@@ -15,7 +15,7 @@ Two situations are different throughout:
 
 | # | Artifact | Check | Empty repository | Repository with history |
 |---|---|---|---|---|
-| 0 | The squad files, at the version named in `SQUAD.md`'s header | `SQUAD.md`, `BOOTSTRAP.md`, `.github/` templates, `.claude/settings.json` and `scripts/squad-handoff.sh` are byte-identical to the `agent-squad` tag | Copy them from the tag | Copy them from the tag; if the project already has files of the same name, reconcile with the CEO before overwriting |
+| 0 | The squad files, at the version named in `SQUAD.md`'s header | `SQUAD.md`, `BOOTSTRAP.md`, `.github/` templates, `.claude/settings.json`, `scripts/squad-handoff.sh` and `scripts/squad-merge-gate.sh` are byte-identical to the `agent-squad` tag | Copy them from the tag | Copy them from the tag; if the project already has files of the same name, reconcile with the CEO before overwriting |
 | 1 | Three sessions, `CTO:<project>`, `DEV:<project>`, `QA:<project>`, launched from `<repo>/` | `ListAgents` shows DEV and QA; each confirms it started from the main checkout | Ask the CEO to launch or relaunch the missing ones from `<repo>/` | Same |
 | 2 | `gh` authenticated with `repo` and `workflow` scopes | `gh auth status` lists both scopes | Ask the CEO to run `gh auth refresh -h github.com -s workflow` | Same |
 | 3 | Toolchains for the stack | The stack's interpreter, package manager and linters run | Ask the CEO to install what is missing | Same |

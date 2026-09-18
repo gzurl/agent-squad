@@ -11,6 +11,7 @@ every project runs the same, versioned method.
 | `BOOTSTRAP.md` | One-time setup runbook for the CTO | yes |
 | `.github/` | Issue and PR templates | yes |
 | `.claude/settings.json`, `scripts/squad-handoff.sh` | Context-compaction hooks and handoff snapshot | yes |
+| `scripts/squad-merge-gate.sh` | The §4.9 merge gate, checked by API; exits non-zero so that it stops the merge | yes |
 | `templates/AGENTS.md`, `templates/openspec/` | Skeletons the CTO fills per project | as a starting point |
 
 ## How to use it
