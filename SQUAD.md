@@ -123,7 +123,7 @@ QA never commits or pushes to another agent's branch. Its tests are ephemeral by
 ## 5. Code and review standards
 **DEV** produces source code that a human could review: English, elegant and readable, a brief comment on each block, 100% compliant with the linters, readability over optimization, Clean Code principles (Robert C. Martin).
 - **Code ships with its automated tests.** A PR that adds or changes behaviour MUST include the tests that prove it; QA's black-box tests complement them, they do not replace them.
-- **No secrets in the repository, ever.** API keys, tokens and credentials live in a git-ignored `.env` (or the tool's own keychain) and are read from the environment; `.env.example` documents the variable names. A script that needs a key refuses to run on an empty or placeholder value. *A leaked key in git history is leaked for good; a placeholder that looks like a value was once taken for a real key.*
+- **No secrets in the repository, ever.** API keys, tokens and credentials live in a git-ignored `.env` (or the tool's own keychain) and are read from the environment; `.env.example` documents the variable names. `.env.example` ships with empty values; a placeholder in `.env` starts with `YOUR_`; a script that needs a key refuses to run on an empty or `YOUR_` value. *A leaked key in git history is leaked for good; a placeholder that looks like a value was once taken for a real key.*
 
 **QA** verifies that what was developed adheres to the rules and works as the PR announces, in two parts carried out in parallel whenever possible:
 - *Code review:* check that the author followed the rules; point out unsafe or incomplete code; every comment carries a priority: P1 (MUST-FIX), P2 (NICE-TO-FIX), P3 (NITS).
