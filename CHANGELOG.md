@@ -1,5 +1,15 @@
 # Changelog
 
+## v10 — 2026-09-18
+- §4.8 and §4.9: findings with no line to anchor to are PR comments tagged with a priority,
+  answered and acknowledged like threads, and part of the merge gate (#7).
+- §5: headline figures state what they measure and QA reproduces them from artifacts (#6);
+  review evidence lives in a git-ignored `evidence/` directory, linked with `file://` (#8).
+- §6: nothing is published outside the project's repositories; no Claude.ai artifacts, nothing on
+  third-party repositories without the CEO's authorisation (#8).
+- 2.4: `evidence/` survives QA's cleanup until its PR or issue closes. BOOTSTRAP.md row 11: `evidence/`
+  git-ignored next to `.env`.
+
 ## v9 — 2026-09-18
 - §4.9 merge gate reads the latest review that contains a `QA-VERDICT` line (inline replies create
   empty reviews). §7: project copies may change only by copying a tagged version in full. 2.4:

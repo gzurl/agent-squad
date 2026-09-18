@@ -1,6 +1,6 @@
 # Squad Charter
 
-> **Version:** 9 (2026-09-18). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v9`); every project carries a copy. **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
+> **Version:** 10 (2026-09-18). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v10`); every project carries a copy. **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
 > **Scope:** project-agnostic, for teams working on GitHub from one machine. Anything specific to one project lives in that project's `AGENTS.md`; the one-time setup procedure lives in `BOOTSTRAP.md` and concerns the CTO only.
 > **Reuse:** copy the tagged files of `agent-squad` (`SQUAD.md`, `BOOTSTRAP.md`, `.github/`, `.claude/settings.json`, `scripts/squad-handoff.sh`) into the target repository, launch the three agent sessions from the main checkout and tell the CTO to read `SQUAD.md`. Everything else is created from there.
 > **Language:** everything in the repository or on GitHub is written in English. Messages between agents, and between the CEO and the CTO, are written in the CEO's language, stated in `AGENTS.md`.
@@ -65,7 +65,7 @@ The agents share a machine and a repository; each works in its own worktree, lai
 - **Benchmarks need the machine to themselves.** Before measuring performance, an agent announces the window to the other agents **and to the CEO**, and waits for the agents to confirm they are idle; the result records that the machine was otherwise idle, and the run writes its progress file (section 3). *A measurement taken while someone else was working is not a measurement, and nobody can tell from inside their own session.*
 - **Idle means idle.** During an announced window, an idle agent runs nothing: no git, no `gh`, no file reads, no new sessions, no messages beyond a one-line reply; whoever needs the machine waits for the end-of-window notice. The only allowed read is a `tail` of the run's `progress.log`, which is what that file is for; the agent running the benchmark MAY send a one-line message per completed pass, to the agent who asked for it only, and nobody replies to it. *A precaution: nobody can tell from inside a session whether a run was disturbed.*
 - **Runs never write into tracked files, and clean up after themselves.** Output goes to the session's scratchpad or to a git-ignored directory. Before a long run the agent states where it writes and roughly how much, and checks free disk space as part of the readiness check. What the report needs (`progress.log` and the results summary) is committed with the report or attached to its PR, because the scratchpad dies with the session; after the report is merged, the owner deletes the rest. An unexpectedly large output, such as a log that keeps growing, is a finding to report, not a side effect to tolerate.
-- **Cleanup:** the `dev` and `qa` worktrees are persistent; everything else is removed by whoever created it as soon as it is no longer needed. After a merge the author deletes the local and remote branch and returns to `origin/main`; after a verdict QA returns to a detached `origin/main` and removes its test artifacts (files, containers, volumes); extra worktrees go with `git worktree remove` followed by `git worktree prune`.
+- **Cleanup:** the `dev` and `qa` worktrees are persistent; everything else is removed by whoever created it as soon as it is no longer needed. After a merge the author deletes the local and remote branch and returns to `origin/main`; after a verdict QA returns to a detached `origin/main` and removes its test artifacts (files, containers, volumes), except `evidence/`, which stays until its PR or issue is merged or closed; extra worktrees go with `git worktree remove` followed by `git worktree prune`.
 
 ## 3. How work is organized
 - **OpenSpec says *what* we build and *why*; issues track the work.** OpenSpec is agreed between the CEO and the CTO; an issue links to its spec instead of restating it. Under `openspec/`: `vision.md` is the CEO's and only the CEO changes its substance; `project.md` (decisions and open questions) and `research/` (dated notes) are the CTO's; `specs/` and `changes/` are added as capabilities are agreed.
@@ -109,11 +109,12 @@ Every change goes through a PR reviewed by QA; the only exceptions are in 2.3.
 5. **Interrupting a review**, when something would make the ongoing review pointless: (a) tell QA to stop, explaining what is changing, why, and which parts of the review you believe become obsolete; (b) push once, with everything; (c) ping QA again with the new `headRefOid` and re-label. *Your notice is a claim: QA verifies it against the real diff and has the final say on what must be repeated, from nothing to everything.*
 6. **QA reviews** in two parallel parts (section 5) and publishes one review of type `COMMENT`: inline comments prefixed `[P1]` / `[P2]` / `[P3]`, a body with the short SHA reviewed and the black-box outcome (what was tested, how, what happened), and as its **last line** exactly `QA-VERDICT: APPROVED` or `QA-VERDICT: CHANGES-REQUESTED`. QA then sets the PR status label (section 3).
 7. **A verdict is bound to a commit.** It is valid only while the review's `commit_id` equals the PR's `headRefOid`; any later push requires a new verdict. *Fixes therefore land in a single push, and QA only re-validates the delta.*
-8. **Every thread is resolved before the merge**, whatever its priority. The author answers each thread individually with one of: *fixed* (citing the commit), *deferred* (linking the issue or PR that tracks it) or *declined* (with the reason); P1 can only be fixed. The reviewer resolves the thread once satisfied. Disagreements go to the CTO, or to the CEO when the CTO is the author.
+8. **Every thread is resolved before the merge**, whatever its priority. The author answers each thread individually with one of: *fixed* (citing the commit), *deferred* (linking the issue or PR that tracks it) or *declined* (with the reason); P1 can only be fixed. The reviewer resolves the thread once satisfied. Disagreements go to the CTO, or to the CEO when the CTO is the author. A finding with no line to anchor to (the title, the description, a missing file, behaviour spread across files) is posted by QA as a PR comment whose first line carries the priority tag right after the signature and status emoji (`👩🏼‍🔬[QA]: ⚠️ [P2] …`), answered by the author in a reply as a thread would be, and acknowledged by QA by editing its comment to end with `Settled: <URL of the reply>`; it counts like a thread for the merge gate.
 9. **Merge**: by the author, with the strategy `AGENTS.md` sets (squash by default). Before merging, every item MUST be true, verified by API and not by eye:
    - [ ] the latest review that contains a `QA-VERDICT` line ends in `QA-VERDICT: APPROVED` and its `commit_id` equals the PR's `headRefOid` (inline replies create empty reviews; ignore them);
    - [ ] zero unresolved review threads;
-   - [ ] the PR carries `✅ status:approved` and CI is green.
+   - [ ] the PR carries `✅ status:approved` and CI is green;
+   - [ ] every body-only finding (a PR comment by QA whose first line matches `^👩🏼‍🔬\[QA\]: \S+ \[P[123]\]`) ends with a `Settled: <URL of the author's reply>` line, which QA adds when acknowledging; the gate checks that by API.
 
    Then clean up (2.4), remove the issue's status label, and tell the others if the merge touched `SQUAD.md` or `AGENTS.md` (section 7).
 10. **Loops:** a PR MUST NOT take more than two author/QA iterations without negotiating or consulting the tie-breaker. New scope that appears mid-review goes to a new PR, never into the one under review. *DEV addresses as much as possible in the first pass; QA gives all of its feedback in the first review.*
@@ -128,6 +129,8 @@ QA never commits or pushes to another agent's branch. Its tests are ephemeral by
 **QA** verifies that what was developed adheres to the rules and works as the PR announces, in two parts carried out in parallel whenever possible:
 - *Code review:* check that the author followed the rules; point out unsafe or incomplete code; every comment carries a priority: P1 (MUST-FIX), P2 (NICE-TO-FIX), P3 (NITS).
 - *Black-box tests:* exercise the PR's new functionality as announced, without looking at the code; reproduce claims rather than read them.
+- *Headline figures:* every number a report or PR publishes states what it measures and how (for an account: cash, or cash plus positions marked at which price); QA reproduces the headline figure from the committed artifacts, not only the hashes. *A report once called the cash the account's value while positions were open.*
+- *Evidence:* screenshots, pages and any file a review relies on live in a git-ignored `evidence/<pr-or-issue>/` directory of the reviewer's checkout, described in the review and linked to the CEO with `file://`; what a report needs is committed next to it (2.4).
 
 QA's review checklist, every item answered in the review body:
 - [ ] the PR closes an issue, and the diff matches that issue's scope, nothing more;
@@ -148,6 +151,7 @@ Every member has a signature: the member's emoji, the text tag, a colon and a sp
 | QA | `👩🏼‍🔬[QA]: ` |
 
 Everywhere — messages to the CEO, messages between agents, each agent's end-of-turn summary, and GitHub content:
+- **Nothing is published outside the project's repositories:** no Claude.ai artifacts, no external pages or services, and nothing on a third-party repository (an upstream issue, for instance) without the CEO's authorisation. A file for the CEO goes to a git-ignored directory of the checkout, with a `file://` link to open it locally. *The CEO does not want to depend on external services, and a post from the shared account speaks for the CEO.*
 - **Open with signature + one status emoji** in messages, end-of-turn summaries, GitHub comments and reviews: ✅ done, ⏳ in progress or waiting, ⚠️ needs attention, ❌ failed or changes requested. Issue and PR descriptions carry the signature alone.
 - **Sign everything written on GitHub** (issue and PR descriptions, comments, reviews, inline comments). Exceptions: commit messages (they carry a `Co-Authored-By` trailer) and PR titles (they are the squash commit subject by repository setting, `BOOTSTRAP.md` row 6b, and follow the commit convention).
 - **Link every PR and issue you mention** with its full URL, e.g. `[PR #8](https://github.com/<owner>/<repo>/pull/8)`, at every mention, repeated ones included. *The reader looks at the line in front of them.* Inside GitHub, `#8` is enough.
@@ -176,7 +180,7 @@ Issue and pull request templates live in `.github/` so that GitHub pre-fills the
 ### Checklist
 (the six items of section 5, each with its answer)
 ### Findings
-- [P1] ... / [P2] ... / [P3] ...   (inline comments carry the detail)
+- [P1] ... / [P2] ... / [P3] ...   (inline comments carry the detail; a finding with no line is a PR comment tagged the same way)
 
 QA-VERDICT: APPROVED | CHANGES-REQUESTED
 ```
