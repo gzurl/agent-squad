@@ -1,5 +1,10 @@
 # Changelog
 
+## v11 — 2026-09-18
+- `scripts/squad-merge-gate.sh`: the §4.9 merge gate as a script that stops the merge (verdict bound
+  to the head, zero unresolved threads, body-only findings settled, approved label, CI green). §4.9
+  requires its use; it is a portable file (header, BOOTSTRAP row 0, README). Closes #10.
+
 ## v10 — 2026-09-18
 - §4.8 and §4.9: findings with no line to anchor to are PR comments tagged with a priority,
   answered and acknowledged like threads, and part of the merge gate (#7).
