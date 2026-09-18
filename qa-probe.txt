@@ -1,0 +1,1 @@
+QA probe for agent-squad PR #11: exercising the merge gate on a real PR. Never merged.
