@@ -1,6 +1,6 @@
 # Squad Charter
 
-> **Version:** 9 (2026-09-18). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v9`); every project carries a copy. **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
+> **Version:** 10 (2026-09-18). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v10`); every project carries a copy. **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
 > **Scope:** project-agnostic, for teams working on GitHub from one machine. Anything specific to one project lives in that project's `AGENTS.md`; the one-time setup procedure lives in `BOOTSTRAP.md` and concerns the CTO only.
 > **Reuse:** copy the tagged files of `agent-squad` (`SQUAD.md`, `BOOTSTRAP.md`, `.github/`, `.claude/settings.json`, `scripts/squad-handoff.sh`) into the target repository, launch the three agent sessions from the main checkout and tell the CTO to read `SQUAD.md`. Everything else is created from there.
 > **Language:** everything in the repository or on GitHub is written in English. Messages between agents, and between the CEO and the CTO, are written in the CEO's language, stated in `AGENTS.md`.
@@ -109,11 +109,12 @@ Every change goes through a PR reviewed by QA; the only exceptions are in 2.3.
 5. **Interrupting a review**, when something would make the ongoing review pointless: (a) tell QA to stop, explaining what is changing, why, and which parts of the review you believe become obsolete; (b) push once, with everything; (c) ping QA again with the new `headRefOid` and re-label. *Your notice is a claim: QA verifies it against the real diff and has the final say on what must be repeated, from nothing to everything.*
 6. **QA reviews** in two parallel parts (section 5) and publishes one review of type `COMMENT`: inline comments prefixed `[P1]` / `[P2]` / `[P3]`, a body with the short SHA reviewed and the black-box outcome (what was tested, how, what happened), and as its **last line** exactly `QA-VERDICT: APPROVED` or `QA-VERDICT: CHANGES-REQUESTED`. QA then sets the PR status label (section 3).
 7. **A verdict is bound to a commit.** It is valid only while the review's `commit_id` equals the PR's `headRefOid`; any later push requires a new verdict. *Fixes therefore land in a single push, and QA only re-validates the delta.*
-8. **Every thread is resolved before the merge**, whatever its priority. The author answers each thread individually with one of: *fixed* (citing the commit), *deferred* (linking the issue or PR that tracks it) or *declined* (with the reason); P1 can only be fixed. The reviewer resolves the thread once satisfied. Disagreements go to the CTO, or to the CEO when the CTO is the author.
+8. **Every thread is resolved before the merge**, whatever its priority. The author answers each thread individually with one of: *fixed* (citing the commit), *deferred* (linking the issue or PR that tracks it) or *declined* (with the reason); P1 can only be fixed. The reviewer resolves the thread once satisfied. Disagreements go to the CTO, or to the CEO when the CTO is the author. A finding with no line to anchor to (the title, the description, a missing file, behaviour spread across files) is posted by QA as a PR comment starting with its priority tag, answered by the author in a reply as a thread would be, and acknowledged by QA in a reply; it counts like a thread for the merge gate.
 9. **Merge**: by the author, with the strategy `AGENTS.md` sets (squash by default). Before merging, every item MUST be true, verified by API and not by eye:
    - [ ] the latest review that contains a `QA-VERDICT` line ends in `QA-VERDICT: APPROVED` and its `commit_id` equals the PR's `headRefOid` (inline replies create empty reviews; ignore them);
    - [ ] zero unresolved review threads;
-   - [ ] the PR carries `✅ status:approved` and CI is green.
+   - [ ] the PR carries `✅ status:approved` and CI is green;
+   - [ ] every body-only finding (a PR comment starting with a priority tag) has been answered and acknowledged.
 
    Then clean up (2.4), remove the issue's status label, and tell the others if the merge touched `SQUAD.md` or `AGENTS.md` (section 7).
 10. **Loops:** a PR MUST NOT take more than two author/QA iterations without negotiating or consulting the tie-breaker. New scope that appears mid-review goes to a new PR, never into the one under review. *DEV addresses as much as possible in the first pass; QA gives all of its feedback in the first review.*
@@ -128,6 +129,8 @@ QA never commits or pushes to another agent's branch. Its tests are ephemeral by
 **QA** verifies that what was developed adheres to the rules and works as the PR announces, in two parts carried out in parallel whenever possible:
 - *Code review:* check that the author followed the rules; point out unsafe or incomplete code; every comment carries a priority: P1 (MUST-FIX), P2 (NICE-TO-FIX), P3 (NITS).
 - *Black-box tests:* exercise the PR's new functionality as announced, without looking at the code; reproduce claims rather than read them.
+- *Headline figures:* every number a report or PR publishes states what it measures and how (for an account: cash, or cash plus positions marked at which price); QA reproduces the headline figure from the committed artifacts, not only the hashes. *A report once called the cash the account's value while positions were open.*
+- *Evidence:* screenshots, pages and any file a review relies on live in a git-ignored `evidence/<pr-or-issue>/` directory of the reviewer's checkout, described in the review and linked to the CEO with `file://`; what a report needs is committed next to it (2.4).
 
 QA's review checklist, every item answered in the review body:
 - [ ] the PR closes an issue, and the diff matches that issue's scope, nothing more;
@@ -156,6 +159,7 @@ Everywhere — messages to the CEO, messages between agents, each agent's end-of
 
 With the CEO:
 - **Lead with what the CEO needs to know or decide;** detail below.
+- **Nothing is published outside the repository and GitHub:** no Claude.ai artifacts, no external pages or services. A file for the CEO goes to a git-ignored directory of the checkout, with a `file://` link to open it locally. *The CEO does not want to depend on external services.*
 - **Decisions are presented as options with a recommendation**, each with its cost and what it unlocks, never as an open question. *The CEO decides; the CTO does the analysis.*
 - **The CTO uses emojis with moderate density** (section markers, status, warnings, decisions needed) so that the CEO grasps a message at a glance. Never in repository files or commit messages; at most sparingly on GitHub.
 - **DEV and QA use them far more subtly:** the opening status emoji and at most one per important block, nothing decorative. *The CEO follows their work from time to time.*

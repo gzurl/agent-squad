@@ -1,5 +1,12 @@
 # Changelog
 
+## v10 — 2026-09-18
+- §4.8 and §4.9: findings with no line to anchor to are PR comments tagged with a priority,
+  answered and acknowledged like threads, and part of the merge gate (#7).
+- §5: headline figures state what they measure and QA reproduces them from artifacts (#6);
+  review evidence lives in a git-ignored `evidence/` directory, linked with `file://` (#8).
+- §6: nothing is published outside the repository and GitHub; no Claude.ai artifacts (#8).
+
 ## v9 — 2026-09-18
 - §4.9 merge gate reads the latest review that contains a `QA-VERDICT` line (inline replies create
   empty reviews). §7: project copies may change only by copying a tagged version in full. 2.4:
