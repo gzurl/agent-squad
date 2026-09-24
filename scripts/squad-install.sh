@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Install or upgrade the squad in a project (agent-squad #23): the tag's playbook in
+# Install, upgrade or check the squad in a project (agent-squad #23): the tag's playbook in
 # <project>/.agent-squad/playbook/, the compaction hooks in .claude/settings.local.json, a pre-push
 # shim that runs the playbook's gate, the GitHub templates the project lacks, and the DEV and QA
 # worktrees. It never overwrites or deletes a file the project owns, prints one line per action
 # taken or skipped, and ends with what is left to do by hand.
 #
 # Usage: squad-install.sh [--source <dir>] <project main checkout> <tag>
+#        squad-install.sh --check <project main checkout>
 #   --source <dir>  install the tree in <dir> (an extracted tarball, for tests) instead of
 #                   downloading the tag from GitHub
+#   --check         change nothing: print one status line per item of the installation, including
+#                   whether the gate really refuses a failing check
 # Exit: 0 installed; 1 installed except the steps marked NOT, which need a decision; 2 bad usage, a
 #       missing prerequisite, or a download or extraction that failed: nothing outside
 #       .agent-squad/ was touched and the installed playbook is unchanged.
+#       With --check: 0 every item passes; 1 at least one failed; 2 bad usage.
 set -u
 
 upstream="gzurl/agent-squad"
@@ -25,21 +29,31 @@ die() { echo "squad-install: $1" >&2; exit 2; }
 unset $(git rev-parse --local-env-vars 2>/dev/null)
 
 # Arguments: the tag names a path in the download URL, so it is validated before use.
+usage="usage: $0 [--source <dir>] <project main checkout> <tag> | --check <project main checkout>"
+mode=install
 source_dir=""
-if [ "${1:-}" = "--source" ]; then
-  [ $# -ge 2 ] || die "--source needs a directory"
-  source_dir="$2"
-  shift 2
+if [ "${1:-}" = "--check" ]; then
+  mode=check
+  shift
+  [ $# -eq 1 ] || die "$usage"
+else
+  if [ "${1:-}" = "--source" ]; then
+    [ $# -ge 2 ] || die "--source needs a directory"
+    source_dir="$2"
+    shift 2
+  fi
+  [ $# -eq 2 ] || die "$usage"
+  tag="$2"
+  case "$tag" in
+    ''|*[!A-Za-z0-9._-]*) die "'$tag' is not a tag name" ;;
+  esac
 fi
-[ $# -eq 2 ] || die "usage: $0 [--source <dir>] <project main checkout> <tag>"
-tag="$2"
-case "$tag" in
-  ''|*[!A-Za-z0-9._-]*) die "'$tag' is not a tag name" ;;
-esac
 for tool in git jq tar awk; do
   command -v "$tool" >/dev/null 2>&1 || die "$tool is required"
 done
-[ -n "$source_dir" ] || command -v gh >/dev/null 2>&1 || die "gh is required to download the tag"
+if [ "$mode" = install ] && [ -z "$source_dir" ]; then
+  command -v gh >/dev/null 2>&1 || die "gh is required to download the tag"
+fi
 
 # The project is named by its main checkout, the one directory every worktree shares (D7).
 project="$(CDPATH='' cd -- "$1" 2>/dev/null && pwd -P)" || die "$1 is not a directory"
@@ -54,7 +68,9 @@ fi
 
 squad="$project/.agent-squad"
 playbook="$squad/playbook"
+manifest_file="$squad/playbook.manifest"
 log="$squad/install.log"
+settings="$project/.claude/settings.local.json"
 needs_decision=0
 tracked_changes=()
 
@@ -71,6 +87,198 @@ manifest() {
     fi
   done)
 }
+
+# The four compaction hooks as the installer writes them (D5, D10). Each command checks that the
+# playbook's script exists, so that a missing playbook is reported to the session instead of
+# failing it.
+# shellcheck disable=SC2016 # expanded by the shell that runs the hook, not here
+handoff='"$CLAUDE_PROJECT_DIR"/.agent-squad/playbook/scripts/squad-handoff.sh'
+# shellcheck disable=SC2016 # same
+missing='echo "Squad: the charter is not installed ($f is missing). Stop and tell the CTO before doing anything else."'
+save_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" save; fi"
+restore_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" restore; else $missing; fi"
+startup_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" startup; else $missing; fi"
+
+# The pre-push shim (D8), written into the common git directory so that every worktree runs it.
+hooks_dir="$common_dir/hooks"
+shim="$(cat <<'SHIM'
+#!/usr/bin/env bash
+# agent-squad pre-push shim, written by squad-install.sh, which rewrites it on every install.
+# Runs the project's own pre-push (pre-push.local), if any, then the squad's gate from the main
+# checkout's .agent-squad/playbook/. When the gate cannot be found, the push is refused.
+set -u
+hooks_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
+refs="$(cat)"
+
+# The project's own hook first, with the arguments and the input git gave this one.
+if [ -x "$hooks_dir/pre-push.local" ]; then
+  "$hooks_dir/pre-push.local" "$@" <<<"$refs" || exit
+fi
+
+# Then the gate, from the main checkout whichever worktree pushes; never a silent pass without it.
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir)" || exit 1
+gate="$(dirname "$common_dir")/.agent-squad/playbook/.githooks/pre-push"
+if [ ! -x "$gate" ]; then
+  echo "pre-push: the squad's gate $gate is missing, so the push is refused. Reinstall the squad with squad-install.sh, or push with --no-verify and say so in the PR" >&2
+  exit 1
+fi
+exec "$gate" "$@" <<<"$refs"
+SHIM
+)"
+
+# --check: one status line per item of the installation (#36); it changes nothing in the project.
+# `verdict <item> <why>` prints the item as ok when <why> is empty, as FAILED with <why> otherwise.
+failed_items=0
+verdict() {
+  if [ -z "$2" ]; then
+    printf 'check: ok      %s\n' "$1"
+  else
+    printf 'check: FAILED  %s: %s\n' "$1" "$2"
+    failed_items=$((failed_items + 1))
+  fi
+}
+# `join` turns lines into one comma-separated line.
+join() { awk 'NR > 1 { printf ", " } { printf "%s", $0 }'; }
+# `real_path <dir>` resolves symlinks, so that two spellings of one directory compare equal.
+real_path() { (CDPATH='' cd -- "$1" 2>/dev/null && pwd -P); }
+
+# `gate_refusal` proves that the playbook's gate runs, not only that it exists: in a throw-away
+# repository whose hooks are the playbook's, a failing check must refuse the push and a passing one
+# must let it through. It prints why when that is not so, and nothing otherwise.
+gate_refusal() {
+  local lab code
+  lab="$(mktemp -d)" || { echo "cannot create a temporary directory"; return; }
+  (
+    # The machine's own git configuration (signing, templates, hooks) stays out of the test.
+    export HOME="$lab" XDG_CONFIG_HOME="$lab" GIT_CONFIG_NOSYSTEM=1
+    work="$lab/work"
+    git init -q --bare -b main "$lab/remote.git" && git init -q -b main "$work" || exit 3
+    git -C "$work" config core.hooksPath "$playbook/.githooks"
+    git -C "$work" config user.name "Squad check" && git -C "$work" config user.email check@example.com
+    git -C "$work" remote add origin "$lab/remote.git"
+    # `push_with <check>` commits a list with that one check and pushes it.
+    push_with() {
+      printf '%s\n' "$1" > "$work/.agent-squad-checks"
+      git -C "$work" add -A && git -C "$work" commit -qm "$1" \
+        && git -C "$work" push -q origin HEAD:refs/heads/main >/dev/null 2>&1
+    }
+    push_with false && exit 4
+    push_with true || exit 5
+    exit 0
+  )
+  code=$?
+  rm -rf "$lab"
+  case "$code" in
+    0) ;;
+    3) echo "cannot build a throw-away repository" ;;
+    4) echo "the playbook's gate let a push through with a failing check" ;;
+    *) echo "the playbook's gate refused a push whose check passes" ;;
+  esac
+}
+
+check_installation() {
+  local why version agent worktree changed expected actual path
+
+  # 9 first, as the heading of the report: which version is installed, and since when.
+  version="$(grep -o '^> \*\*Version:\*\* [0-9]*' "$playbook/SQUAD.md" 2>/dev/null | grep -o '[0-9]*$')"
+  if [ -n "$version" ]; then
+    verdict "installed version $version (install.log: $(tail -1 "$log" 2>/dev/null || echo none))" ""
+  else
+    verdict "installed version" "no Version line in .agent-squad/playbook/SQUAD.md"
+  fi
+
+  # 1. The playbook is the tree that was installed, byte for byte.
+  why=""
+  if [ ! -d "$playbook" ]; then
+    why="there is no .agent-squad/playbook/"
+  elif [ ! -f "$manifest_file" ]; then
+    why="no checksums were recorded when it was installed; install again"
+  else
+    changed="$(diff "$manifest_file" <(manifest "$playbook") | awk '/^[<>]/ { sub(/^\.\//, "", $NF); print $NF }' | sort -u | join)"
+    [ -z "$changed" ] || why="changed since it was installed: $changed"
+  fi
+  verdict "playbook/ is complete and unmodified" "$why"
+
+  # 2. The four hooks, exactly as the installer writes them.
+  why=""
+  expected="$(jq -cn --arg save "$save_command" --arg restore "$restore_command" \
+    --arg startup "$startup_command" \
+    '[["PreCompact", "manual", $save], ["PreCompact", "auto", $save],
+      ["SessionStart", "compact", $restore], ["SessionStart", "startup", $startup]] | sort')"
+  if ! actual="$(jq -c '[(.hooks // {}) | to_entries[] | .key as $event | .value[] | .matcher as $matcher
+      | .hooks[] | select((.command // "") | contains("squad-handoff.sh"))
+      | [$event, $matcher, .command]] | sort' "$settings" 2>/dev/null)"; then
+    why="cannot read .claude/settings.local.json"
+  elif [ "$actual" != "$expected" ]; then
+    why="$(jq -rn --argjson want "$expected" --argjson have "$actual" \
+      '"missing: \([($want - $have)[] | .[1]] | join(", ") | if . == "" then "none" else . end); unexpected: \([($have - $want)[] | .[1]] | join(", ") | if . == "" then "none" else . end)"')"
+  fi
+  verdict "the four hooks are in .claude/settings.local.json and point at the playbook" "$why"
+
+  # 3. Both paths are ignored, by a rule of the project's own .gitignore.
+  why="$(for path in .agent-squad .claude/settings.local.json; do
+    [ "$(git -C "$project" check-ignore -v --no-index "$path" 2>/dev/null | cut -d: -f1)" = .gitignore ] \
+      || echo "$path is not ignored by .gitignore"
+  done | join)"
+  verdict ".gitignore ignores .agent-squad/ and .claude/settings.local.json" "$why"
+
+  # 4. The shim is the installer's, where git runs it.
+  why=""
+  hooks_path="$(git -C "$project" config --get core.hooksPath || true)"
+  if [ -n "$hooks_path" ]; then
+    why="core.hooksPath is set to '$hooks_path', so git never runs $hooks_dir/pre-push"
+  elif [ ! -f "$hooks_dir/pre-push" ]; then
+    why="there is no $hooks_dir/pre-push"
+  elif ! grep -q "$shim_marker" "$hooks_dir/pre-push"; then
+    why="$hooks_dir/pre-push is not the squad's shim"
+  elif [ "$(cat "$hooks_dir/pre-push")" != "$shim" ] || [ ! -x "$hooks_dir/pre-push" ]; then
+    why="the shim is not the one this installer writes; install again"
+  fi
+  verdict "the pre-push shim is installed and core.hooksPath is unset" "$why"
+
+  # 5. The gate runs.
+  verdict "the gate refuses a failing check and lets a passing one through" "$(gate_refusal)"
+
+  # 6. The project's list of checks is part of the project.
+  why=""
+  if [ ! -f "$project/.agent-squad-checks" ]; then
+    why="there is no .agent-squad-checks"
+  elif ! git -C "$project" ls-files --error-unmatch .agent-squad-checks >/dev/null 2>&1; then
+    why=".agent-squad-checks is not tracked"
+  fi
+  verdict ".agent-squad-checks exists and is tracked" "$why"
+
+  # 7. The DEV and QA worktrees belong to this repository.
+  why="$(for agent in dev qa; do
+    worktree="$squad/worktrees/$agent"
+    if [ ! -d "$worktree" ]; then
+      echo "$agent is missing"
+    elif [ "$(real_path "$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")" \
+        != "$(real_path "$common_dir")" ] \
+      || [ "$(real_path "$(git -C "$worktree" rev-parse --show-toplevel 2>/dev/null)")" != "$(real_path "$worktree")" ]; then
+      echo "$agent is not a worktree of this repository"
+    fi
+  done | join)"
+  verdict ".agent-squad/worktrees/dev and qa are worktrees of this repository" "$why"
+
+  # 8. Every session loads the charter.
+  why="$({
+    case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
+      AGENTS.md|./AGENTS.md) ;;
+      *) echo "CLAUDE.md is not a symlink to AGENTS.md" ;;
+    esac
+    grep -qF '@.agent-squad/playbook/SQUAD.md' "$project/AGENTS.md" 2>/dev/null \
+      || echo "AGENTS.md does not import @.agent-squad/playbook/SQUAD.md"
+  } | join)"
+  verdict "CLAUDE.md links to AGENTS.md, which imports the charter" "$why"
+
+  [ "$failed_items" -eq 0 ]
+}
+
+if [ "$mode" = check ]; then
+  check_installation
+  exit
+fi
 
 # 1. Playbook (D2, D9): the new tree is built beside the current one and swapped in only once it
 #    is complete, so a failed download or extraction leaves the installed playbook as it was.
@@ -102,7 +310,8 @@ done
 
 previous="none"
 [ -s "$log" ] && previous="$(awk 'END { print $NF }' "$log")"
-if [ -d "$playbook" ] && [ "$(manifest "$staging")" = "$(manifest "$playbook")" ]; then
+installed_manifest="$(manifest "$staging")"
+if [ -d "$playbook" ] && [ "$installed_manifest" = "$(manifest "$playbook")" ]; then
   say playbook "$tag is already installed, unchanged"
 else
   retired="$squad/playbook.old.$$"
@@ -115,6 +324,13 @@ else
   fi
   rm -rf "$retired"
   say playbook "installed $tag in .agent-squad/playbook/ (previously $previous)"
+fi
+# The checksums of what was installed, which --check compares the playbook against.
+if [ "$(cat "$manifest_file" 2>/dev/null)" = "$installed_manifest" ]; then
+  say manifest "the playbook's checksums are already recorded"
+else
+  printf '%s\n' "$installed_manifest" > "$manifest_file"
+  say manifest "recorded the playbook's checksums in .agent-squad/playbook.manifest"
 fi
 printf '%s %s -> %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$previous" "$tag" >> "$log"
 say log "appended '$previous -> $tag' to .agent-squad/install.log"
@@ -139,16 +355,7 @@ for path in .agent-squad .claude/settings.local.json; do
 done
 
 # 3. Compaction hooks (D5, D10), merged into .claude/settings.local.json: every other key and hook
-#    is kept, and only entries that run squad-handoff.sh are replaced. Each command checks that the
-#    script exists, so that a missing playbook is reported to the session instead of failing.
-# shellcheck disable=SC2016 # expanded by the shell that runs the hook, not here
-handoff='"$CLAUDE_PROJECT_DIR"/.agent-squad/playbook/scripts/squad-handoff.sh'
-# shellcheck disable=SC2016 # same
-missing='echo "Squad: the charter is not installed ($f is missing). Stop and tell the CTO before doing anything else."'
-save_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" save; fi"
-restore_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" restore; else $missing; fi"
-startup_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" startup; else $missing; fi"
-settings="$project/.claude/settings.local.json"
+#    is kept, and only entries that run squad-handoff.sh are replaced.
 current="{}"
 [ -f "$settings" ] && current="$(cat "$settings")"
 # shellcheck disable=SC2016 # $save, $restore and $startup are jq variables
@@ -176,31 +383,6 @@ fi
 
 # 4. Pre-push shim (D8) in the common git directory, so that every worktree runs it. A project's
 #    own pre-push is kept as pre-push.local and run first; other hooks are left alone.
-hooks_dir="$common_dir/hooks"
-shim="$(cat <<'SHIM'
-#!/usr/bin/env bash
-# agent-squad pre-push shim, written by squad-install.sh, which rewrites it on every install.
-# Runs the project's own pre-push (pre-push.local), if any, then the squad's gate from the main
-# checkout's .agent-squad/playbook/. When the gate cannot be found, the push is refused.
-set -u
-hooks_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
-refs="$(cat)"
-
-# The project's own hook first, with the arguments and the input git gave this one.
-if [ -x "$hooks_dir/pre-push.local" ]; then
-  "$hooks_dir/pre-push.local" "$@" <<<"$refs" || exit
-fi
-
-# Then the gate, from the main checkout whichever worktree pushes; never a silent pass without it.
-common_dir="$(git rev-parse --path-format=absolute --git-common-dir)" || exit 1
-gate="$(dirname "$common_dir")/.agent-squad/playbook/.githooks/pre-push"
-if [ ! -x "$gate" ]; then
-  echo "pre-push: the squad's gate $gate is missing, so the push is refused. Reinstall the squad with squad-install.sh, or push with --no-verify and say so in the PR" >&2
-  exit 1
-fi
-exec "$gate" "$@" <<<"$refs"
-SHIM
-)"
 hooks_path="$(git -C "$project" config --get core.hooksPath || true)"
 if [ -n "$hooks_path" ]; then
   say pre-push "NOT INSTALLED: core.hooksPath is set to '$hooks_path', so git never runs $hooks_dir; decide with the CEO whether to unset it"
