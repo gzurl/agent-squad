@@ -50,15 +50,15 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 git init -q .
+# Written first, before anything that a leaked GIT_DIR would make fail: under a leak this is the
+# deliberate write that lands in the repository being pushed, and the test looks for it there.
+git config squadgate.stray yes
 git config user.email inner@example.com
 git config user.name Inner
 echo inner > f.txt
 git add f.txt
 git commit -qm "a commit that belongs to this temporary repository"
 test "$(git rev-list --count HEAD)" = 1
-# Left set on purpose: whoever this reaches is the repository the test then inspects. The one
-# that broke a real checkout was `core.bare=true`, written the same way (#19).
-git config squadgate.stray yes
 CHECK
 chmod +x "$work/uses-git.sh"
 # A check that records every time it runs, to tell a push that ran nothing from one that did.
@@ -105,7 +105,7 @@ commit "$wt" "a check that uses git" >/dev/null
 expected_head="$(git -C "$wt" rev-parse HEAD)"
 before_refs="$(git -C "$work" show-ref)"
 before_bare="$(git -C "$work" config --get core.bare)"
-before_stray="$(git -C "$work" config --get squadgate.stray || true)"
+before_stray="$(git -C "$work" config --get squadgate.stray || true)$(git -C "$wt" config --get squadgate.stray || true)"
 if git -C "$wt" push -q origin HEAD:refs/heads/wt 2>/dev/null; then
   pass "a check that uses git passes and its push goes through"
 else
@@ -113,7 +113,7 @@ else
 fi
 after_head="$(git -C "$wt" rev-parse HEAD)"
 after_bare="$(git -C "$work" config --get core.bare)"
-after_stray="$(git -C "$work" config --get squadgate.stray || true)"
+after_stray="$(git -C "$work" config --get squadgate.stray || true)$(git -C "$wt" config --get squadgate.stray || true)"
 if [ "$after_head" = "$expected_head" ]; then
   pass "the pushing worktree's HEAD is the commit it pushed, not one its checks made"
 else
