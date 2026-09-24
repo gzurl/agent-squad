@@ -48,7 +48,8 @@ Then run `"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" --ch
 it changes nothing and prints the installed version and the last `install.log` entry, then one
 line per item (`check: ok` or `check: FAILED  <item>: <reason>`), and exits 1 if any failed. It
 also proves that the gate really refuses a failing check. Right after installing, only the items
-the installer leaves to you fail. Launch the three sessions from the main checkout and tell the CTO to follow
+the installer leaves to you fail, plus the worktrees in an empty repository: run the installer
+again once `origin/main` exists. Launch the three sessions from the main checkout and tell the CTO to follow
 `.agent-squad/playbook/BOOTSTRAP.md`.
 
 ## What goes where
