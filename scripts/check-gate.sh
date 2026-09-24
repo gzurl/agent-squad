@@ -2,8 +2,11 @@
 # Check that the push gate of SQUAD.md §4.2 behaves as the charter says (agent-squad #21): a
 # failing check refuses the push, a passing one lets it through from a linked worktree and from the
 # main checkout, a check that uses git leaves the pushing repository's commits and configuration
-# alone, and a push that only deletes runs no check at all. Everything happens in a temporary
-# directory: this script never touches the repository it is run from.
+# alone, and a push that only deletes runs no check at all. The hook finds squad-checks.sh through
+# its own location (#34): the gate is tested as an installed playbook (git-ignored, nested in the
+# main checkout), then at the root of a repository as this one has it, and a hook that cannot find
+# its runner must refuse the push. Everything happens in a temporary directory: this script never
+# touches the repository it is run from.
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2
@@ -20,12 +23,22 @@ pass() { echo "  ok      $1" >&2; }
 fail() { echo "  FAILED  $1" >&2; status=1; }
 
 # `list <directory> <command>` makes that checkout's checks the one command given.
-list() { printf '# the sandbox checks\n%s\n' "$2" > "$1/.squad/checks"; }
+list() { printf '# the sandbox checks\n%s\n' "$2" > "$1/.agent-squad-checks"; }
 
 # `commit <directory> <message>` records whatever changed there, quietly.
 commit() { git -C "$1" add -A && git -C "$1" commit -qm "$2"; }
 
-# A clone of the gate under test, with a bare remote and the hook enabled.
+# `install_gate <directory>` copies the gate under test into <directory>/.githooks and
+# <directory>/scripts, the layout the hook expects around itself.
+install_gate() {
+  mkdir -p "$1/.githooks" "$1/scripts"
+  cp "$root/.githooks/pre-push" "$1/.githooks/pre-push"
+  cp "$root/scripts/squad-checks.sh" "$1/scripts/squad-checks.sh"
+  chmod +x "$1/.githooks/pre-push" "$1/scripts/squad-checks.sh"
+}
+
+# A clone with a bare remote and the gate installed as a playbook: git-ignored, in the main
+# checkout only, reached from every worktree by an absolute path.
 git init -q --bare "$lab/remote.git" || exit 2
 git init -q "$lab/work" || exit 2
 work="$lab/work"
@@ -33,14 +46,16 @@ git -C "$work" config user.email gate@example.com
 git -C "$work" config user.name "Gate check"
 git -C "$work" config core.bare false
 git -C "$work" remote add origin "$lab/remote.git"
-mkdir -p "$work/.squad" "$work/.githooks" "$work/scripts"
-cp "$root/.githooks/pre-push" "$work/.githooks/pre-push"
-cp "$root/scripts/squad-checks.sh" "$work/scripts/squad-checks.sh"
-chmod +x "$work/.githooks/pre-push" "$work/scripts/squad-checks.sh"
-git -C "$work" config core.hooksPath .githooks
+playbook="$work/.agent-squad/playbook"
+install_gate "$playbook"
+echo ".agent-squad/" > "$work/.gitignore"
+git -C "$work" config core.hooksPath "$playbook/.githooks"
 list "$work" true
 commit "$work" "the sandbox" >/dev/null || exit 2
-git -C "$work" push -q origin HEAD:refs/heads/main 2>/dev/null || exit 2
+if ! git -C "$work" push -q origin HEAD:refs/heads/main 2>/dev/null; then
+  fail "the first push, with a passing check, was refused: the gate cannot run from a playbook"
+  exit 1
+fi
 
 # A check that uses git as a project's tests do: its own repository in a temporary directory.
 cat > "$work/uses-git.sh" <<'CHECK'
@@ -143,6 +158,32 @@ if [ "$runs_before" = "$runs_after" ]; then
   pass "a push that only deletes runs no check"
 else
   fail "a delete-only push ran the checks"
+fi
+
+# 6. A hook that cannot find squad-checks.sh next to it refuses the push, even a passing one.
+mv "$playbook/scripts/squad-checks.sh" "$lab/squad-checks.sh.aside"
+list "$wt" true
+commit "$wt" "a passing check, with the runner missing" >/dev/null
+if git -C "$wt" push -q origin HEAD:refs/heads/wt 2>/dev/null; then
+  fail "a hook without squad-checks.sh next to it let the push through"
+else
+  pass "a hook without squad-checks.sh next to it refuses the push"
+fi
+mv "$lab/squad-checks.sh.aside" "$playbook/scripts/squad-checks.sh"
+
+# 7. The same hook at the root of a repository, as this one has it: tracked, next to scripts/, and
+#    reached through a relative core.hooksPath from the worktree that pushes. The recording check
+#    proves that the hook found its runner and ran the list, not only that the push went through.
+install_gate "$wt"
+list "$wt" ./records.sh
+commit "$wt" "the gate at the root of the repository" >/dev/null
+git -C "$work" config core.hooksPath .githooks
+runs_before="$(wc -l < "$lab/ran.txt" 2>/dev/null || echo 0)"
+if git -C "$wt" push -q origin HEAD:refs/heads/wt 2>/dev/null \
+  && [ "$(wc -l < "$lab/ran.txt" 2>/dev/null || echo 0)" -gt "$runs_before" ]; then
+  pass "the hook at the root of a repository finds its runner and runs the checks"
+else
+  fail "the hook at the root of a repository did not run the checks"
 fi
 
 exit "$status"

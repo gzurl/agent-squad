@@ -4,10 +4,13 @@
 #   save     PreCompact hook: snapshot the objective state of the project into a per-session file.
 #   restore  SessionStart(compact) hook: print that snapshot plus re-orientation instructions, so
 #            that it is re-injected into the compacted session's context.
+#   startup  SessionStart(startup) hook: print a one-line warning when the charter is not installed,
+#            and nothing otherwise.
 #
-# Both read the hook's JSON payload on stdin and key the file by session_id, so the script works
-# for any role without knowing which session it runs in. It never fails the hook: on any error it
-# prints what it has and exits 0.
+# save and restore read the hook's JSON payload on stdin and key the file by session_id, so the
+# script works for any role without knowing which session it runs in. Snapshots live in the main
+# checkout's .agent-squad/handoff/, the same directory from every linked worktree. It never fails
+# the hook: on any error it prints what it has and exits 0.
 set -u
 
 action="${1:-}"
@@ -23,9 +26,16 @@ case "$session_id" in
   *[!A-Za-z0-9_-]*|"") session_id="" ;;
 esac
 
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-handoff_dir="$repo_root/.claude/handoff"
+# The main checkout is the parent of the common git directory, whichever worktree the hook runs in.
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$common_dir" ]; then
+  main_checkout="$(dirname "$common_dir")"
+else
+  main_checkout="$(pwd)"
+fi
+handoff_dir="$main_checkout/.agent-squad/handoff"
 handoff_file="$handoff_dir/$session_id.md"
+charter="$main_checkout/.agent-squad/playbook/SQUAD.md"
 
 # Objective facts a compacted session needs to re-orient itself. Everything comes from git and
 # GitHub, nothing from the conversation, so it is exact even if the summary is not.
@@ -91,8 +101,14 @@ case "$action" in
       echo "(no handoff file was saved for this session; rely on GitHub and the repository)"
     fi
     ;;
+  startup)
+    # A session that cannot read the charter must not start working as if it could.
+    if [ ! -f "$charter" ]; then
+      echo "Squad: the charter is not installed ($charter is missing). Stop and tell the CTO before doing anything else."
+    fi
+    ;;
   *)
-    echo "usage: $0 save|restore" >&2
+    echo "usage: $0 save|restore|startup" >&2
     ;;
 esac
 exit 0

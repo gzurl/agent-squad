@@ -23,3 +23,5 @@ jobs:
         run: scripts/check-version.sh
       - name: The push gate behaves as the charter says
         run: scripts/check-gate.sh
+      - name: The compaction hooks keep their snapshots in the main checkout
+        run: scripts/check-handoff.sh

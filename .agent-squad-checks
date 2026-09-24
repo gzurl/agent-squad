@@ -5,3 +5,4 @@ jq . .claude/settings.json >/dev/null
 scripts/check-links.sh
 scripts/check-version.sh
 scripts/check-gate.sh
+scripts/check-handoff.sh

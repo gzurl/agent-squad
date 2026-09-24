@@ -73,9 +73,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 
 ## Stack and commands
 - bash, git ≥ 2.31, `jq`, `gh`, and `uv` (the checks run shellcheck through `uvx`).
-- The checks are exactly the lines of [.squad/checks](.squad/checks); run them all with
-  `scripts/squad-checks.sh`. The `pre-push` hook runs the same script (`core.hooksPath` is
+- The checks are exactly the lines of [.agent-squad-checks](.agent-squad-checks); run them all
+  with `scripts/squad-checks.sh`. The `pre-push` hook runs the same script (`core.hooksPath` is
   `.githooks` in this clone), and CI runs the same checks (shellcheck from apt instead of `uvx`).
+- The compaction hooks keep their snapshots in the main checkout's `.agent-squad/handoff/`
+  (git-ignored), whichever worktree the session works in.
 
 ## Local services and ports
 None.
