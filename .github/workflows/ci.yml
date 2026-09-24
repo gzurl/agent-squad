@@ -25,3 +25,5 @@ jobs:
         run: scripts/check-gate.sh
       - name: The compaction hooks keep their snapshots in the main checkout
         run: scripts/check-handoff.sh
+      - name: The installer installs, upgrades and refuses as it says
+        run: scripts/check-install.sh
