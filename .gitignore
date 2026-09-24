@@ -1,5 +1,5 @@
-# Squad handoff snapshots (per session, written by the PreCompact hook)
-.claude/handoff/
+# The squad's local directory: handoff snapshots, and the playbook and worktrees once installed
+.agent-squad/
 # Review evidence (SQUAD.md, section 5)
 evidence/
 .DS_Store

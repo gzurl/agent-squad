@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 # pre-push hook of SQUAD.md §4: no commit reaches the remote before the project's checks pass on it.
-# Enabled once per clone with `git config core.hooksPath .githooks` (BOOTSTRAP.md); `--no-verify`
-# skips it, and whoever uses it says so in the PR body.
+# Enabled once per clone (BOOTSTRAP.md); `--no-verify` skips it, and whoever uses it says so in the
+# PR body. It finds squad-checks.sh through its own location, so the same file works at the root of
+# a repository (.githooks/ next to scripts/) and inside an installed playbook.
 set -u
 
-root="$(git rev-parse --show-toplevel)" || exit 1
+# The runner of the checks sits in ../scripts/ from this hook. A gate that cannot find it cannot
+# run, and a gate that cannot run refuses the push instead of letting it through.
+hook_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
+checks="$(dirname "$hook_dir")/scripts/squad-checks.sh"
+if [ ! -x "$checks" ]; then
+  echo "pre-push: $checks is missing or not executable; the gate cannot run, so the push is refused" >&2
+  exit 1
+fi
+
 head="$(git rev-parse HEAD)" || exit 1
 zero=0000000000000000000000000000000000000000
 
@@ -27,4 +36,4 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   exit 1
 fi
 
-exec "$root/scripts/squad-checks.sh"
+exec "$checks"

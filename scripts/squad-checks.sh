@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Local gate of SQUAD.md §4: run every check listed in .squad/checks as a command of its own,
-# print one status line per check, and exit non-zero when any of them failed.
+# Local gate of SQUAD.md §4: run every check listed in .agent-squad-checks, at the root of the
+# checkout, as a command of its own, print one status line per check, and exit non-zero when any of
+# them failed.
 # Usage: scripts/squad-checks.sh   (from anywhere inside the repository; the pre-push hook runs it)
 # Exit: 0 all passed, 1 at least one failed, 2 the list is missing or empty.
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2
 cd "$root" || exit 2
-list=".squad/checks"
+list=".agent-squad-checks"
 
 # A hook runs with git's own variables set (GIT_DIR and others). A check that uses git, such as a
 # test that builds a repository in a temporary directory, would otherwise act on this repository:
