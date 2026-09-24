@@ -1,3 +1,5 @@
 # Squad handoff snapshots (per session, written by the PreCompact hook)
 .claude/handoff/
+# Review evidence (SQUAD.md, section 5)
+evidence/
 .DS_Store

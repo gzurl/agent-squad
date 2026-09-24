@@ -1,9 +1,18 @@
 # Changelog
 
+## v12 — 2026-09-24
+- Header and §7 name the same six portable files; `.github/` is limited to the issue and PR
+  templates, since `.github/workflows/` is this repository's own CI and would fail in a project.
+  §7 now lists `scripts/squad-merge-gate.sh`. README table says which `.github/` files are copied.
+  `.gitignore` ignores `evidence/` (§5). The v11 entry mentions the `--match-head-commit` form.
+  Closes #13 and #14.
+
 ## v11 — 2026-09-18
 - `scripts/squad-merge-gate.sh`: the §4.9 merge gate as a script that stops the merge (verdict bound
   to the head, zero unresolved threads, body-only findings settled, approved label, CI green). §4.9
-  requires its use; it is a portable file (header, BOOTSTRAP row 0, README). Closes #10.
+  requires its use in the form `head=$(scripts/squad-merge-gate.sh <pr>) && gh pr merge <pr>
+  --squash --match-head-commit "$head"`, which pins the merge to the head the gate verified; it is
+  a portable file (header, BOOTSTRAP row 0, README). Closes #10.
 
 ## v10 — 2026-09-18
 - §4.8 and §4.9: findings with no line to anchor to are PR comments tagged with a priority,
