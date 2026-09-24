@@ -27,22 +27,12 @@ Two situations are different throughout:
 | 8 | First milestone | `gh api repos/<owner>/<repo>/milestones` | Create it before handing out the first issue | Same, unless one fits |
 | 9 | `.github/` templates and CI | `ISSUE_TEMPLATE/task.md`, `PULL_REQUEST_TEMPLATE.md` and a CI workflow (lint, format check, type check where the language has one, tests) exist | The installer created the templates; CI comes with the first scaffolding issue | The installer kept any existing templates: evaluate them with the CEO and reconcile |
 | 9b | Local gate before push (SQUAD.md §4) | `.agent-squad-checks` lists the commands CI runs, one per line, each in the project's environment; `--check` reports that the gate refuses a failing check; `"$p/scripts/squad-checks.sh"` exits 0 on `main` | Write `.agent-squad-checks` with the first scaffolding issue | Write `.agent-squad-checks` from the existing CI |
-| 10 | `AGENTS.md` with `CLAUDE.md` as a symlink to it | Both exist; `git ls-tree HEAD CLAUDE.md` shows mode `120000`; `AGENTS.md` has the *Squad* and *Compact instructions* sections (templates below) | Create both (stack, commands, directories, language, conventions, the two sections) | Read the existing instruction files first; reconcile into `AGENTS.md` with the CEO |
+| 10 | `AGENTS.md` with `CLAUDE.md` as a symlink to it | Both exist; `git ls-tree HEAD CLAUDE.md` shows mode `120000`; `AGENTS.md` has the *Squad* section of `templates/AGENTS.md`, word for word (the installer prints it), and the *Compact instructions* section (template below) | Create both (stack, commands, directories, language, conventions, the two sections) | Read the existing instruction files first; reconcile into `AGENTS.md` with the CEO |
 | 10b | Compaction hooks | `jq` is installed (the hook script reads its JSON payload with it); `--check` reports the four hooks in `.claude/settings.local.json`; simulated hook input (`echo '{"session_id":"x"}' \| "$p/scripts/squad-handoff.sh" save`, then `restore`) prints a snapshot | The installer merged them | Same; the installer keeps any other hook of the same event: ask the CEO whether both should run |
 | 11 | `.env` conventions | `.env` is git-ignored; `.env.example` lists the variable names with empty values | Create | Check; add what is missing |
 | 12 | `openspec/` layout | `vision.md`, `project.md`, `research/` exist | Create; ask the CEO for the vision | Ask the CEO whether OpenSpec applies to this project; if it does, create |
 | 13 | Worktrees | `git worktree list` shows `.agent-squad/worktrees/dev` and `.agent-squad/worktrees/qa`, both detached at `origin/main` | The installer creates them once `origin/main` exists: on an empty repository, run it again after row 5 | Same |
 | 14 | Team ready | DEV and QA acknowledged the charter and their directories | Ping both with their role, directory and first task | Same |
-
-## Squad section template for `AGENTS.md`
-```
-## Squad
-This project follows the team charter in `.agent-squad/playbook/SQUAD.md` (installed by the
-squad installer, not tracked). Its full text is loaded below; if you cannot see it, stop and
-tell the CTO that the squad is not installed.
-
-@.agent-squad/playbook/SQUAD.md
-```
 
 ## Compact instructions template for `AGENTS.md`
 ```

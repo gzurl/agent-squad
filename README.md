@@ -40,7 +40,7 @@ rm -rf "$tmp"
 The installer is idempotent and never overwrites or deletes a file the project owns. It prints
 every action it takes or skips, and what it leaves to you:
 1. **The *Squad* section of `AGENTS.md`**, which imports the charter into every session (the
-   template is in `BOOTSTRAP.md`), and `CLAUDE.md` as a symlink to `AGENTS.md`.
+   installer prints it, from `templates/AGENTS.md`), and `CLAUDE.md` as a symlink to `AGENTS.md`.
 2. **`.agent-squad-checks`**, the list of commands the pre-push gate runs: the ones your CI runs,
    one per line.
 
@@ -55,7 +55,7 @@ Outside it, the installer only touches the files listed after it.
 
 | Path (from the project's main checkout) | What it holds | Written by | In git | On upgrade | Removed when |
 |---|---|---|---|---|---|
-| `.agent-squad/playbook/` | The installed `agent-squad` tag: `SQUAD.md`, `BOOTSTRAP.md`, this README, `scripts/`, `templates/` | Installer | No | Replaced whole, only once the new one is complete | Never; reinstall to restore it |
+| `.agent-squad/playbook/` | The installed `agent-squad` tag, as GitHub's tarball of it: `SQUAD.md`, `BOOTSTRAP.md`, this README, `CHANGELOG.md`, `scripts/`, `templates/` | Installer | No | Replaced whole, only once the new one is complete | Never; reinstall to restore it |
 | `.agent-squad/playbook/scripts/` | The compaction hooks' script, the merge gate, the checks runner, the installer | Installer | No | Replaced with the playbook | — |
 | `.agent-squad/worktrees/dev/`, `qa/` | DEV's and QA's checkouts (git worktrees) | Installer creates; DEV and QA work there | No | Untouched | Persistent |
 | `.agent-squad/worktrees/cto-<topic>/` | The CTO's checkout for one PR | CTO | No | Untouched | After its PR merges |
@@ -95,7 +95,8 @@ version changes.
 | `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | Charter, one-time setup, this guide | Yes |
 | `scripts/squad-*.sh`, `.githooks/pre-push` | Installer, compaction hooks, merge gate, checks runner, gate | Yes |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates and skeletons the CTO starts from | Yes; the installer copies the GitHub ones when missing |
-| `AGENTS.md`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh`, `CHANGELOG.md` | This repository's own conventions, checks, CI, tests and history | No: they come with the tag but are not used there |
+| `CHANGELOG.md` | What each version changes | Yes, to read |
+| `AGENTS.md`, `CLAUDE.md`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, checks, CI and tests | No: `.gitattributes` keeps them out of the tag's tarball, so a project's agent never loads this repository's `CLAUDE.md` |
 
 ## How it evolves
 Upstream first (`SQUAD.md`, section 7): any agent who finds a flaw or an improvement in the method
