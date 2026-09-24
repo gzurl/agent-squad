@@ -1,0 +1,7 @@
+# What a tag's tarball leaves out: this repository's own conventions, CI, checks and tests, which a
+# project's .agent-squad/playbook/ does not use. Patterns are anchored to the root.
+/AGENTS.md export-ignore
+/CLAUDE.md export-ignore
+/.github/workflows export-ignore
+/.agent-squad-checks export-ignore
+/scripts/check-*.sh export-ignore
