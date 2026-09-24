@@ -4,3 +4,4 @@ uvx --from shellcheck-py shellcheck scripts/*.sh .githooks/*
 jq . .claude/settings.json >/dev/null
 scripts/check-links.sh
 scripts/check-version.sh
+scripts/check-gate.sh
