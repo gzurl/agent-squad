@@ -70,6 +70,9 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   exception: its agents run `main`'s hooks, checks and scripts, so each intermediate PR keeps them
   working here and records in this file what changes for the agents, until the last PR updates
   the charter.
+- A tag's tarball, which is what projects install, leaves out what [.gitattributes](.gitattributes)
+  marks `export-ignore`: this repository's own conventions, CI, checks list and tests. A new file
+  that only this repository uses goes there too.
 - After the merge, whoever merged tags the squash commit from a checkout of it, because the
   `pre-push` hook refuses to push a tag whose commit is not the one checked out: in the main
   checkout `git pull --ff-only`, in a worktree `git fetch && git switch --detach origin/main`; then
