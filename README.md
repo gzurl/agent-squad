@@ -9,10 +9,11 @@ every project runs the same, versioned method.
 |---|---|---|
 | `SQUAD.md` | The charter: roles, workflow, PR lifecycle, communication | yes |
 | `BOOTSTRAP.md` | One-time setup runbook for the CTO | yes |
-| `.github/` | Issue and PR templates | yes |
+| `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md` | Issue and PR templates | yes |
 | `.claude/settings.json`, `scripts/squad-handoff.sh` | Context-compaction hooks and handoff snapshot | yes |
 | `scripts/squad-merge-gate.sh` | The §4.9 merge gate, checked by API; exits non-zero so that it stops the merge | yes |
 | `templates/AGENTS.md`, `templates/openspec/` | Skeletons the CTO fills per project | as a starting point |
+| `.github/workflows/ci.yml`, `scripts/check-links.sh`, `scripts/check-version.sh` | This repository's own CI | no |
 
 ## How to use it
 1. Create the project repository; copy the files of the latest tag into it (`BOOTSTRAP.md`, row 0).
