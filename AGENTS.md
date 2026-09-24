@@ -15,10 +15,9 @@ This repository is where the method is maintained. The portable files that §7 o
 are **edited here, through PRs** reviewed like any other; §7's "never edited" applies to the copies
 in projects.
 
-**`CTO:agent-squad` owns this repository** (the CEO, 2026-09-24; handover from `CTO:rogue-trader`
-in [#26](https://github.com/gzurl/agent-squad/issues/26)): the backlog, the design, the PRs (its
-own or `DEV:agent-squad`'s, each merged by its author as §4.9 says), the review with
-`QA:agent-squad`, the tags and the notices to the projects. The CTOs of other projects open issues
+**`CTO:agent-squad` owns this repository:** the backlog, the design, the PRs (its own or
+`DEV:agent-squad`'s, each merged by its author as §4.9 says), the review with `QA:agent-squad`, the
+tags and the notices to the projects. The CTOs of other projects open issues
 here freely, with the incident that motivated them; they do not create branches, open PRs, merge or
 tag, unless `CTO:agent-squad` assigns them a PR explicitly in its issue, and `QA:agent-squad`
 reviews such a PR. For this repository, this replaces the §7 sentence by which a project's CTO
