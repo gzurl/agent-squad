@@ -9,14 +9,13 @@ This file does not restate those rules; it only adds what is specific to this re
 
 ## Language
 The CEO's language is Spanish: messages between agents, and with the CEO, are written in it.
-Everything in the repository or on GitHub stays in English.
 
 ## This is the upstream
 This repository is where the method is maintained. The portable files that §7 of `SQUAD.md` lists
 are **edited here, through PRs** reviewed like any other; §7's "never edited" applies to the copies
-in projects. The CTOs of other projects also open issues and PRs here: before opening one, check
-the open issues (for instance [#23](https://github.com/gzurl/agent-squad/issues/23)) and tell
-`CTO:agent-squad`, so that two changes to the method do not collide.
+in projects. The CTOs of other projects also open issues and PRs here; `CTO:agent-squad` keeps
+them from colliding with the changes in progress, and tells them when an open issue already
+covers what they bring.
 
 ## Compact instructions
 When compacting this conversation, always preserve: my role and signature; the issue and PR I am
@@ -55,10 +54,13 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 ## Releases
 - A PR that changes a portable file (§7) also bumps the `Version:` line of `SQUAD.md` and adds the
   matching entry at the top of [CHANGELOG.md](CHANGELOG.md), in the same PR;
-  `scripts/check-version.sh` fails when they disagree. A PR that only touches the README, this
-  file, the CI or this repository's own scripts does not bump the version.
-- After the merge, whoever merged tags the squash commit and pushes the tag:
-  `git tag -a vN -m "Charter vN: <summary>" <sha> && git push origin vN`. Then they notify the
+  `scripts/check-version.sh` fails when they disagree. `templates/` counts as portable here:
+  projects start from the tagged copy. A PR that only touches the README, this file, the CI or
+  this repository's own scripts does not bump the version.
+- After the merge, whoever merged tags the squash commit from a checkout of it, because the
+  `pre-push` hook refuses to push a tag whose commit is not the one checked out: in the main
+  checkout `git pull --ff-only`, in a worktree `git fetch && git switch --detach origin/main`; then
+  `git tag -a vN -m "Charter vN: <summary>" HEAD && git push origin vN`. Then they notify the
   agents of this repository and the CTOs of the projects (`ListAgents`), who decide when their
   project takes the new version.
 
