@@ -64,6 +64,12 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   `scripts/check-version.sh` fails when they disagree. `templates/` counts as portable here:
   projects start from the tagged copy. A PR that only touches the README, this file, the CI or
   this repository's own scripts does not bump the version.
+- A release built over several PRs lands on `main` one PR at a time, each naming the release's
+  parent issue; only its **last** PR bumps `Version:` and writes the CHANGELOG entry. Projects
+  install tags only, so `main` between two tags is never installed. This repository is the
+  exception: its agents run `main`'s hooks, checks and scripts, so each intermediate PR keeps them
+  working here and records in this file what changes for the agents, until the last PR updates
+  the charter.
 - After the merge, whoever merged tags the squash commit from a checkout of it, because the
   `pre-push` hook refuses to push a tag whose commit is not the one checked out: in the main
   checkout `git pull --ff-only`, in a worktree `git fetch && git switch --detach origin/main`; then
