@@ -1,5 +1,16 @@
 # Changelog
 
+## v13 — 2026-09-24
+- §4.2: **the checks pass before anything is pushed.** A project lists its checks in `.squad/checks`, and a
+  `pre-push` hook (`.githooks/pre-push`, enabled with `git config core.hooksPath .githooks`) runs
+  them through `scripts/squad-checks.sh`: each as a command of its own, one status line per check,
+  the push refused on a failure, on uncommitted changes, or when the pushed commit is not the one
+  checked out; a push that only deletes is not checked. The pushed head is checked, not each commit
+  before it; a failing commit fixed in the same push, like `--no-verify`, is declared in the PR.
+  Header, §7, BOOTSTRAP.md row 0 and README list the two new portable files; BOOTSTRAP.md row 9b
+  installs the hook. This repository's own checks are in `.squad/checks`, and its CI shellchecks
+  `.githooks/` too. Closes #17.
+
 ## v12 — 2026-09-24
 - Header and §7 name the same six portable files; `.github/` is limited to the issue and PR
   templates, since `.github/workflows/` is this repository's own CI and would fail in a project.

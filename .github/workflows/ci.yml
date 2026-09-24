@@ -12,9 +12,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Shell syntax and shellcheck
         run: |
-          for f in scripts/*.sh; do bash -n "$f"; done
+          for f in scripts/*.sh .githooks/*; do bash -n "$f"; done
           sudo apt-get install -y -qq shellcheck >/dev/null
-          shellcheck scripts/*.sh
+          shellcheck scripts/*.sh .githooks/*
       - name: settings.json is valid JSON
         run: jq . .claude/settings.json >/dev/null
       - name: Relative Markdown links resolve

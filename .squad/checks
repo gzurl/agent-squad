@@ -1,0 +1,6 @@
+# agent-squad's own checks: the commands its CI runs, one per line (scripts/squad-checks.sh).
+for f in scripts/*.sh .githooks/*; do bash -n "$f" || exit 1; done
+uvx --from shellcheck-py shellcheck scripts/*.sh .githooks/*
+jq . .claude/settings.json >/dev/null
+scripts/check-links.sh
+scripts/check-version.sh

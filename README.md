@@ -12,6 +12,8 @@ every project runs the same, versioned method.
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md` | Issue and PR templates | yes |
 | `.claude/settings.json`, `scripts/squad-handoff.sh` | Context-compaction hooks and handoff snapshot | yes |
 | `scripts/squad-merge-gate.sh` | The §4.9 merge gate, checked by API; exits non-zero so that it stops the merge | yes |
+| `scripts/squad-checks.sh`, `.githooks/pre-push` | The §4 local gate: the project's checks, each on its own, run before every push | yes |
+| `.squad/checks` | This repository's own list of checks; every project writes its own | no |
 | `templates/AGENTS.md`, `templates/openspec/` | Skeletons the CTO fills per project | as a starting point |
 | `.github/workflows/ci.yml`, `scripts/check-links.sh`, `scripts/check-version.sh` | This repository's own CI | no |
 
