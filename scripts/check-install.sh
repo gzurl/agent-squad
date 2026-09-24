@@ -38,9 +38,10 @@ check() {
 }
 
 # Predicates for check. `refused` inverts a command; `contains` and `lacks` look for a fixed
-# string in a text, `matches_none` for an extended regular expression.
+# string in a text, `has_line` for a whole line, `matches_none` for an extended regular expression.
 refused() { ! "$@"; }
 contains() { grep -qF -- "$2" <<<"$1"; }
+has_line() { grep -qxF -- "$2" <<<"$1"; }
 lacks() { ! contains "$@"; }
 matches_none() { ! grep -Eq -- "$2" <<<"$1"; }
 # `prints <string> <command...>` and `prints_nothing <command...>` look at what a command writes
@@ -216,7 +217,8 @@ for agent in dev qa; do
 done
 check "the Squad section of the playbook's templates/AGENTS.md is printed" \
   contains "$out" "The squad section this test expects, first line."
-check "with its import line" contains "$out" "@.agent-squad/playbook/SQUAD.md"
+check "unindented, so that the import works once pasted" has_line "$out" "@.agent-squad/playbook/SQUAD.md"
+check "between markers" has_line "$out" "----- begin Squad section -----"
 check "and nothing after the section" lacks "$out" "Not part of the section."
 
 # 2. The project's local settings are kept; only the entries that run squad-handoff.sh change.
@@ -299,12 +301,18 @@ code=$?
 check "a download that is not a tarball exits 2" [ "$code" -eq 2 ]
 check "and leaves the playbook as it was" same_tree "$squad/playbook" "$lab/vb"
 check "with nothing left behind" no_leftovers "$squad"
-mkdir -p "$lab/incomplete" && cp -pR "$lab/vb/." "$lab/incomplete/" && rm "$lab/incomplete/SQUAD.md"
-out="$("$install" --source "$lab/incomplete" "$project" vd 2>&1)"
-code=$?
-check "a tree without SQUAD.md exits 2" [ "$code" -eq 2 ]
-check "and leaves the playbook as it was" same_tree "$squad/playbook" "$lab/vb"
-check "and neither failure wrote to install.log" matches_none "$(cat "$squad/install.log")" " -> (vc|vd)$"
+# A tree without one of the files the installation relies on; without scripts/squad-install.sh,
+# it is a tag older than the installer, such as v14, which would install without working.
+for missing in SQUAD.md scripts/squad-install.sh templates/AGENTS.md; do
+  rm -rf "$lab/incomplete" && mkdir -p "$lab/incomplete" && cp -pR "$lab/vb/." "$lab/incomplete/"
+  rm "$lab/incomplete/$missing"
+  out="$("$install" --source "$lab/incomplete" "$project" vd 2>&1)"
+  code=$?
+  check "a tree without $missing exits 2, saying so" \
+    bash -c '[ "$1" -eq 2 ] && grep -qF "has no $2" <<<"$3"' _ "$code" "$missing" "$out"
+  check "and leaves the playbook as it was" same_tree "$squad/playbook" "$lab/vb"
+done
+check "and no failure wrote to install.log" matches_none "$(cat "$squad/install.log")" " -> (vc|vd)$"
 
 # 9. With core.hooksPath set, the shim is not installed, the reason is printed and the exit is 1.
 other="$(new_project other)" || exit 2
@@ -321,5 +329,62 @@ out="$("$install" "$dev" va 2>&1)"
 code=$?
 check "a linked worktree is refused with exit 2" [ "$code" -eq 2 ]
 check "and nothing is created in it" absent "$dev" .agent-squad
+
+# 11. Blank settings count as none; settings that are not one JSON object are left as they are.
+four_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\"]"
+for kind in empty blank; do
+  target="$(new_project "settings-$kind")" || exit 2
+  mkdir -p "$target/.claude"
+  case "$kind" in
+    empty) : > "$target/.claude/settings.local.json" ;;
+    blank) printf ' \n\t\n' > "$target/.claude/settings.local.json" ;;
+  esac
+  out="$("$install" "$target" va 2>&1)"
+  code=$?
+  check "an $kind settings.local.json exits 0" [ "$code" -eq 0 ]
+  check "and gets the four hooks" jq_holds "$four_hooks" "$target/.claude/settings.local.json"
+done
+for kind in not-json two-objects; do
+  target="$(new_project "settings-$kind")" || exit 2
+  mkdir -p "$target/.claude"
+  case "$kind" in
+    not-json) echo '{"permissions": ' > "$target/.claude/settings.local.json" ;;
+    two-objects) echo '{} {}' > "$target/.claude/settings.local.json" ;;
+  esac
+  cp -p "$target/.claude/settings.local.json" "$lab/settings-before"
+  out="$("$install" "$target" va 2>&1)"
+  code=$?
+  check "a settings.local.json that is $kind exits 1" [ "$code" -eq 1 ]
+  check "and says why" contains "$out" "hooks      NOT INSTALLED: .claude/settings.local.json is not one JSON object"
+  check "and is left byte for byte" cmp -s "$lab/settings-before" "$target/.claude/settings.local.json"
+done
+
+# 12. A negation in the project's .gitignore is not taken for an ignore rule.
+target="$(new_project negations)" || exit 2
+printf '.agent-squad/\n!.agent-squad/\n*.json\n!.claude/settings.local.json\n' > "$target/.gitignore"
+out="$("$install" "$target" va 2>&1)"
+check "a negated .agent-squad/ gets its ignore line, and is ignored in fact" \
+  git -C "$target" check-ignore -q --no-index .agent-squad
+check "a negated .claude/settings.local.json too" \
+  git -C "$target" check-ignore -q --no-index .claude/settings.local.json
+
+# 13. The other steps that need a decision: nothing is overwritten, the step says NOT, the exit is 1.
+target="$(new_project two-hooks)" || exit 2
+printf '#!/bin/sh\necho the project pre-push\n' > "$target/.git/hooks/pre-push"
+printf '#!/bin/sh\necho the project pre-push.local\n' > "$target/.git/hooks/pre-push.local"
+chmod +x "$target/.git/hooks/pre-push" "$target/.git/hooks/pre-push.local"
+hooks_before="$(tree_state "$target/.git/hooks")"
+out="$("$install" "$target" va 2>&1)"
+code=$?
+check "with pre-push and pre-push.local both the project's, the installer exits 1" [ "$code" -eq 1 ]
+check "and says why" contains "$out" "pre-push   NOT INSTALLED: pre-push and pre-push.local both exist"
+check "and leaves the git hooks as they were" [ "$hooks_before" = "$(tree_state "$target/.git/hooks")" ]
+target="$lab/no-origin"
+git init -q -b main "$target" || exit 2
+out="$("$install" "$target" va 2>&1)"
+code=$?
+check "without origin/main the installer exits 1" [ "$code" -eq 1 ]
+check "and says the worktrees were not created" contains "$out" "worktrees  NOT CREATED: .agent-squad/worktrees/dev"
+check "and creates none" absent "$target" .agent-squad/worktrees/dev .agent-squad/worktrees/qa
 
 exit "$status"

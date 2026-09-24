@@ -95,9 +95,12 @@ else
   tar -xzf "$tarball" -C "$staging" --strip-components=1 \
     || die "cannot extract the tarball of $tag; the installed playbook is unchanged"
 fi
-for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh; do
+# What the hooks, the gate and the By hand list rely on. A tree from before the installer (v14 and
+# older) has no scripts/squad-install.sh, and would install without working.
+for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh \
+  scripts/squad-install.sh templates/AGENTS.md; do
   [ -f "$staging/$required" ] \
-    || die "the tree of $tag has no $required; the installed playbook is unchanged"
+    || die "the tree of $tag has no $required, so this installer cannot install it (a tag older than v15?); the installed playbook is unchanged"
 done
 
 previous="none"
@@ -120,13 +123,15 @@ printf '%s %s -> %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$previous" "$tag" >> 
 say log "appended '$previous -> $tag' to .agent-squad/install.log"
 
 # 2. .gitignore: the squad's directory and Claude Code's local settings stay out of git. A line is
-#    added only when the project's own .gitignore does not already ignore the path.
+#    added unless the path is ignored in fact (a negation such as !.agent-squad/ counts) by a rule
+#    of the project's own .gitignore, not only by this machine's excludes.
 gitignore="$project/.gitignore"
 for path in .agent-squad .claude/settings.local.json; do
   line="$path"
   [ "$path" = .agent-squad ] && line=".agent-squad/"
   source_of_rule="$(git -C "$project" check-ignore -v --no-index "$path" 2>/dev/null | cut -d: -f1)"
-  if [ "$source_of_rule" = .gitignore ]; then
+  if git -C "$project" check-ignore -q --no-index "$path" 2>/dev/null \
+    && [ "$source_of_rule" = .gitignore ]; then
     say .gitignore "$line is already ignored"
     continue
   fi
@@ -149,10 +154,16 @@ save_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" save; fi"
 restore_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" restore; else $missing; fi"
 startup_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" startup; else $missing; fi"
 settings="$project/.claude/settings.local.json"
+# `one_object` passes when its input is exactly one JSON object: jq alone accepts an empty input,
+# and several values, without a word.
+one_object() { jq -e -s 'length == 1 and (.[0] | type == "object")' >/dev/null 2>&1; }
 current="{}"
 [ -f "$settings" ] && current="$(cat "$settings")"
+# A blank file holds no settings yet.
+[ -n "${current//[[:space:]]/}" ] || current="{}"
 # shellcheck disable=SC2016 # $save, $restore and $startup are jq variables
-if merged="$(printf '%s' "$current" | jq --arg save "$save_command" --arg restore "$restore_command" \
+if printf '%s' "$current" | one_object \
+  && merged="$(printf '%s' "$current" | jq --arg save "$save_command" --arg restore "$restore_command" \
   --arg startup "$startup_command" '
   def ours: (.command // "") | contains("squad-handoff.sh");
   def entry($matcher; $command): {matcher: $matcher, hooks: [{type: "command", command: $command}]};
@@ -162,7 +173,8 @@ if merged="$(printf '%s' "$current" | jq --arg save "$save_command" --arg restor
       else . end))
   | .hooks.PreCompact = (.hooks.PreCompact // []) + [entry("manual"; $save), entry("auto"; $save)]
   | .hooks.SessionStart = (.hooks.SessionStart // [])
-      + [entry("compact"; $restore), entry("startup"; $startup)]')"; then
+      + [entry("compact"; $restore), entry("startup"; $startup)]')" \
+  && printf '%s' "$merged" | one_object; then
   if [ -f "$settings" ] && [ "$merged" = "$current" ]; then
     say hooks "the four hooks are already in .claude/settings.local.json"
   else
@@ -170,7 +182,7 @@ if merged="$(printf '%s' "$current" | jq --arg save "$save_command" --arg restor
     say hooks "wrote the four hooks into .claude/settings.local.json, other settings kept"
   fi
 else
-  say hooks "NOT INSTALLED: .claude/settings.local.json is not a JSON object with a valid \"hooks\"; fix it and run again"
+  say hooks "NOT INSTALLED: .claude/settings.local.json is not one JSON object with a valid \"hooks\"; it is left as it is: fix it and run again"
   needs_decision=1
 fi
 
@@ -265,13 +277,15 @@ item() {
   items=$((items + 1))
   printf '  %d. %s\n' "$items" "$1"
 }
+template="$playbook/templates/AGENTS.md"
 if ! grep -qF '@.agent-squad/playbook/SQUAD.md' "$project/AGENTS.md" 2>/dev/null; then
-  # The one source of the Squad section is the playbook's template of AGENTS.md.
-  block="$(awk '/^## Squad[[:space:]]*$/ { inside = 1; print; next } inside && /^## / { exit } inside' \
-    "$playbook/templates/AGENTS.md" 2>/dev/null)"
-  if [ -n "$block" ]; then
-    item "Add this section to AGENTS.md, which imports the charter into every session:"
-    printf '%s\n' "$block" | sed 's/^/       /'
+  # The one source of the Squad section is the playbook's template of AGENTS.md. It is printed
+  # unindented: indented, it would become a code block in which Claude Code does not import.
+  if grep -qE '^## Squad[[:space:]]*$' "$template"; then
+    item "Add this section to AGENTS.md, which imports the charter into every session; copy the lines between the markers as they are:"
+    echo "----- begin Squad section -----"
+    awk '/^## Squad[[:space:]]*$/ { inside = 1; print; next } inside && /^## / { exit } inside' "$template"
+    echo "----- end Squad section -----"
   else
     item "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md"
   fi
