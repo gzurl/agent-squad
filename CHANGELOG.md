@@ -1,5 +1,13 @@
 # Changelog
 
+## v14 — 2026-09-24
+- Fix: `scripts/squad-checks.sh` clears git's own variables (`git rev-parse --local-env-vars`)
+  before running any check. A hook runs with `GIT_DIR` and others set, and a check that uses git,
+  such as a test that builds a repository in a temporary directory, acted on the pushing
+  repository instead: in rogue-trader it committed into the pushing branch and set `core.bare` in
+  the shared config. Any project on v13 that enabled the hook should check its `core.bare` and its
+  branches. Closes #19.
+
 ## v13 — 2026-09-24
 - §4.2: **the checks pass before anything is pushed.** A project lists its checks in `.squad/checks`, and a
   `pre-push` hook (`.githooks/pre-push`, enabled with `git config core.hooksPath .githooks`) runs
