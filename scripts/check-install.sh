@@ -100,6 +100,14 @@ check_reports() {
   fi
 }
 
+# `check_reason <item> <text>` runs --check on the project and passes when that item fails with a
+# reason that contains the text.
+check_reason() {
+  local out
+  out="$("$install" --check "$project" 2>&1)"
+  grep -F "check: FAILED  $1: " <<<"$out" | grep -qF -- "$2"
+}
+
 # `tree_state <dir>` lists every file under <dir> with a checksum, git metadata and install.log
 # aside: two equal listings mean nothing was added, removed or changed.
 tree_state() {
@@ -393,6 +401,19 @@ check "a negated .agent-squad/ gets its ignore line, and is ignored in fact" \
   git -C "$target" check-ignore -q --no-index .agent-squad
 check "a negated .claude/settings.local.json too" \
   git -C "$target" check-ignore -q --no-index .claude/settings.local.json
+# A negation in a nested .gitignore outranks the root one: appending cannot help.
+target="$(new_project nested-negation)" || exit 2
+mkdir -p "$target/.claude" && echo '!settings.local.json' > "$target/.claude/.gitignore"
+out="$("$install" "$target" va 2>&1)"
+code=$?
+check "a nested negation of settings.local.json exits 1" [ "$code" -eq 1 ]
+check "and says which rule wins" contains "$out" ".gitignore NOT IGNORED: .claude/settings.local.json would lose to .claude/.gitignore:1:!settings.local.json"
+check "and appends nothing" refused grep -qxF .claude/settings.local.json "$target/.gitignore"
+out="$("$install" "$target" va 2>&1)"
+code=$?
+check "nor on a second run, which says the same" \
+  bash -c '[ "$1" -eq 1 ] && ! grep -qxF .claude/settings.local.json "$2" && grep -qF "NOT IGNORED" <<<"$3"' \
+  _ "$code" "$target/.gitignore" "$out"
 
 # 13. The other steps that need a decision: nothing is overwritten, the step says NOT, the exit is 1.
 target="$(new_project two-hooks)" || exit 2
@@ -405,6 +426,14 @@ code=$?
 check "with pre-push and pre-push.local both the project's, the installer exits 1" [ "$code" -eq 1 ]
 check "and says why" contains "$out" "pre-push   NOT INSTALLED: pre-push and pre-push.local both exist"
 check "and leaves the git hooks as they were" [ "$hooks_before" = "$(tree_state "$target/.git/hooks")" ]
+target="$(new_project worktree-hooks-path)" || exit 2
+"$install" "$target" va >/dev/null 2>&1
+git -C "$target" config extensions.worktreeConfig true
+git -C "$target/.agent-squad/worktrees/dev" config --worktree core.hooksPath .githooks
+out="$("$install" "$target" va 2>&1)"
+code=$?
+check "core.hooksPath in a worktree's own configuration makes the installer exit 1" [ "$code" -eq 1 ]
+check "and says where" contains "$out" "pre-push   NOT INSTALLED: core.hooksPath is set ('.githooks' in .agent-squad/worktrees/dev)"
 target="$lab/no-origin"
 git init -q -b main "$target" || exit 2
 out="$("$install" "$target" va 2>&1)"
@@ -449,6 +478,42 @@ git -C "$project" config core.hooksPath .githooks
 check "a set core.hooksPath fails the shim item" check_reports "$item_shim"
 git -C "$project" config --unset core.hooksPath
 
+git -C "$project" config extensions.worktreeConfig true
+git -C "$dev" config --worktree core.hooksPath .githooks
+check "core.hooksPath in a worktree's own configuration fails the shim item" check_reports "$item_shim"
+git -C "$dev" config --worktree --unset core.hooksPath
+git -C "$project" config --unset extensions.worktreeConfig
+
+# A machine whose git configuration signs every commit with a gpg that fails, and forbids local
+# pushes: the gate's sandbox must not see it.
+printf '[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = false\n[protocol "file"]\n\tallow = never\n' > "$lab/hostile.gitconfig"
+with_hostile_git() { (export GIT_CONFIG_GLOBAL="$lab/hostile.gitconfig"; "$@"); }
+check "a hostile global git configuration does not fail the gate item" with_hostile_git check_reports
+
+mv "$squad/playbook" "$lab/playbook-aside"
+check "without the playbook the gate item says so, and does not blame the gate" \
+  check_reason "$item_gate" "the playbook has no executable .githooks/pre-push to test"
+mv "$lab/playbook-aside" "$squad/playbook"
+
+# Interrupted while the gate's sandbox exists, --check leaves nothing behind. The run gets its own
+# process group, which is what a Ctrl-C signals.
+mkdir -p "$lab/tmp"
+interrupted_leaves_nothing() {
+  local pid tries=0
+  set -m
+  TMPDIR="$lab/tmp" "$install" --check "$project" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  while [ -z "$(ls -A "$lab/tmp")" ] && [ "$tries" -lt 200 ]; do sleep 0.05; tries=$((tries + 1)); done
+  [ -n "$(ls -A "$lab/tmp")" ] || return 1
+  kill -INT -- "-$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+  tries=0
+  while [ -n "$(ls -A "$lab/tmp")" ] && [ "$tries" -lt 100 ]; do sleep 0.05; tries=$((tries + 1)); done
+  [ -z "$(ls -A "$lab/tmp")" ]
+}
+check "an interrupted --check leaves no sandbox behind" interrupted_leaves_nothing
+
 broken "$squad/playbook/scripts/squad-checks.sh"
 printf '#!/bin/sh\nexit 0\n' > "$squad/playbook/scripts/squad-checks.sh"
 check "a gate that passes a failing check fails the gate item (and the playbook one)" \
@@ -464,6 +529,13 @@ mv "$project/.agent-squad-checks" "$lab/list-aside"
 check "a missing list fails the list item" check_reports "$item_list"
 mv "$lab/list-aside" "$project/.agent-squad-checks"
 
+broken "$project/.agent-squad-checks"
+for content in '' '# only a comment'; do
+  printf '%s\n' "$content" > "$project/.agent-squad-checks"
+  check "a list with no command ('$content') fails the list item" check_reports "$item_list"
+done
+mended "$project/.agent-squad-checks"
+
 mv "$squad/worktrees/qa" "$lab/qa-aside"
 check "a missing worktree fails the worktrees item" check_reports "$item_worktrees"
 mv "$lab/qa-aside" "$squad/worktrees/qa"
@@ -471,6 +543,17 @@ mv "$lab/qa-aside" "$squad/worktrees/qa"
 broken "$project/AGENTS.md"
 printf '# AGENTS.md\n' > "$project/AGENTS.md"
 check "a missing import fails the import item" check_reports "$item_import"
+# Imports that Claude Code does not evaluate: in a fence, indented, inline, commented out, or of
+# another file.
+import="@.agent-squad/playbook/SQUAD.md"
+for inert in '```\n'"$import"'\n```' '~~~\n'"$import"'\n~~~' "    $import" "Read \`$import\`." \
+  "<!-- $import -->" "<!--\n$import\n-->" "$import.bak"; do
+  printf '# AGENTS.md\n\n%b\n' "$inert" > "$project/AGENTS.md"
+  check "an import that is not evaluated fails the import item: $(head -c 24 <<<"$inert" | tr '\n' ' ')" \
+    check_reports "$item_import"
+done
+printf '# AGENTS.md\n\n%s  \n' "$import" > "$project/AGENTS.md"
+check "an import with trailing blanks still counts" check_reports
 mended "$project/AGENTS.md"
 
 check "with every breakage undone, --check passes again" check_reports

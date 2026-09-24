@@ -95,6 +95,36 @@ ignored_by_project() {
   git -C "$project" check-ignore -q --no-index "$1" 2>/dev/null \
     && [ "$(git -C "$project" check-ignore -v --no-index "$1" 2>/dev/null | cut -d: -f1)" = .gitignore ]
 }
+# `hooks_path_settings` prints where core.hooksPath is set, for the main checkout and each squad
+# worktree that exists (a worktree can set it in its own config.worktree): git never runs the
+# common hooks directory, and so the shim, from there.
+hooks_path_settings() {
+  local dir value
+  for dir in "$project" "$squad/worktrees/dev" "$squad/worktrees/qa"; do
+    [ -d "$dir" ] || continue
+    value="$(git -C "$dir" config --get core.hooksPath 2>/dev/null)" || continue
+    if [ "$dir" = "$project" ]; then
+      echo "'$value' in the main checkout"
+    else
+      echo "'$value' in ${dir#"$project"/}"
+    fi
+  done
+}
+# `lists_a_command <file>` passes when the file has a line that squad-checks.sh runs, by the same
+# rule: neither blank nor a comment. Without one, the gate refuses every push.
+lists_a_command() { awk '$0 != "" && !/^#/ { found = 1 } END { exit !found }' "$1" 2>/dev/null; }
+# `imports_charter <file>` passes when the file imports the charter where Claude Code evaluates
+# an import: a whole line at the margin (trailing blanks allowed), outside fenced code blocks and
+# HTML comments. Indented, inline or commented out, it imports nothing.
+imports_charter() {
+  awk '
+    /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
+    fenced { next }
+    commented { if (/-->/) commented = 0; next }
+    /<!--/ && !/-->/ { commented = 1; next }
+    /^@\.agent-squad\/playbook\/SQUAD\.md[[:space:]]*$/ { found = 1 }
+    END { exit !found }' "$1" 2>/dev/null
+}
 
 # The four compaction hooks as the installer writes them (D5, D10). Each command checks that the
 # playbook's script exists, so that a missing playbook is reported to the session instead of
@@ -154,21 +184,30 @@ real_path() { (CDPATH='' cd -- "$1" 2>/dev/null && pwd -P); }
 # repository whose hooks are the playbook's, a failing check must refuse the push and a passing one
 # must let it through. It prints why when that is not so, and nothing otherwise.
 gate_refusal() {
-  local lab code
-  lab="$(mktemp -d)" || { echo "cannot create a temporary directory"; return; }
+  local lab="" code
+  if [ ! -x "$playbook/.githooks/pre-push" ]; then
+    echo "the playbook has no executable .githooks/pre-push to test"
+    return
+  fi
+  # The sandbox's hooks are the project's playbook: it goes away even when the run is interrupted.
+  trap '[ -z "$lab" ] || rm -rf "$lab"; exit 130' INT TERM HUP
+  # A template, so that TMPDIR is honoured on every system and a leftover is recognisable.
+  lab="${TMPDIR:-/tmp}"
+  lab="$(mktemp -d "${lab%/}/squad-check.XXXXXX")" || { echo "cannot create a temporary directory"; return; }
   (
-    # The machine's own git configuration (signing, templates, hooks) stays out of the test.
-    export HOME="$lab" XDG_CONFIG_HOME="$lab" GIT_CONFIG_NOSYSTEM=1
+    # The machine's own git configuration (signing, protocols, templates, hooks) stays out.
+    export HOME="$lab" XDG_CONFIG_HOME="$lab" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
     work="$lab/work"
     git init -q --bare -b main "$lab/remote.git" && git init -q -b main "$work" || exit 3
     git -C "$work" config core.hooksPath "$playbook/.githooks"
     git -C "$work" config user.name "Squad check" && git -C "$work" config user.email check@example.com
     git -C "$work" remote add origin "$lab/remote.git"
-    # `push_with <check>` commits a list with that one check and pushes it.
+    # `push_with <check>` commits a list with that one check and pushes it; a commit that fails is
+    #  the sandbox's failure, not a verdict on the gate.
     push_with() {
       printf '%s\n' "$1" > "$work/.agent-squad-checks"
-      git -C "$work" add -A && git -C "$work" commit -qm "$1" \
-        && git -C "$work" push -q origin HEAD:refs/heads/main >/dev/null 2>&1
+      { git -C "$work" add -A && git -C "$work" commit -qm "$1"; } >/dev/null 2>&1 || exit 3
+      git -C "$work" push -q origin HEAD:refs/heads/main >/dev/null 2>&1
     }
     push_with false && exit 4
     push_with true || exit 5
@@ -176,9 +215,10 @@ gate_refusal() {
   )
   code=$?
   rm -rf "$lab"
+  trap - INT TERM HUP
   case "$code" in
     0) ;;
-    3) echo "cannot build a throw-away repository" ;;
+    3) echo "cannot build a throw-away repository to test the gate in" ;;
     4) echo "the playbook's gate let a push through with a failing check" ;;
     *) echo "the playbook's gate refused a push whose check passes" ;;
   esac
@@ -231,9 +271,9 @@ check_installation() {
 
   # 4. The shim is the installer's, where git runs it.
   why=""
-  hooks_path="$(git -C "$project" config --get core.hooksPath || true)"
-  if [ -n "$hooks_path" ]; then
-    why="core.hooksPath is set to '$hooks_path', so git never runs $hooks_dir/pre-push"
+  hooks_paths="$(hooks_path_settings | join)"
+  if [ -n "$hooks_paths" ]; then
+    why="core.hooksPath is set ($hooks_paths), so git never runs $hooks_dir/pre-push there"
   elif [ ! -f "$hooks_dir/pre-push" ]; then
     why="there is no $hooks_dir/pre-push"
   elif ! grep -q "$shim_marker" "$hooks_dir/pre-push"; then
@@ -252,6 +292,8 @@ check_installation() {
     why="there is no .agent-squad-checks"
   elif ! git -C "$project" ls-files --error-unmatch .agent-squad-checks >/dev/null 2>&1; then
     why=".agent-squad-checks is not tracked"
+  elif ! lists_a_command "$project/.agent-squad-checks"; then
+    why=".agent-squad-checks lists no command, so the gate refuses every push"
   fi
   verdict ".agent-squad-checks exists and is tracked" "$why"
 
@@ -274,8 +316,8 @@ check_installation() {
       AGENTS.md|./AGENTS.md) ;;
       *) echo "CLAUDE.md is not a symlink to AGENTS.md" ;;
     esac
-    grep -qF '@.agent-squad/playbook/SQUAD.md' "$project/AGENTS.md" 2>/dev/null \
-      || echo "AGENTS.md does not import @.agent-squad/playbook/SQUAD.md"
+    imports_charter "$project/AGENTS.md" \
+      || echo "AGENTS.md does not import @.agent-squad/playbook/SQUAD.md on a line of its own, outside code and comments"
   } | join)"
   verdict "CLAUDE.md links to AGENTS.md, which imports the charter" "$why"
 
@@ -346,7 +388,9 @@ printf '%s %s -> %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$previous" "$tag" >> 
 say log "appended '$previous -> $tag' to .agent-squad/install.log"
 
 # 2. .gitignore: the squad's directory and Claude Code's local settings stay out of git. A line is
-#    added unless the project's own .gitignore already ignores the path.
+#    added unless the project's own .gitignore already ignores the path. A rule in a nested
+#    .gitignore outranks the root one, so when such a rule (a negation) decides, appending cannot
+#    help: the step appends nothing, says so, and needs a decision.
 gitignore="$project/.gitignore"
 for path in .agent-squad .claude/settings.local.json; do
   line="$path"
@@ -355,12 +399,27 @@ for path in .agent-squad .claude/settings.local.json; do
     say .gitignore "$line is already ignored"
     continue
   fi
+  # The rule that decides today, as source:line:pattern; its source is absolute for this machine's
+  # excludes, relative for the project's own files.
+  winner="$(git -C "$project" check-ignore -v --no-index "$path" 2>/dev/null | cut -f1)"
+  case "${winner%%:*}" in
+    /*) ;;
+    */.gitignore)
+      say .gitignore "NOT IGNORED: $line would lose to $winner, a nested .gitignore; decide with the CEO how to reconcile them"
+      needs_decision=1
+      continue
+      ;;
+  esac
   if [ -s "$gitignore" ] && [ -n "$(tail -c 1 "$gitignore")" ]; then
     echo >> "$gitignore"
   fi
   echo "$line" >> "$gitignore"
   say .gitignore "added $line"
   tracked_changes+=(".gitignore")
+  if ! ignored_by_project "$path"; then
+    say .gitignore "NOT IGNORED: $line was added, and still git does not ignore it; decide with the CEO"
+    needs_decision=1
+  fi
 done
 
 # 3. Compaction hooks (D5, D10), merged into .claude/settings.local.json: every other key and hook
@@ -399,9 +458,9 @@ fi
 
 # 4. Pre-push shim (D8) in the common git directory, so that every worktree runs it. A project's
 #    own pre-push is kept as pre-push.local and run first; other hooks are left alone.
-hooks_path="$(git -C "$project" config --get core.hooksPath || true)"
-if [ -n "$hooks_path" ]; then
-  say pre-push "NOT INSTALLED: core.hooksPath is set to '$hooks_path', so git never runs $hooks_dir; decide with the CEO whether to unset it"
+hooks_paths="$(hooks_path_settings | join)"
+if [ -n "$hooks_paths" ]; then
+  say pre-push "NOT INSTALLED: core.hooksPath is set ($hooks_paths), so git never runs $hooks_dir there; decide with the CEO whether to unset it"
   needs_decision=1
 elif [ -e "$hooks_dir/pre-push" ] && grep -q "$shim_marker" "$hooks_dir/pre-push" 2>/dev/null; then
   if [ "$(cat "$hooks_dir/pre-push")" = "$shim" ]; then
@@ -464,7 +523,7 @@ item() {
   printf '  %d. %s\n' "$items" "$1"
 }
 template="$playbook/templates/AGENTS.md"
-if ! grep -qF '@.agent-squad/playbook/SQUAD.md' "$project/AGENTS.md" 2>/dev/null; then
+if ! imports_charter "$project/AGENTS.md"; then
   # The one source of the Squad section is the playbook's template of AGENTS.md. It is printed
   # unindented: indented, it would become a code block in which Claude Code does not import.
   if grep -qE '^## Squad[[:space:]]*$' "$template"; then
@@ -480,8 +539,8 @@ case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
   AGENTS.md|./AGENTS.md) ;;
   *) item "Make CLAUDE.md a symlink to AGENTS.md (ln -s AGENTS.md CLAUDE.md), once its content is in AGENTS.md" ;;
 esac
-if [ ! -f "$project/.agent-squad-checks" ]; then
-  item "Write .agent-squad-checks: the commands your CI runs, one per line; until it exists the gate refuses every push"
+if ! lists_a_command "$project/.agent-squad-checks"; then
+  item "Write .agent-squad-checks: the commands your CI runs, one per line; until it lists one the gate refuses every push"
 fi
 if [ "${#tracked_changes[@]}" -gt 0 ]; then
   changed="$(printf '%s\n' "${tracked_changes[@]}" | sort -u | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')"
