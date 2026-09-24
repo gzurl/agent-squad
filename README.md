@@ -45,8 +45,10 @@ every action it takes or skips, and what it leaves to you:
    one per line.
 
 Then run `"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" --check /path/to/project`:
-it changes nothing and reports each item, including that the gate really refuses a failing
-check. Launch the three sessions from the main checkout and tell the CTO to follow
+it changes nothing and prints the installed version and the last `install.log` entry, then one
+line per item (`check: ok` or `check: FAILED  <item>: <reason>`), and exits 1 if any failed. It
+also proves that the gate really refuses a failing check. Right after installing, only the items
+the installer leaves to you fail. Launch the three sessions from the main checkout and tell the CTO to follow
 `.agent-squad/playbook/BOOTSTRAP.md`.
 
 ## What goes where
@@ -62,6 +64,7 @@ Outside it, the installer only touches the files listed after it.
 | `.agent-squad/handoff/` | One snapshot per session, saved before each compaction | Compaction hooks | No | Untouched | When stale, by anyone |
 | `.agent-squad/evidence/<pr-or-issue>/` | Screenshots and files a review relies on | QA | No | Untouched | When its PR or issue closes |
 | `.agent-squad/install.log` | One line per install or upgrade: date, old tag, new tag | Installer | No | Appended | Never |
+| `.agent-squad/playbook.manifest` | The playbook's checksums as installed; `--check` compares against it | Installer | No | Rewritten | Never |
 | `.agent-squad-checks` | The project's checks for the pre-push gate | The project | **Yes** | Untouched | — |
 | `AGENTS.md`, `CLAUDE.md` → `AGENTS.md` | The project's conventions and the *Squad* section | The project | **Yes** | Untouched | — |
 | `.claude/settings.local.json` | The four compaction hooks, next to Claude Code's own local settings | Installer merges ours, keeps the rest | No | Our entries rewritten | — |
