@@ -7,7 +7,7 @@
 # as it was, and the steps that need a decision. GitHub is replaced by a `gh` that serves a tarball
 # built here with `git archive`, as GitHub builds it; this script never touches the repository it
 # is run from.
-# shellcheck disable=SC2016,SC2329 # jq programs use jq variables; the predicates run through check
+# shellcheck disable=SC2016,SC2317,SC2329 # jq programs use jq variables; the predicates run through check
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2

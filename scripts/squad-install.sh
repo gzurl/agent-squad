@@ -77,7 +77,7 @@ manifest() {
 mkdir -p "$squad" || die "cannot create $squad"
 staging="$(mktemp -d "$squad/playbook.new.XXXXXX")" || die "cannot create a directory in $squad"
 tarball=""
-# shellcheck disable=SC2329 # invoked by the trap below
+# shellcheck disable=SC2317,SC2329 # invoked by the trap below
 cleanup() {
   rm -rf "$staging"
   [ -z "$tarball" ] || rm -f "$tarball"
