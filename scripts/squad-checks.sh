@@ -9,6 +9,12 @@ root="$(git rev-parse --show-toplevel)" || exit 2
 cd "$root" || exit 2
 list=".squad/checks"
 
+# A hook runs with git's own variables set (GIT_DIR and others). A check that uses git, such as a
+# test that builds a repository in a temporary directory, would otherwise act on this repository:
+# commit into it, or even reinitialise its configuration. The checks start without them.
+# shellcheck disable=SC2046 # the names are split on purpose, one variable each
+unset $(git rev-parse --local-env-vars)
+
 # The project's own checks, one shell command per line; blank lines and # comments are skipped.
 commands=()
 if [ -f "$list" ]; then

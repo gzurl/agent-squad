@@ -1,6 +1,6 @@
 # Squad Charter
 
-> **Version:** 13 (2026-09-24). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v13`); every project carries a copy. **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
+> **Version:** 14 (2026-09-24). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v14`); every project carries a copy. **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
 > **Scope:** project-agnostic, for teams working on GitHub from one machine. Anything specific to one project lives in that project's `AGENTS.md`; the one-time setup procedure lives in `BOOTSTRAP.md` and concerns the CTO only.
 > **Reuse:** copy the tagged files of `agent-squad` (`SQUAD.md`, `BOOTSTRAP.md`, the `.github/` issue and PR templates, `.claude/settings.json`, `scripts/squad-handoff.sh`, `scripts/squad-merge-gate.sh`, `scripts/squad-checks.sh`, `.githooks/pre-push`; not `.github/workflows/`, which is `agent-squad`'s own CI) into the target repository, launch the three agent sessions from the main checkout and tell the CTO to read `SQUAD.md`. Everything else is created from there.
 > **Language:** everything in the repository or on GitHub is written in English. Messages between agents, and between the CEO and the CTO, are written in the CEO's language, stated in `AGENTS.md`.
