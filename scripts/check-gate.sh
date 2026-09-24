@@ -160,16 +160,32 @@ else
   fail "a delete-only push ran the checks"
 fi
 
-# 6. A hook that cannot find squad-checks.sh next to it refuses the push, even a passing one.
-mv "$playbook/scripts/squad-checks.sh" "$lab/squad-checks.sh.aside"
+# 6. A hook that cannot run squad-checks.sh next to it, missing or not executable, refuses every
+#    push, one whose checks pass and one that only deletes, and says why: no other refusal counts.
+# `refused_for_runner <description> <refspec>` pushes from the worktree and expects the hook's own
+# message about its runner.
+refused_for_runner() {
+  local errors
+  if errors="$(git -C "$wt" push -q origin "$2" 2>&1)"; then
+    fail "$1 let the push through"
+  elif grep -q 'is missing or not executable' <<<"$errors"; then
+    pass "$1 refuses the push and says why"
+  else
+    fail "$1 refused the push for another reason: $errors"
+  fi
+}
+runner="$playbook/scripts/squad-checks.sh"
 list "$wt" true
-commit "$wt" "a passing check, with the runner missing" >/dev/null
-if git -C "$wt" push -q origin HEAD:refs/heads/wt 2>/dev/null; then
-  fail "a hook without squad-checks.sh next to it let the push through"
-else
-  pass "a hook without squad-checks.sh next to it refuses the push"
-fi
-mv "$lab/squad-checks.sh.aside" "$playbook/scripts/squad-checks.sh"
+commit "$wt" "a passing check, with the runner broken" >/dev/null
+# A branch to delete below, pushed while the runner still works.
+git -C "$wt" push -q origin HEAD:refs/heads/doomed-too 2>/dev/null
+mv "$runner" "$lab/squad-checks.sh.aside"
+refused_for_runner "a hook without squad-checks.sh next to it" HEAD:refs/heads/wt
+refused_for_runner "a hook without squad-checks.sh, on a delete-only push," :refs/heads/doomed-too
+mv "$lab/squad-checks.sh.aside" "$runner"
+chmod -x "$runner"
+refused_for_runner "a hook whose squad-checks.sh is not executable" HEAD:refs/heads/wt
+chmod +x "$runner"
 
 # 7. The same hook at the root of a repository, as this one has it: tracked, next to scripts/, and
 #    reached through a relative core.hooksPath from the worktree that pushes. The recording check
