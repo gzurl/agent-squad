@@ -1,7 +1,7 @@
 # Squad Bootstrap
 
 > **Owner:** the CTO agent. **Read by:** the CTO only, once per project, before the first task. DEV and QA never need this file.
-> **Companion of** [SQUAD.md](SQUAD.md), which holds the rules; this file holds the one-time procedure that puts a repository in the state those rules assume. Both are maintained in the `agent-squad` repository and copied into projects at a tagged version (row 0).
+> **Companion of** [SQUAD.md](SQUAD.md), which holds the rules; this file holds the one-time procedure that puts a repository in the state those rules assume. Both are maintained in the `agent-squad` repository and installed into projects at a tagged version (row 0); in a project this file is `.agent-squad/playbook/BOOTSTRAP.md`.
 > **Targets GitHub**, one machine, and three agent sessions of the same harness.
 
 ## How to run it
@@ -15,7 +15,7 @@ Two situations are different throughout:
 
 | # | Artifact | Check | Empty repository | Repository with history |
 |---|---|---|---|---|
-| 0 | The squad files, at the version named in `SQUAD.md`'s header | `SQUAD.md`, `BOOTSTRAP.md`, `.github/` templates, `.claude/settings.json`, `scripts/squad-handoff.sh`, `scripts/squad-merge-gate.sh`, `scripts/squad-checks.sh` and `.githooks/pre-push` are byte-identical to the `agent-squad` tag | Copy them from the tag | Copy them from the tag; if the project already has files of the same name, reconcile with the CEO before overwriting |
+| 0 | The squad, installed at the chosen tag | `"$p/scripts/squad-install.sh" --check .` passes, where `p` is `.agent-squad/playbook` of the main checkout | Run the installer as the `agent-squad` README says (*Install*) | Same; it never overwrites a project file: resolve with the CEO what it reports instead (for instance a `core.hooksPath` already set) |
 | 1 | Three sessions, `CTO:<project>`, `DEV:<project>`, `QA:<project>`, launched from `<repo>/` | `ListAgents` shows DEV and QA; each confirms it started from the main checkout | Ask the CEO to launch or relaunch the missing ones from `<repo>/` | Same |
 | 2 | `gh` authenticated with `repo` and `workflow` scopes | `gh auth status` lists both scopes | Ask the CEO to run `gh auth refresh -h github.com -s workflow` | Same |
 | 3 | Toolchains for the stack | The stack's interpreter, package manager and linters run | Ask the CEO to install what is missing | Same |
@@ -25,14 +25,24 @@ Two situations are different throughout:
 | 6b | Repository merge settings | `gh api repos/{owner}/{repo} --jq '{squash_merge_commit_title,squash_merge_commit_message,allow_merge_commit,allow_rebase_merge}'` shows `PR_TITLE`, `PR_BODY`, `false`, `false` | `gh api -X PATCH repos/{owner}/{repo} -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY -F allow_merge_commit=false -F allow_rebase_merge=false` | Same, after checking with the CEO that squash-only suits the existing history |
 | 7 | Labels | `gh label list` equals the table below (name, color, description) | Delete GitHub's default labels; create the table | Keep any existing label used by an open issue; map the rest with the CEO; create what is missing |
 | 8 | First milestone | `gh api repos/<owner>/<repo>/milestones` | Create it before handing out the first issue | Same, unless one fits |
-| 9 | `.github/` templates and CI | `ISSUE_TEMPLATE/task.md`, `PULL_REQUEST_TEMPLATE.md` and a CI workflow (lint, format check, type check where the language has one, tests) exist | Copy the templates; CI comes with the first scaffolding issue | Do not overwrite; evaluate the existing ones with the CEO and reconcile |
-| 9b | Local gate before push (SQUAD.md §4) | `.squad/checks` lists the commands CI runs, one per line, each in the project's environment; `git config core.hooksPath` prints `.githooks`; `scripts/squad-checks.sh` exits 0 on `main` | Write `.squad/checks` with the first scaffolding issue, then `git config core.hooksPath .githooks` | Write `.squad/checks` from the existing CI; `git config core.hooksPath .githooks` (the setting is shared by every worktree of the clone) |
-| 10 | `AGENTS.md` with `CLAUDE.md` as a symlink to it | Both exist; `git ls-tree HEAD CLAUDE.md` shows mode `120000`; `AGENTS.md` has the *Compact instructions* section (template below) | Create both (stack, commands, directories, language, conventions, compact instructions) | Read the existing instruction files first; reconcile into `AGENTS.md` with the CEO |
-| 10b | Compaction hooks | `jq` is installed (the hook script reads its JSON payload with it); `.claude/settings.json` declares the `PreCompact` (manual and auto) and `SessionStart` (`compact`) hooks pointing at `scripts/squad-handoff.sh`; `.claude/handoff/` is git-ignored; simulated hook input (`echo '{"session_id":"x"}' \| scripts/squad-handoff.sh save`, then `restore`) prints a snapshot | Copy `.claude/settings.json` and `scripts/squad-handoff.sh`; add the ignore line | Merge the hooks into the existing `.claude/settings.json` without removing others; ask the CEO if a hook of the same event already exists |
-| 11 | `.env` and `evidence/` conventions | `.env` and `evidence/` are git-ignored; `.env.example` lists the variable names with empty values | Create | Check; add what is missing |
+| 9 | `.github/` templates and CI | `ISSUE_TEMPLATE/task.md`, `PULL_REQUEST_TEMPLATE.md` and a CI workflow (lint, format check, type check where the language has one, tests) exist | The installer created the templates; CI comes with the first scaffolding issue | The installer kept any existing templates: evaluate them with the CEO and reconcile |
+| 9b | Local gate before push (SQUAD.md §4) | `.agent-squad-checks` lists the commands CI runs, one per line, each in the project's environment; `--check` reports that the gate refuses a failing check; `"$p/scripts/squad-checks.sh"` exits 0 on `main` | Write `.agent-squad-checks` with the first scaffolding issue | Write `.agent-squad-checks` from the existing CI |
+| 10 | `AGENTS.md` with `CLAUDE.md` as a symlink to it | Both exist; `git ls-tree HEAD CLAUDE.md` shows mode `120000`; `AGENTS.md` has the *Squad* and *Compact instructions* sections (templates below) | Create both (stack, commands, directories, language, conventions, the two sections) | Read the existing instruction files first; reconcile into `AGENTS.md` with the CEO |
+| 10b | Compaction hooks | `jq` is installed (the hook script reads its JSON payload with it); `--check` reports the four hooks in `.claude/settings.local.json`; simulated hook input (`echo '{"session_id":"x"}' \| "$p/scripts/squad-handoff.sh" save`, then `restore`) prints a snapshot | The installer merged them | Same; the installer keeps any other hook of the same event: ask the CEO whether both should run |
+| 11 | `.env` conventions | `.env` is git-ignored; `.env.example` lists the variable names with empty values | Create | Check; add what is missing |
 | 12 | `openspec/` layout | `vision.md`, `project.md`, `research/` exist | Create; ask the CEO for the vision | Ask the CEO whether OpenSpec applies to this project; if it does, create |
-| 13 | Worktrees | `git worktree list` shows `<repo>.worktrees/dev` (branch from `origin/main`) and `<repo>.worktrees/qa` (detached) | `git worktree add ../<repo>.worktrees/dev -b <branch> origin/main` and `git worktree add --detach ../<repo>.worktrees/qa origin/main` | Same |
+| 13 | Worktrees | `git worktree list` shows `.agent-squad/worktrees/dev` and `.agent-squad/worktrees/qa`, both detached at `origin/main` | The installer creates them once `origin/main` exists: on an empty repository, run it again after row 5 | Same |
 | 14 | Team ready | DEV and QA acknowledged the charter and their directories | Ping both with their role, directory and first task | Same |
+
+## Squad section template for `AGENTS.md`
+```
+## Squad
+This project follows the team charter in `.agent-squad/playbook/SQUAD.md` (installed by the
+squad installer, not tracked). Its full text is loaded below; if you cannot see it, stop and
+tell the CTO that the squad is not installed.
+
+@.agent-squad/playbook/SQUAD.md
+```
 
 ## Compact instructions template for `AGENTS.md`
 ```
@@ -41,7 +51,7 @@ When compacting this conversation, always preserve: my role and signature; the i
 working on, with their status labels, the PR's `headRefOid`, its latest verdict and open threads;
 the exact step I am at and what I was about to do next; anything I promised another agent by
 message; decisions taken in this session that are not yet on GitHub. After compaction, re-read
-`AGENTS.md` and `SQUAD.md` before acting. (Charter rule: SQUAD.md, section 7.)
+`AGENTS.md` and `.agent-squad/playbook/SQUAD.md` before acting. (Charter rule: SQUAD.md, section 7.)
 ```
 
 ## Labels

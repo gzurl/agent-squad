@@ -1,5 +1,28 @@
 # Changelog
 
+## v15 — 2026-09-24
+- **Projects install the method instead of carrying copies** (#23). `scripts/squad-install.sh`
+  puts a tag in `<project>/.agent-squad/playbook/`, which git ignores, and never overwrites or
+  deletes a project file; `--check` verifies an installation and proves the pre-push gate refuses
+  a failing check; an upgrade is the same command with a newer tag. Outside `.agent-squad/` it
+  only merges the compaction hooks into `.claude/settings.local.json`, appends two ignore lines,
+  creates the GitHub templates when missing and writes a `pre-push` shim in the shared git
+  directory (#34, #35, #36).
+- `.agent-squad/` also holds the worktrees (`worktrees/dev`, `qa`, `cto-<topic>`), the compaction
+  snapshots (`handoff/`), the review evidence (`evidence/`) and `install.log` (§2.4, §5).
+- The project's list of checks is `.agent-squad-checks`, tracked (§4.2). The gate no longer uses
+  `core.hooksPath`, which silently disabled every other hook in `.git/hooks/`; a project's own
+  `pre-push` runs first and the shim refuses the push when the playbook is missing. Every push
+  runs every check.
+- `AGENTS.md` imports the charter with `@.agent-squad/playbook/SQUAD.md`, so every session has it
+  from the start and after each compaction (templates in `BOOTSTRAP.md` and `templates/`).
+- §4.9: the merge gate is reached from any worktree through the shared git directory.
+- §7: the method's repository has its own CTO; projects' CTOs open issues there and take one to a
+  PR only when assigned. `.claude/settings.json` and the GitHub templates are no longer portable
+  copies (#16). `BOOTSTRAP.md` rows 0, 9, 9b, 10, 10b, 11 and 13 run the installer and `--check`.
+- README rewritten: requirements, install, a map of every directory, upgrade, tooling traps
+  (#26); no portable file names a project.
+
 ## v14 — 2026-09-24
 - Fix: `scripts/squad-checks.sh` clears git's own variables (`git rev-parse --local-env-vars`)
   before running any check. A hook runs with `GIT_DIR` and others set, and a check that uses git,
