@@ -42,7 +42,9 @@ every action it takes or skips, and what it leaves to you:
 1. **The *Squad* section of `AGENTS.md`**, which imports the charter into every session (the
    installer prints it, from `templates/AGENTS.md`), and `CLAUDE.md` as a symlink to `AGENTS.md`.
 2. **`.agent-squad-checks`**, the list of commands the pre-push gate runs: the ones your CI runs,
-   one per line.
+   one per line. Until it lists one, the gate refuses every push.
+3. **A PR with what it changed in tracked files** (`.gitignore`, and the GitHub templates when it
+   created them), together with the two files above.
 
 Then run `"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" --check /path/to/project`:
 it changes nothing and prints the installed version and the last `install.log` entry, then one
@@ -100,7 +102,7 @@ version changes.
 | `scripts/squad-*.sh`, `.githooks/pre-push` | Installer, compaction hooks, merge gate, checks runner, gate | Yes |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates and skeletons the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |
-| `AGENTS.md`, `CLAUDE.md`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, checks, CI and tests | No: `.gitattributes` keeps them out of the tag's tarball, so a project's agent never loads this repository's `CLAUDE.md` |
+| `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, Claude Code settings, checks, CI and tests | No: `.gitattributes` keeps them out of the tag's tarball, so a project's agent never loads this repository's `CLAUDE.md` |
 
 ## How it evolves
 Upstream first (`SQUAD.md`, section 7): any agent who finds a flaw or an improvement in the method

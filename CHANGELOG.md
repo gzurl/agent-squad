@@ -1,6 +1,6 @@
 # Changelog
 
-## v15 — 2026-09-24
+## v15 — 2026-09-25
 - **Projects install the method instead of carrying copies** (#23). `scripts/squad-install.sh`
   puts a tag in `<project>/.agent-squad/playbook/`, which git ignores, and never overwrites or
   deletes a project file; `--check` verifies an installation and proves the pre-push gate refuses

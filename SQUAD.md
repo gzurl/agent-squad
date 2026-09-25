@@ -1,6 +1,6 @@
 # Squad Charter
 
-> **Version:** 15 (2026-09-24). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v15`); projects install a tagged version (section 7). **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
+> **Version:** 15 (2026-09-25). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v15`); projects install a tagged version (section 7). **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
 > **Scope:** project-agnostic, for teams working on GitHub from one machine. Anything specific to one project lives in that project's `AGENTS.md`; the one-time setup procedure lives in `BOOTSTRAP.md` and concerns the CTO only.
 > **Install:** the `agent-squad` installer puts a tagged version of the method in the project's `.agent-squad/playbook/`, which git ignores, and touches only the project files it lists (see the `agent-squad` README); the project's `AGENTS.md` imports this charter into every session. Launch the three agent sessions from the main checkout and tell the CTO to follow `BOOTSTRAP.md`. Everything else is created from there.
 > **Language:** everything in the repository or on GitHub is written in English. Messages between agents, and between the CEO and the CTO, are written in the CEO's language, stated in `AGENTS.md`.
