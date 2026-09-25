@@ -15,7 +15,7 @@ Two situations are different throughout:
 
 | # | Artifact | Check | Empty repository | Repository with history |
 |---|---|---|---|---|
-| 0 | The squad, installed at the chosen tag | `"$p/scripts/squad-install.sh" --check .` passes, where `p` is `.agent-squad/playbook` of the main checkout, except its items for `.agent-squad-checks` and the `AGENTS.md` import, which rows 9b and 10 complete | Run the installer as the `agent-squad` README says (*Install*) | Same; it never overwrites a project file: resolve with the CEO what it reports instead (for instance a `core.hooksPath` already set) |
+| 0 | The squad, installed at the chosen tag | `"$p/scripts/squad-install.sh" --check .` passes, where `p` is `.agent-squad/playbook` of the main checkout, except its items for `.agent-squad-checks` and the `AGENTS.md` import, which rows 9b and 10 complete, and, on an empty repository, the worktrees, which row 13 completes | Run the installer as the `agent-squad` README says (*Install*) | Same; it never overwrites a project file: resolve with the CEO what it reports instead (for instance a `core.hooksPath` already set) |
 | 1 | Three sessions, `CTO:<project>`, `DEV:<project>`, `QA:<project>`, launched from `<repo>/` | `ListAgents` shows DEV and QA; each confirms it started from the main checkout | Ask the CEO to launch or relaunch the missing ones from `<repo>/` | Same |
 | 2 | `gh` authenticated with `repo` and `workflow` scopes | `gh auth status` lists both scopes | Ask the CEO to run `gh auth refresh -h github.com -s workflow` | Same |
 | 3 | Toolchains for the stack | The stack's interpreter, package manager and linters run | Ask the CEO to install what is missing | Same |
