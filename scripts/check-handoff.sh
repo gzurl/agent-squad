@@ -135,4 +135,52 @@ else
   fail "restore run by hand on a terminal waited for input, or did not run"
 fi
 
+# 7. The snapshot's listings ask gh for an explicit limit, and say so on a line of their own when a
+#    listing reaches it (#63): a cut snapshot must not read as a complete one. This gh answers with
+#    GH_ITEMS pull requests and issues, honouring --limit and defaulting to 30 as gh does.
+mkdir -p "$lab/bin-listing"
+cat > "$lab/bin-listing/gh" <<'GH'
+#!/usr/bin/env bash
+limit=30
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  [ "${args[$i]}" = --limit ] && limit="${args[$((i + 1))]}"
+done
+n="${GH_ITEMS:-0}"
+[ "$n" -gt "$limit" ] && n="$limit"
+case "$1 ${2:-}" in
+  "repo view") echo sandbox ;;
+  "pr list")
+    jq -n --argjson n "$n" '[range(1; $n + 1) | {number: ., title: "PR \(.)", headRefName: "b\(.)",
+      headRefOid: "0123456789abcdef0123456789abcdef01234567", labels: []}]' ;;
+  "issue list")
+    jq -n --argjson n "$n" '[range(1; $n + 1) | {number: ., title: "Issue \(.)",
+      labels: [{name: "🚧 status:in-progress"}]}]' ;;
+  "api graphql") echo 0 ;;
+  api*) echo '[]' ;;
+  *) exit 1 ;;
+esac
+GH
+chmod +x "$lab/bin-listing/gh"
+# `snapshot_with <items>` saves a snapshot against that gh and prints it.
+snapshot_with() {
+  rm -f "$handoff_dir/listing.md"
+  (cd "$main" && echo '{"session_id":"listing"}' \
+    | GH_ITEMS="$1" PATH="$lab/bin-listing:$PATH" "$handoff" save)
+  cat "$handoff_dir/listing.md" 2>/dev/null
+}
+snapshot="$(snapshot_with 100)"
+if [ "$(grep -c '^- PR #' <<<"$snapshot")" -eq 100 ] && [ "$(grep -c '^- #' <<<"$snapshot")" -eq 100 ] \
+  && [ "$(grep -c 'the limit of this snapshot' <<<"$snapshot")" -eq 2 ]; then
+  pass "with as many PRs and issues as the limit, all are listed and two lines say there may be more"
+else
+  fail "with 100 PRs and issues, the snapshot listed $(grep -c '^- PR #' <<<"$snapshot") PRs, $(grep -c '^- #' <<<"$snapshot") issues and $(grep -c 'the limit of this snapshot' <<<"$snapshot") limit lines"
+fi
+snapshot="$(snapshot_with 5)"
+if [ "$(grep -c '^- PR #' <<<"$snapshot")" -eq 5 ] && ! grep -q 'the limit of this snapshot' <<<"$snapshot"; then
+  pass "below the limit, the snapshot lists everything and says nothing about a limit"
+else
+  fail "with 5 PRs and issues, the snapshot did not list them plainly"
+fi
+
 exit "$status"

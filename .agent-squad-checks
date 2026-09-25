@@ -7,3 +7,4 @@ scripts/check-gate.sh
 scripts/check-merge-gate.sh
 scripts/check-handoff.sh
 scripts/check-install.sh
+scripts/check-gh-filters.sh
