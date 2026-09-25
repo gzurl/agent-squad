@@ -1,6 +1,6 @@
 # Squad Charter
 
-> **Version:** 15 (2026-09-25). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v15`); projects install a tagged version (section 7). **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
+> **Version:** 16 (2026-09-25). **Home:** the `agent-squad` repository, where this file is maintained and tagged (`v16`); projects install a tagged version (section 7). **Owner:** the CTO agents, who decide, execute and keep it up to date; important changes are agreed with the CEO first.
 > **Scope:** project-agnostic, for teams working on GitHub from one machine. Anything specific to one project lives in that project's `AGENTS.md`; the one-time setup procedure lives in `BOOTSTRAP.md` and concerns the CTO only.
 > **Install:** the `agent-squad` installer puts a tagged version of the method in the project's `.agent-squad/playbook/`, which git ignores, and touches only the project files it lists (see the `agent-squad` README); the project's `AGENTS.md` imports this charter into every session. Launch the three agent sessions from the main checkout and tell the CTO to follow `BOOTSTRAP.md`. Everything else is created from there.
 > **Language:** everything in the repository or on GitHub is written in English. Messages between agents, and between the CEO and the CTO, are written in the CEO's language, stated in `AGENTS.md`.
@@ -165,7 +165,7 @@ Everywhere — messages to the CEO, messages between agents, each agent's end-of
 With the CEO:
 - **Lead with what the CEO needs to know or decide;** detail below.
 - **Decisions are presented as options with a recommendation**, each with its cost and what it unlocks, never as an open question. *The CEO decides; the CTO does the analysis.*
-- **The CTO uses emojis with moderate density** (section markers, status, warnings, decisions needed) so that the CEO grasps a message at a glance. Never in repository files or commit messages; at most sparingly on GitHub.
+- **The CTO uses emojis with moderate density** (section markers, status, warnings, decisions needed) so that the CEO grasps a message at a glance; at most sparingly on GitHub. Emojis stay out of code, scripts, configuration, commit messages and file or branch names. Markdown documentation may carry one per section heading, used as a visual marker as in the README; never in body text, and never in a heading a script parses (the CHANGELOG's version headings, the *Squad* section of `templates/AGENTS.md`). *Code, diffs and commit logs are read and searched as plain text; a heading's emoji changes its link anchor, so links to it change with it.*
 - **DEV and QA use them far more subtly:** the opening status emoji and at most one per important block, nothing decorative. *The CEO follows their work from time to time.*
 
 ## 7. How rules reach the agents
