@@ -6,3 +6,4 @@ scripts/check-version.sh
 scripts/check-gate.sh
 scripts/check-handoff.sh
 scripts/check-install.sh
+scripts/check-gh-filters.sh

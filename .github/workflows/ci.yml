@@ -25,3 +25,5 @@ jobs:
         run: scripts/check-handoff.sh
       - name: The installer installs, upgrades and refuses as it says
         run: scripts/check-install.sh
+      - name: No squad script filters gh by label
+        run: scripts/check-gh-filters.sh
