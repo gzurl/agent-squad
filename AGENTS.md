@@ -44,8 +44,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 | DEV | `agent-squad.worktrees/dev/` |
 | QA | `agent-squad.worktrees/qa/` |
 
-[#23](https://github.com/gzurl/agent-squad/issues/23) moves the worktrees under
-`agent-squad/.agent-squad/worktrees/` in v15; until it is released, this table holds.
+The charter (v15) puts the worktrees under `.agent-squad/worktrees/` and reaches the scripts
+through `.agent-squad/playbook/`. This repository follows it once
+[#38](https://github.com/gzurl/agent-squad/issues/38) installs v15 here; until then this table
+holds, and the scripts are the ones at the root: the §4.9 merge gate is
+`head=$(scripts/squad-merge-gate.sh <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"`.
 
 ## Environment facts
 - GitHub account arrangement: **shared**, one account (`gzurl`) for the three agents.
