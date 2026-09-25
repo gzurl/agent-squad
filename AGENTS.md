@@ -4,8 +4,18 @@ Conventions for every agent working in this repository. `CLAUDE.md` is a symlink
 Owner: CTO.
 
 Team roles, the review and merge protocol, the worktree policy and the rules about what may be
-pushed directly to `main` live in [SQUAD.md](SQUAD.md). Read it once at the start of a session.
-This file does not restate those rules; it only adds what is specific to this repository.
+pushed directly to `main` live in the team charter, imported below. This file does not restate
+those rules; it only adds what is specific to this repository.
+
+## Squad
+This project follows the team charter in `.agent-squad/playbook/SQUAD.md` (installed by the
+squad installer, not tracked). Its full text is loaded below; if you cannot see it, stop and
+tell the CTO that the squad is not installed.
+
+@.agent-squad/playbook/SQUAD.md
+
+Here the charter the agents work by is the installed release; `SQUAD.md` at the root is the next
+version, being written, and binds nobody until it is tagged and installed.
 
 ## Language
 The CEO's language is Spanish: messages between agents, and with the CEO, are written in it.
@@ -26,7 +36,7 @@ When compacting this conversation, always preserve: my role and signature; the i
 working on, with their status labels, the PR's `headRefOid`, its latest verdict and open threads;
 the exact step I am at and what I was about to do next; anything I promised another agent by
 message; decisions taken in this session that are not yet on GitHub. After compaction, re-read
-`AGENTS.md` and `SQUAD.md` before acting. (Charter rule: SQUAD.md, section 7.)
+`AGENTS.md` and `.agent-squad/playbook/SQUAD.md` before acting. (Charter rule: SQUAD.md, section 7.)
 
 ## Status
 There is no `openspec/` here: decisions live in the issues and, once released, in
@@ -37,15 +47,9 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 
 | Agent | Directory |
 |---|---|
-| CTO | `agent-squad/` (plus ephemeral `agent-squad.worktrees/cto-<topic>/`) |
-| DEV | `agent-squad.worktrees/dev/` |
-| QA | `agent-squad.worktrees/qa/` |
-
-The charter (v15) puts the worktrees under `.agent-squad/worktrees/` and reaches the scripts
-through `.agent-squad/playbook/`. This repository follows it once
-[#38](https://github.com/gzurl/agent-squad/issues/38) installs v15 here; until then this table
-holds, and the scripts are the ones at the root: the §4.9 merge gate is
-`head=$(scripts/squad-merge-gate.sh <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"`.
+| CTO | `agent-squad/` (plus ephemeral `agent-squad/.agent-squad/worktrees/cto-<topic>/`) |
+| DEV | `agent-squad/.agent-squad/worktrees/dev/` |
+| QA | `agent-squad/.agent-squad/worktrees/qa/` |
 
 ## Environment facts
 - GitHub account arrangement: **shared**, one account (`gzurl`) for the three agents.
@@ -67,10 +71,10 @@ holds, and the scripts are the ones at the root: the §4.9 merge gate is
   repository's own checks and tests) does not bump the version.
 - A release built over several PRs lands on `main` one PR at a time, each naming the release's
   parent issue; only its **last** PR bumps `Version:` and writes the CHANGELOG entry. Projects
-  install tags only, so `main` between two tags is never installed. This repository is the
-  exception: its agents run `main`'s hooks, checks and scripts, so each intermediate PR keeps them
-  working here and records in this file what changes for the agents, until the last PR updates
-  the charter.
+  install tags only, so `main` between two tags is never installed. This repository runs the
+  installed release too; what its agents run from `main` is only its own checks list, CI and
+  tests, which each intermediate PR keeps working, recording in this file anything that changes
+  for the agents.
 - A tag's tarball, which is what projects install, leaves out what [.gitattributes](.gitattributes)
   marks `export-ignore`: this repository's own conventions, CI, checks list and tests. A new file
   that only this repository uses goes there too.
@@ -84,10 +88,13 @@ holds, and the scripts are the ones at the root: the §4.9 merge gate is
 ## Stack and commands
 - bash, git ≥ 2.31, `jq`, `gh`, and `uv` (the checks run shellcheck through `uvx`).
 - The checks are exactly the lines of [.agent-squad-checks](.agent-squad-checks); run them all
-  with `scripts/squad-checks.sh`. The `pre-push` hook runs the same script (`core.hooksPath` is
-  `.githooks` in this clone), and CI runs the same checks (shellcheck from apt instead of `uvx`).
-- The compaction hooks keep their snapshots in the main checkout's `.agent-squad/handoff/`
-  (git-ignored), whichever worktree the session works in.
+  with `scripts/squad-checks.sh`, and CI runs the same checks (shellcheck from apt instead of
+  `uvx`). The pre-push gate and the compaction hooks are the installed release's, as in any
+  project: the shim in `.git/hooks/pre-push` runs `.agent-squad/playbook/.githooks/pre-push`, and
+  the hooks in `.claude/settings.local.json` run `.agent-squad/playbook/scripts/squad-handoff.sh`.
+  The scripts at the root are the next version's; `scripts/check-*.sh` test them.
+- From the main checkout, `.agent-squad/playbook/scripts/squad-install.sh --check .` verifies this
+  installation; after a release, upgrade it like a project does (README, *Upgrade*).
 
 ## Local services and ports
 None.

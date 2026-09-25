@@ -1,5 +1,5 @@
-# The squad's local directory: handoff snapshots, and the playbook and worktrees once installed
+# The squad's local directory: the installed playbook, the worktrees, snapshots and evidence
 .agent-squad/
-# Review evidence (SQUAD.md, section 5)
-evidence/
+# Claude Code's local settings: the squad's hooks and approved permissions
+.claude/settings.local.json
 .DS_Store
