@@ -127,9 +127,11 @@ Then verify the installation:
 
 It changes nothing and prints the installed version and the last `install.log` entry, then one
 line per item (`check: ok` or `check: FAILED  <item>: <reason>`), and exits 1 if any failed. It
-also proves that the gate really refuses a failing check. Right after installing, only the items
-the installer leaves to you fail, plus the worktrees in an empty repository: run the installer
-again once `origin/main` exists. Launch the three sessions from the main checkout and tell the
+also proves that the gate really refuses a failing check, and says which branch the gate protects:
+the remote's default one, as git records it in `origin/HEAD`, which the installer sets when it is
+missing. Right after installing, only the items the installer leaves to you fail, plus the
+worktrees and the default branch in an empty repository: run the installer again once the default
+branch has a commit. Launch the three sessions from the main checkout and tell the
 CTO to follow `.agent-squad/playbook/BOOTSTRAP.md`.
 
 
