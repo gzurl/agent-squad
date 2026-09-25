@@ -72,7 +72,6 @@ manifest_file="$squad/playbook.manifest"
 log="$squad/install.log"
 settings="$project/.claude/settings.local.json"
 needs_decision=0
-tracked_changes=()
 
 # `manifest <dir>` lists every file of a tree with its kind and content hash, so that two trees
 # compare equal only when they are the same byte for byte, executable bits and symlinks included.
@@ -417,7 +416,6 @@ for path in .agent-squad .claude/settings.local.json; do
   fi
   echo "$line" >> "$gitignore"
   say .gitignore "added $line"
-  tracked_changes+=(".gitignore")
   if ! ignored_by_project "$path"; then
     say .gitignore "NOT IGNORED: $line was added, and still git does not ignore it; decide with the CEO"
     needs_decision=1
@@ -496,7 +494,6 @@ for template in .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md;
   else
     mkdir -p "$(dirname "$project/$template")" && cp "$playbook/$template" "$project/$template"
     say templates "created $template"
-    tracked_changes+=("$template")
   fi
 done
 
@@ -544,9 +541,13 @@ esac
 if ! lists_a_command "$project/.agent-squad-checks"; then
   item "Write .agent-squad-checks: the commands your CI runs, one per line; until it lists one the gate refuses every push"
 fi
-if [ "${#tracked_changes[@]}" -gt 0 ]; then
-  changed="$(printf '%s\n' "${tracked_changes[@]}" | sort -u | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')"
-  item "Commit what this run changed in tracked files through a PR: $changed"
+# The squad's files that belong in git, as git sees them now: whichever run wrote them, they are
+# left to commit until a PR takes them.
+uncommitted="$(git -C "$project" status --porcelain --untracked-files=all -- .gitignore \
+  .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md | cut -c4- | LC_ALL=C sort \
+  | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')"
+if [ -n "$uncommitted" ]; then
+  item "Commit these files, which the squad writes and git shows as not committed, through a PR: $uncommitted"
 fi
 [ "$items" -gt 0 ] || echo "  nothing"
 

@@ -558,4 +558,17 @@ mended "$project/AGENTS.md"
 
 check "with every breakage undone, --check passes again" check_reports
 
+# 15. By hand lists the squad's tracked files that are not committed yet, whatever run wrote them,
+#     and none once they are committed (#49).
+target="$(new_project uncommitted)" || exit 2
+"$install" "$target" va >/dev/null 2>&1
+out="$("$install" "$target" va 2>&1)"
+commit_item="$(grep 'Commit these files' <<<"$out")"
+check "a second run still lists the files the first one wrote and nobody committed" \
+  bash -c 'grep -qF ".gitignore" <<<"$1" && grep -qF ".github/ISSUE_TEMPLATE/task.md" <<<"$1"' _ "$commit_item"
+check "and not the project's own template, which it did not change" lacks "$commit_item" "PULL_REQUEST_TEMPLATE"
+git -C "$target" add .gitignore .github && git -C "$target" commit -qm "the squad's tracked files"
+out="$("$install" "$target" va 2>&1)"
+check "once they are committed, it lists none" lacks "$out" "Commit these files"
+
 exit "$status"
