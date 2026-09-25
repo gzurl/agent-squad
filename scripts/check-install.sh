@@ -88,6 +88,7 @@ item_gate="the gate refuses a failing check and lets a passing one through"
 item_list=".agent-squad-checks exists and is tracked"
 item_worktrees=".agent-squad/worktrees/dev and qa are worktrees of this repository"
 item_import="CLAUDE.md links to AGENTS.md, which imports the charter"
+item_branch="git knows the remote's default branch, the one the gate protects"
 # `check_reports [<item>...]` runs --check on the project and passes when the items that fail are
 # exactly those given, with exit 1; with none given, when every item passes, with exit 0.
 check_reports() {
@@ -96,7 +97,7 @@ check_reports() {
   code=$?
   failed="$(sed -n 's/^check: FAILED  \([^:]*\):.*/\1/p' <<<"$out" | LC_ALL=C sort)"
   if [ $# -eq 0 ]; then
-    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 9 ]
+    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 10 ]
   else
     [ "$code" -eq 1 ] && [ "$failed" = "$(printf '%s\n' "$@" | LC_ALL=C sort)" ]
   fi
@@ -129,10 +130,10 @@ project_state() { tree_state "$1"; tree_state "$1/.git/hooks"; }
 # looks at its last one.
 log_lines() { wc -l < "$1/.agent-squad/install.log" | tr -d ' '; }
 log_ends_with() { tail -1 "$1/.agent-squad/install.log" | grep -q -- " $2\$"; }
-# `detached_at_origin_main <project> <worktree>`: a linked worktree, detached, at origin/main.
-detached_at_origin_main() {
+# `detached_at <project> <worktree> <branch>`: a linked worktree, detached, at origin/<branch>.
+detached_at() {
   [ -f "$2/.git" ] \
-    && [ "$(git -C "$2" rev-parse HEAD)" = "$(git -C "$1" rev-parse origin/main)" ] \
+    && [ "$(git -C "$2" rev-parse HEAD)" = "$(git -C "$1" rev-parse "origin/$3")" ] \
     && ! git -C "$2" symbolic-ref -q HEAD >/dev/null
 }
 # `no_leftovers <squad dir>`: no staging directory or tarball survived a run.
@@ -248,7 +249,7 @@ check "the project's own PR template was kept" \
   has_lines "$project/.github/PULL_REQUEST_TEMPLATE.md" "The project's own PR template."
 for agent in dev qa; do
   check "worktrees/$agent is a linked worktree detached at origin/main" \
-    detached_at_origin_main "$project" "$squad/worktrees/$agent"
+    detached_at "$project" "$squad/worktrees/$agent" main
 done
 check "the Squad section of the playbook's templates/AGENTS.md is printed" \
   contains "$out" "The squad section this test expects, first line."
@@ -449,7 +450,7 @@ check "and creates none" absent "$target" .agent-squad/worktrees/dev .agent-squa
 printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$project/AGENTS.md"
 ln -s AGENTS.md "$project/CLAUDE.md"
 before="$(project_state "$project")$(cat "$squad/install.log")"
-check "--check passes on a complete installation, nine items ok" check_reports
+check "--check passes on a complete installation, ten items ok" check_reports
 check "and changes nothing, the install log included" \
   [ "$before" = "$(project_state "$project")$(cat "$squad/install.log")" ]
 # `broken <file>` keeps a copy of a file about to be broken; `mended <file>` puts it back.
@@ -568,6 +569,10 @@ printf '# the sandbox checks\r\n./records.sh\r\n' > "$project/.agent-squad-check
 check "a CRLF list with a command passes the list item" check_reports
 mended "$project/.agent-squad-checks"
 
+git -C "$project" symbolic-ref --delete refs/remotes/origin/HEAD
+check "a missing origin/HEAD fails the default-branch item" check_reports "$item_branch"
+git -C "$project" remote set-head origin main >/dev/null
+
 mv "$squad/worktrees/qa" "$lab/qa-aside"
 check "a missing worktree fails the worktrees item" check_reports "$item_worktrees"
 mv "$lab/qa-aside" "$squad/worktrees/qa"
@@ -602,5 +607,56 @@ check "and not the project's own template, which it did not change" lacks "$comm
 git -C "$target" add .gitignore .github && git -C "$target" commit -qm "the squad's tracked files"
 out="$("$install" "$target" va 2>&1)"
 check "once they are committed, it lists none" lacks "$out" "Commit these files"
+
+# 16. A remote whose default branch is not main (#72). A project on trunk, complete: the worktrees
+#     are made at origin/trunk, --check passes, and the gate protects trunk. Without origin/HEAD,
+#     the installer asks the remote and records it for the gate; when the remote cannot tell, it
+#     says so, makes no worktree, and exits 1, instead of assuming main.
+git init -q --bare -b trunk "$lab/trunk.git" && git init -q -b trunk "$lab/trunk-seed" || exit 2
+printf '# the sandbox checks\ntrue\n' > "$lab/trunk-seed/.agent-squad-checks"
+printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$lab/trunk-seed/AGENTS.md"
+ln -s AGENTS.md "$lab/trunk-seed/CLAUDE.md"
+git -C "$lab/trunk-seed" add -A && git -C "$lab/trunk-seed" commit -qm seed \
+  && git -C "$lab/trunk-seed" push -q "$lab/trunk.git" trunk || exit 2
+git clone -q "$lab/trunk.git" "$lab/on-trunk" || exit 2
+out="$("$install" "$lab/on-trunk" va 2>&1)"
+code=$?
+check "on a project whose default branch is trunk, the installer exits 0" [ "$code" -eq 0 ]
+for agent in dev qa; do
+  check "and makes worktrees/$agent detached at origin/trunk" \
+    detached_at "$lab/on-trunk" "$lab/on-trunk/.agent-squad/worktrees/$agent" trunk
+done
+# `reports_on <project> [<item>...]` is check_reports on another project.
+reports_on() {
+  local project="$1"
+  shift
+  check_reports "$@"
+}
+check "and --check passes its ten items" reports_on "$lab/on-trunk"
+echo "a change" >> "$lab/on-trunk/.agent-squad/worktrees/dev/.agent-squad-checks"
+git -C "$lab/on-trunk/.agent-squad/worktrees/dev" commit -qam "a change"
+errors="$(git -C "$lab/on-trunk/.agent-squad/worktrees/dev" push -q origin HEAD:refs/heads/trunk 2>&1)"
+check "and a push to trunk is refused by the gate" contains "$errors" "which only a PR reviewed by QA may change"
+
+git init -q -b main "$lab/no-head" && git -C "$lab/no-head" remote add origin "$lab/trunk.git" \
+  && git -C "$lab/no-head" fetch -q origin || exit 2
+# Recent git records origin/HEAD on fetch (followRemoteHEAD); older git does not. Either way, none.
+git -C "$lab/no-head" symbolic-ref --delete refs/remotes/origin/HEAD 2>/dev/null
+check "a checkout fetched without origin/HEAD has none before the install" \
+  refused git -C "$lab/no-head" symbolic-ref -q refs/remotes/origin/HEAD
+out="$("$install" "$lab/no-head" va 2>&1)"
+check "the installer asks the remote, records origin/HEAD and says so" \
+  contains "$out" "recorded origin/HEAD -> origin/trunk"
+check "so that the gate protects trunk there too" \
+  has_line "$(git -C "$lab/no-head" symbolic-ref -q --short refs/remotes/origin/HEAD)" "origin/trunk"
+check "and the worktrees are at origin/trunk" \
+  detached_at "$lab/no-head" "$lab/no-head/.agent-squad/worktrees/dev" trunk
+
+git init -q -b main "$lab/unknown" && git -C "$lab/unknown" remote add origin "$lab/no-such-remote.git" || exit 2
+out="$("$install" "$lab/unknown" va 2>&1)"
+code=$?
+check "when the remote cannot tell its default branch, the installer exits 1" [ "$code" -eq 1 ]
+check "and says it does not know it, instead of assuming main" contains "$out" "branch     NOT KNOWN"
+check "and makes no worktree" absent "$lab/unknown" .agent-squad/worktrees/dev .agent-squad/worktrees/qa
 
 exit "$status"

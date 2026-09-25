@@ -97,6 +97,14 @@ ignored_by_project() {
 # `hooks_path_settings` prints where core.hooksPath is set, for the main checkout and each squad
 # worktree that exists (a worktree can set it in its own config.worktree): git never runs the
 # common hooks directory, and so the shim, from there.
+# `known_default_branch` prints the remote's default branch as git records it for origin
+# (refs/remotes/origin/HEAD): the one the gate protects and the worktrees start from. It fails when
+# git does not know it; it never asks the remote.
+known_default_branch() {
+  local ref
+  ref="$(git -C "$project" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)" || return 1
+  echo "${ref#origin/}"
+}
 hooks_path_settings() {
   local dir value
   for dir in "$project" "$squad/worktrees/dev" "$squad/worktrees/qa"; do
@@ -353,6 +361,13 @@ check_installation() {
   } | join)"
   verdict "CLAUDE.md links to AGENTS.md, which imports the charter" "$why"
 
+  # 10. The gate protects the remote's default branch, which it reads from origin/HEAD; without it,
+  #     the gate falls back to main, whatever the remote's default is (#72).
+  why=""
+  branch="$(known_default_branch)" \
+    || why="origin/HEAD is not set, so the gate protects main; set it with: git remote set-head origin --auto"
+  verdict "git knows the remote's default branch${branch:+ ($branch)}, the one the gate protects" "$why"
+
   [ "$failed_items" -eq 0 ]
 }
 
@@ -528,23 +543,39 @@ for template in .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md;
   fi
 done
 
-# 6. The DEV and QA worktrees (D3), detached at origin/main as it is locally: no fetch.
+# 6. The remote's default branch, which the gate protects and the worktrees start from (#72). When
+#    git does not know it, the remote is asked once, which records it for the gate too; when the
+#    remote cannot tell, nothing is assumed: the gate would protect main, whatever the remote says.
+if base="$(known_default_branch)"; then
+  say branch "the remote's default branch is $base (origin/HEAD), the one the gate protects"
+elif git -C "$project" remote set-head origin --auto >/dev/null 2>&1 && base="$(known_default_branch)"; then
+  say branch "recorded origin/HEAD -> origin/$base, as the remote answered: the gate protects $base"
+else
+  base=""
+  say branch "NOT KNOWN: origin/HEAD is not set and the remote could not be asked, so the gate protects main; set it with git remote set-head origin --auto and run again"
+  needs_decision=1
+fi
+
+# 7. The DEV and QA worktrees (D3), detached at the default branch as it is locally: no fetch.
 for agent in dev qa; do
   worktree="$squad/worktrees/$agent"
   if [ -e "$worktree" ]; then
     say worktrees ".agent-squad/worktrees/$agent exists, kept"
-  elif ! git -C "$project" rev-parse -q --verify 'origin/main^{commit}' >/dev/null; then
-    say worktrees "NOT CREATED: .agent-squad/worktrees/$agent, because origin/main does not exist yet; run again once it does"
+  elif [ -z "$base" ]; then
+    say worktrees "NOT CREATED: .agent-squad/worktrees/$agent, because the remote's default branch is not known"
     needs_decision=1
-  elif error="$(git -C "$project" worktree add -q --detach "$worktree" origin/main 2>&1)"; then
-    say worktrees "created .agent-squad/worktrees/$agent, detached at origin/main"
+  elif ! git -C "$project" rev-parse -q --verify "origin/$base^{commit}" >/dev/null; then
+    say worktrees "NOT CREATED: .agent-squad/worktrees/$agent, because origin/$base does not exist yet; run again once it does"
+    needs_decision=1
+  elif error="$(git -C "$project" worktree add -q --detach "$worktree" "origin/$base" 2>&1)"; then
+    say worktrees "created .agent-squad/worktrees/$agent, detached at origin/$base"
   else
     say worktrees "NOT CREATED: .agent-squad/worktrees/$agent: $error"
     needs_decision=1
   fi
 done
 
-# 7. What only the CTO can do: the project's own tracked files.
+# 8. What only the CTO can do: the project's own tracked files.
 echo
 echo "By hand:"
 items=0
