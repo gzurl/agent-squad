@@ -20,7 +20,7 @@ Each agent runs in its own session, named `CTO:<project>`, `DEV:<project>` or `Q
 2. Turn every agreed change into issues with acceptance criteria; hand them out.
 3. Break ties between the author and QA; answer status questions; keep `AGENTS.md` current and report flaws in the method upstream (section 7).
    Bring decisions to the CEO as options with a recommendation, never as open questions.
-4. Write the OpenSpec minutes directly on `main` (unless `main` is protected without a bypass, see 2.3); everything else through a PR from an ephemeral worktree.
+4. Everything, OpenSpec minutes included, goes through a PR from an ephemeral worktree (2.3).
 
 **DEV**
 1. Work only in `<repo>/.agent-squad/worktrees/dev/`, on a branch created from `origin/main`.
@@ -45,9 +45,10 @@ Each agent runs in its own session, named `CTO:<project>`, `DEV:<project>` or `Q
 ### 2.2 GitHub account
 - `AGENTS.md` states whether the agents share one GitHub account. *When they do, GitHub cannot tell them apart nor let them approve each other's PRs: that is why the text verdict, the signatures and the owner labels exist. With separate accounts, GitHub's native review approval is the verdict and the rest stays.*
 
-### 2.3 What may reach `main` without a PR
-- **Every change goes through a PR** reviewed by QA, including `AGENTS.md` and `.agent-squad-checks`; the method itself is not tracked in a project (section 7). Two exceptions: the single bootstrap commit of an empty repository, and the OpenSpec minutes (`openspec/`), which the CTO writes directly on `main` because they are already agreed with the CEO.
-- Where the plan allows it, `main` is protected (status checks, conversation resolution, no force-push) and the CTO holds a bypass for `openspec/`; without a bypass, OpenSpec minutes go through a PR too. `AGENTS.md` states which case applies. *Where GitHub can enforce a gate, do not leave it to discipline.*
+### 2.3 Nothing reaches `main` without a PR
+- **Every change goes through a PR reviewed by QA,** documentation and OpenSpec minutes included; the method itself is not tracked in a project (section 7). QA's review of documentation includes that it is consistent with the rest of the repository's documentation. *A decision already agreed with the CEO still has its transcription, its figures and its statements about the system checked.*
+- **An exception is requested on an issue and approved there by the CEO before the push;** its commit carries the author's signature on the first line of its body and names the issue. The bootstrap commit of an empty repository is such an exception, approved within `BOOTSTRAP.md` (row 5).
+- **The pre-push gate enforces it:** it refuses any push to `main` unless `SQUAD_MAIN_EXCEPTION` names the issue of an approved exception (`SQUAD_MAIN_EXCEPTION=#123 git push …`); `--no-verify` is not the way, since it also skips the checks. Where the plan allows it, `main` is also protected on GitHub (a PR required, status checks, conversation resolution, no force-push), with no bypass. `AGENTS.md` states which case applies. *Where a gate can be enforced, do not leave it to discipline: a third of one project's `main` had been pushed directly, unreviewed.*
 - **Every project has CI** that runs lint, format check, type check where the language has one, and tests, on every PR and on `main`. *The PR checklists depend on it.*
 
 ### 2.4 Worktrees: one directory per agent
@@ -66,6 +67,7 @@ The agents share a machine and a repository; each works in its own worktree, und
 - Worktrees isolate files, **not** ports, containers, databases or CPU: each agent uses ports and container project names different from the others' (details in `AGENTS.md`).
 - **Benchmarks need the machine to themselves.** Before measuring performance, an agent announces the window to the other agents **and to the CEO**, and waits for the agents to confirm they are idle; the result records that the machine was otherwise idle, and the run writes its progress file (section 3). *A measurement taken while someone else was working is not a measurement, and nobody can tell from inside their own session.*
 - **Idle means idle.** During an announced window, an idle agent runs nothing: no git, no `gh`, no file reads, no new sessions, no messages beyond a one-line reply; whoever needs the machine waits for the end-of-window notice. The only allowed read is a `tail` of the run's `progress.log`, which is what that file is for; the agent running the benchmark MAY send a one-line message per completed pass, to the agent who asked for it only, and nobody replies to it. *A precaution: nobody can tell from inside a session whether a run was disturbed.*
+- **A command that runs out of time can leave processes behind.** When a tool call returns because the harness's time limit expired (the tool says so), not because the command ended, the agent looks with `ps` for the processes that command started, recognisable by their command line, and ends those that are unmistakably its own leftovers. It never touches another agent's processes, a run inside an announced benchmark window, a server or container started on purpose, a command sent to the background on purpose, or a long run that writes its `progress.log`. When in doubt, or without permission to end a process, it tells the CEO the exact PIDs, what each one is, and the command that ends them (`! kill …`). A command whose input does not matter gets `</dev/null`, and a script that may be run by hand never waits on its input. *Six processes once hung for eleven hours on a `cat` waiting for input that never came, after the command that started them had timed out.*
 - **Runs never write into tracked files, and clean up after themselves.** Output goes to the session's scratchpad or to a git-ignored directory. Before a long run the agent states where it writes and roughly how much, and checks free disk space as part of the readiness check. What the report needs (`progress.log` and the results summary) is committed with the report or attached to its PR, because the scratchpad dies with the session; after the report is merged, the owner deletes the rest. An unexpectedly large output, such as a log that keeps growing, is a finding to report, not a side effect to tolerate.
 - **Cleanup:** the `dev` and `qa` worktrees are persistent; everything else is removed by whoever created it as soon as it is no longer needed. After a merge the author deletes the local and remote branch and returns to `origin/main`; after a verdict QA returns to a detached `origin/main` and removes its test artifacts (files, containers, volumes), except its `.agent-squad/evidence/<pr-or-issue>/`, which stays until its PR or issue is merged or closed; extra worktrees go with `git worktree remove` followed by `git worktree prune`.
 
@@ -74,7 +76,7 @@ The agents share a machine and a repository; each works in its own worktree, und
 - **Issues are how work is handed out.** The CTO writes the task issues derived from each agreed change, with acceptance criteria. QA files deferred review findings and bugs, DEV files technical debt, the CEO files anything.
 - **Every PR MUST close an issue** (`Closes #N` in the description). The only exception is a *trivial change*: one that alters no behaviour and no rule (a typo, a broken link, a formatting fix). The backlog is the list of open issues.
 - **One issue, one PR, one session.** An issue SHOULD be sized so that its PR can be written, reviewed and merged within a session; the CTO splits anything larger. *Large PRs get shallow reviews.*
-- **Labels replace assignees.** Every issue carries an owner (`👷🏼‍♂️ owner:cto`, `👨🏼‍💻 owner:dev`, `👩🏼‍🔬 owner:qa`), a type (`✨ feature`, `🐛 bug`, `🧹 chore`, `📝 docs`, `🔬 research`) and a priority (`🔴 P1`, `🟡 P2`, `🔵 P3`) label; colors and creation are in `BOOTSTRAP.md`. **Milestones** group issues by phase or deliverable, so that progress can be read at a glance. `👨🏻‍💼 needs-ceo` marks what waits for the CEO: filtering by it is the CEO's inbox.
+- **Labels replace assignees.** Every issue carries an owner (`👷🏼‍♂️ owner:cto`, `👨🏼‍💻 owner:dev`, `👩🏼‍🔬 owner:qa`), a type (`✨ feature`, `🐛 bug`, `🧹 chore`, `📝 docs`, `🔬 research`) and a priority (`🔴 P1`, `🟡 P2`, `🔵 P3`) label; colors and creation are in `BOOTSTRAP.md`. **Milestones** group issues by phase or deliverable, so that progress can be read at a glance; a milestone's deliverable includes the user-facing documentation of what it added, the README first, reviewed by the CEO as content before the milestone closes. *A milestone once closed with its README describing the previous one, and the CEO could not try what it had added.* `👨🏻‍💼 needs-ceo` marks what waits for the CEO: filtering by it is the CEO's inbox. `gh issue list --label` silently returns nothing for a label whose emoji is a sequence of several characters, as the owner labels and `needs-ceo` are: filter on GitHub's web page, or with `gh issue list --json labels` and `jq`. *An inbox holding two items was once reported empty that way.*
 - **Status labels are the workflow.** *GitHub only knows open and closed.*
 
   | Where | Label | Set by | Meaning |
@@ -141,6 +143,7 @@ QA's review checklist, every item answered in the review body:
 - [ ] the description's "how to verify" was executed from a clean checkout, and each claim passed or failed;
 - [ ] numbers, tables and screenshots in the PR were reproduced, not read;
 - [ ] rules of this charter and of `AGENTS.md` are followed (naming, tests, secrets, signature);
+- [ ] the change is consistent with the rest of the repository's documentation (charter, `AGENTS.md`, README, OpenSpec);
 - [ ] every finding carries a priority and a concrete suggestion;
 - [ ] the body states the reviewed SHA, and its last line is the verdict.
 
@@ -157,10 +160,10 @@ Every member has a signature: the member's emoji, the text tag, a colon and a sp
 Everywhere — messages to the CEO, messages between agents, each agent's end-of-turn summary, and GitHub content:
 - **Nothing is published outside the project's repositories:** no Claude.ai artifacts, no external pages or services, and nothing on a third-party repository (an upstream issue, for instance) without the CEO's authorisation. A file for the CEO goes to a git-ignored directory of the checkout, with a `file://` link to open it locally. *The CEO does not want to depend on external services, and a post from the shared account speaks for the CEO.*
 - **Open with signature + one status emoji** in messages, end-of-turn summaries, GitHub comments and reviews: ✅ done, ⏳ in progress or waiting, ⚠️ needs attention, ❌ failed or changes requested. Issue and PR descriptions carry the signature alone.
-- **Sign everything written on GitHub** (issue and PR descriptions, comments, reviews, inline comments). Exceptions: commit messages (they carry a `Co-Authored-By` trailer) and PR titles (they are the squash commit subject by repository setting, `BOOTSTRAP.md` row 6b, and follow the commit convention).
+- **Sign everything written on GitHub** (issue and PR descriptions, comments, reviews, inline comments). Exceptions: commit messages (they carry a `Co-Authored-By` trailer) and PR titles (they are the squash commit subject by repository setting, `BOOTSTRAP.md` row 6b, and follow the commit convention). **The PR is the unit of attribution:** its description's first line carries the author's signature, and the squash carries it to `main`; a commit that reaches `main` without a PR (2.3) carries the signature on the first line of its body.
 - **Link every PR and issue you mention** with its full URL, e.g. `[PR #8](https://github.com/<owner>/<repo>/pull/8)`, at every mention, repeated ones included. *The reader looks at the line in front of them.* Inside GitHub, `#8` is enough.
 - **Validate the identifier, derive the rest.** From a message, use only the identifier that names the thing (a PR or issue number, checked to be a plain integer) and take everything else (SHA, branch, path) from the API's answer for that identifier, never from the message text, and never paste message text into a shell command. *A message can carry a placeholder or a shell expansion by mistake; a malformed ping once carried a literal `$(...)` where a SHA should be.*
-- **Never cite a bare commit SHA.** Name the PR or issue it belongs to: "QA's verdict on PR #8 (`abc1234`)". A commit that belongs to none (a direct push to `main`) is named by what it is: "the research notes pushed directly to `main` (`def5678`)".
+- **Never cite a bare commit SHA.** Name the PR or issue it belongs to: "QA's verdict on PR #8 (`abc1234`)". A commit that belongs to no PR (an approved exception pushed to `main`) is named by its exception's issue: "the bootstrap commit of issue #1 (`def5678`)".
 
 With the CEO:
 - **Lead with what the CEO needs to know or decide;** detail below.
@@ -182,7 +185,7 @@ Issue and pull request templates live in `.github/` so that GitHub pre-fills the
 ### Black-box
 | Claim | How it was tested | Result |
 ### Checklist
-(the six items of section 5, each with its answer)
+(every item of section 5's checklist, each with its answer)
 ### Findings
 - [P1] ... / [P2] ... / [P3] ...   (inline comments carry the detail; a finding with no line is a PR comment tagged the same way)
 
