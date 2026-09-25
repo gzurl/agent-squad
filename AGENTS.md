@@ -71,10 +71,10 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   repository's own checks and tests) does not bump the version.
 - A release built over several PRs lands on `main` one PR at a time, each naming the release's
   parent issue; only its **last** PR bumps `Version:` and writes the CHANGELOG entry. Projects
-  install tags only, so `main` between two tags is never installed. This repository is the
-  exception: its agents run `main`'s hooks, checks and scripts, so each intermediate PR keeps them
-  working here and records in this file what changes for the agents, until the last PR updates
-  the charter.
+  install tags only, so `main` between two tags is never installed. This repository runs the
+  installed release too; what its agents run from `main` is only its own checks list, CI and
+  tests, which each intermediate PR keeps working, recording in this file anything that changes
+  for the agents.
 - A tag's tarball, which is what projects install, leaves out what [.gitattributes](.gitattributes)
   marks `export-ignore`: this repository's own conventions, CI, checks list and tests. A new file
   that only this repository uses goes there too.
@@ -93,8 +93,8 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   project: the shim in `.git/hooks/pre-push` runs `.agent-squad/playbook/.githooks/pre-push`, and
   the hooks in `.claude/settings.local.json` run `.agent-squad/playbook/scripts/squad-handoff.sh`.
   The scripts at the root are the next version's; `scripts/check-*.sh` test them.
-- `scripts/squad-install.sh --check .` from `.agent-squad/playbook/` verifies this installation;
-  after a release, upgrade it like a project does (README, *Upgrade*).
+- From the main checkout, `.agent-squad/playbook/scripts/squad-install.sh --check .` verifies this
+  installation; after a release, upgrade it like a project does (README, *Upgrade*).
 
 ## Local services and ports
 None.
