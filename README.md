@@ -14,7 +14,7 @@ projects, without touching what the project owns.
   tests; QA reviews every PR in two parts, code review and black-box tests.
 - **Gates enforced by scripts, not by memory:** before every push (the project's checks must pass,
   and nothing is pushed to `main`) and before every merge (an approved verdict bound to the head,
-  no open thread, CI green).
+  no open thread, CI green, and a warning when `main` has moved under the PR).
 - **A clean install:** everything lives in a git-ignored `.agent-squad/`; the installer never
   overwrites a project file, and `--check` proves the installation works.
 - **Sessions that keep their bearings:** every session loads the charter by itself, and a
