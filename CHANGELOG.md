@@ -10,7 +10,8 @@
   author's signature in its body (#47).
 - **Review rules** (§3, §4, §5, #27, #28, #57, #58): a PR announces numbered claims a reviewer can
   prove false, and QA gives each a result; evidence on both sides, stating what it proves;
-  negative results say what was searched; inputs are checked, not only the arithmetic; the
+  negative results say what was searched; a claim that something is untouched or absent says how it
+  was measured; inputs are checked, not only the arithmetic; the
   author's self-criticism; the tie-break happens in the thread; a P2 is marked `claims: yes|no`,
   and one that does not touch what the PR claims is deferred unless another push is due; any
   agent may challenge the CTO's instructions with evidence, through the CTO to the CEO when a
@@ -22,9 +23,12 @@
   ZWJ-emoji labels, so the squad's scripts never filter by label (a check guards it) and the
   compaction snapshot lists with explicit limits and says when it may be truncated (#56, #63);
   a milestone ships with its user-facing documentation, reviewed by the CEO (#29).
-- **Installer and gate fixes:** a CRLF checks list runs without carriage returns (#46); *By hand*
+- **Installer and gate fixes:** a CRLF checks list runs without carriage returns (#46); the
+  bootstrap commit of an empty repository carries a first `.agent-squad-checks` (BOOTSTRAP row 5); *By hand*
   lists the squad's tracked files still uncommitted, from `git status` (#49); `.gitignore` stays
   out of the tag's tarball (#50).
+- **Upgrading from v15:** see the README, *Upgrade*, *From v15* (the PR template, any `openspec/`
+  bypass, `AGENTS.md`'s protection line).
 - **README** rewritten for readability: built for Claude Code and GitHub, features, quick start,
   contents, an overview with a diagram. §6 lets Markdown documentation carry one emoji per section
   heading, never in body text nor in headings a script parses (#65).

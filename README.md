@@ -56,7 +56,7 @@ the project's main checkout, and tell the CTO to follow `.agent-squad/playbook/B
 
 | | Claude Code | GitHub |
 |---|---|---|
-| **Who works** | One session per role, named `CTO:<project>`, `DEV:<project>`, `QA:<project>`, launched from the project's main checkout | One account, shared by the three agents; signatures and labels tell them apart |
+| **Who works** | One session per role, named `CTO:<project>`, `DEV:<project>`, `QA:<project>`, launched from the project's main checkout | One account, usually shared by the three agents (`AGENTS.md` says which); signatures and labels tell them apart |
 | **How they talk** | Messages between sessions | Issues, PRs, reviews and comments: the durable record |
 | **What they follow** | `AGENTS.md` imports the charter into every session with an `@` import | The charter's rules for issues, labels, PRs and merges |
 | **What keeps them on track** | Hooks: a snapshot before each compaction, re-injected after it | The merge gate reads verdicts, threads, labels and CI through `gh` |
@@ -70,7 +70,7 @@ flowchart LR
   DEV -- "branch, code, tests" --> PUSH["pre-push gate:<br/>checks pass, nothing to main"]
   PUSH --> PR["PR that closes its issue"]
   PR -- "ping with the head" --> QA
-  QA -- "code review + black-box,<br/>verdict bound to the commit" --> MERGE["merge gate:<br/>verdict on the head, no open thread,<br/>label, CI green"]
+  QA -- "code review + black-box, one review,<br/>verdict bound to the commit" --> MERGE["merge gate:<br/>verdict on the head, no open thread,<br/>label, CI green"]
   MERGE -- "squash merge by the author" --> MAIN["main"]
 ```
 
@@ -104,16 +104,20 @@ The installer is idempotent and never overwrites or deletes a file the project o
 every action it takes or skips and, under *By hand*, what it leaves to you, including the squad's
 tracked files that `git status` shows as not yet committed, whichever run wrote them:
 
-1. **The *Squad* section of `AGENTS.md`**, which imports the charter into every session (the
-   installer prints it, from `templates/AGENTS.md`), and `CLAUDE.md` as a symlink to `AGENTS.md`.
-2. **`.agent-squad-checks`**, the list of commands the pre-push gate runs: the ones your CI runs,
-   one per line. Until it lists one, the gate refuses every push.
-3. **A PR with all of it.** The main checkout stays on `main`, so do items 1 and 2 in a worktree
-   (for instance `.agent-squad/worktrees/cto-squad/`), copy there what the installer changed in
-   tracked files (`.gitignore`, and the GitHub templates when it created them; `cp -P` keeps a
-   symlink a symlink), and open the PR from it. Once it merges, clear the installer's changes in
-   the main checkout before pulling, or `git pull --ff-only` refuses to overwrite them:
-   `git checkout -- <file>` for each tracked file it modified, and delete each file it created.
+- **The *Squad* section of `AGENTS.md`**, which imports the charter into every session (the
+  installer prints it, from `templates/AGENTS.md`).
+- **`CLAUDE.md` as a symlink to `AGENTS.md`.**
+- **`.agent-squad-checks`**, the list of commands the pre-push gate runs: the ones your CI runs,
+  one per line. Until it lists one, the gate refuses every push.
+- **The tracked files the installer changed** (`.gitignore`, and the GitHub templates when it
+  created them), to commit.
+
+All of it reaches `main` through one PR. The main checkout stays on `main`, so write it in a
+worktree, `git -C /path/to/project worktree add .agent-squad/worktrees/cto-squad -b chore/squad origin/main`,
+copy there the tracked files the installer changed, and open the PR from it; remove the worktree
+after the merge. Then clear the installer's changes in the main checkout before pulling, or
+`git pull --ff-only` refuses to overwrite them: `git checkout -- <file>` for each tracked file it
+modified, and delete each file it created.
 
 Then verify the installation:
 
@@ -147,7 +151,7 @@ Outside it, the installer only touches the files listed after it.
 
 | Path (from the project's main checkout) | What it holds | Written by | In git | On upgrade | Removed when |
 |---|---|---|---|---|---|
-| `.agent-squad/playbook/` | The installed `agent-squad` tag, as GitHub's tarball of it: `SQUAD.md`, `BOOTSTRAP.md`, this README, `CHANGELOG.md`, `scripts/`, `.githooks/` (the gate the shim runs), the `.github/` templates, `templates/` | Installer | No | Replaced whole, only once the new one is complete | Never; reinstall to restore it |
+| `.agent-squad/playbook/` | The installed `agent-squad` tag, as GitHub's tarball of it: `SQUAD.md`, `BOOTSTRAP.md`, this README, `CHANGELOG.md`, `scripts/`, `.githooks/` (the gate the shim runs), the `.github/` templates, `templates/`, and `.gitattributes` | Installer | No | Replaced whole, only once the new one is complete | Never; reinstall to restore it |
 | `.agent-squad/playbook/scripts/` | The compaction hooks' script, the merge gate, the checks runner, the installer | Installer | No | Replaced with the playbook | — |
 | `.agent-squad/worktrees/dev/`, `qa/` | DEV's and QA's checkouts (git worktrees) | Installer creates; DEV and QA work there | No | Untouched | Persistent |
 | `.agent-squad/worktrees/cto-<topic>/` | The CTO's checkout for one PR | CTO | No | Untouched | After its PR merges |
@@ -157,7 +161,7 @@ Outside it, the installer only touches the files listed after it.
 | `.agent-squad/playbook.manifest` | The playbook's checksums as installed; `--check` compares against it | Installer | No | Rewritten | Never |
 | `.agent-squad-checks` | The project's checks for the pre-push gate | The project | **Yes** | Untouched | — |
 | `AGENTS.md`, `CLAUDE.md` → `AGENTS.md` | The project's conventions and the *Squad* section | The project | **Yes** | Untouched | — |
-| `.claude/settings.local.json` | The four compaction hooks, next to Claude Code's own local settings | Installer merges ours, keeps the rest | No | Our entries rewritten | — |
+| `.claude/settings.local.json` | The squad's four hooks (compaction save and restore, and the start-up check that the charter is installed), next to Claude Code's own local settings | Installer merges ours, keeps the rest | No | Our entries rewritten | — |
 | `.gitignore` | Two lines: `.agent-squad/` and `.claude/settings.local.json` | Installer appends when missing | **Yes** | Re-added if missing | — |
 | `.github/ISSUE_TEMPLATE/task.md`, `.github/PULL_REQUEST_TEMPLATE.md` | Issue and PR templates | Installer only if missing; then the project | **Yes** | Re-created if missing | — |
 | `.git/hooks/pre-push` | A shim that runs the playbook's gate and refuses the push if it is missing | Installer | No | Rewritten | — |
@@ -180,6 +184,16 @@ changed sections: a running session keeps the charter it loaded until it restart
 From v16 on, the pre-push gate refuses any push to `main`: OpenSpec minutes go through a PR like
 everything else, and an exception approved by the CEO on an issue is pushed with
 `SQUAD_MAIN_EXCEPTION=#<issue> git push …`.
+
+### From v15
+
+Besides running the installer, a project on v15 does three things by hand, in one PR:
+1. **The PR template.** The installer never overwrites a project's templates, so copy
+   `.agent-squad/playbook/.github/PULL_REQUEST_TEMPLATE.md` over yours if yours is the one an
+   earlier install created: v16 asks a PR to announce numbered claims.
+2. **`main`'s protection.** Remove any GitHub bypass left for `openspec/`.
+3. **`AGENTS.md`.** Update its line on `main`'s protection as `templates/AGENTS.md` now words it,
+   and send OpenSpec minutes through PRs.
 
 ### From v14
 
@@ -222,9 +236,10 @@ and an announced stop:
 ## ⚠️ Things to know
 
 - **Tools that do not honour `.gitignore`** walk into `.agent-squad/worktrees/` from the main
-  checkout and see the other agents' copies of the project: `grep -r`, a test runner without a
-  path restriction (pytest without `testpaths`, mypy without `files`), some IDE indexers and
-  bundlers. Restrict them to the project's paths; `rg` and ruff honour `.gitignore`.
+  checkout and see the other agents' copies of the project: `grep -r`, some IDE indexers and
+  bundlers. Test runners and type checkers skip dot-directories by default (pytest and mypy do),
+  and are affected only when configured to enter them, for instance pytest with `norecursedirs`
+  overridden. Restrict such tools to the project's paths; `rg` and ruff honour `.gitignore`.
 - **Never run `git clean -d` with `-x` or `-X` in the main checkout:** it deletes the playbook, the
   snapshots, the evidence and `.claude/settings.local.json` (with `-ff`, the worktrees too).
 - **`gh issue list --label` returns nothing, silently,** for a label whose emoji is a sequence of
