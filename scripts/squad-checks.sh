@@ -16,11 +16,12 @@ list=".agent-squad-checks"
 # shellcheck disable=SC2046 # the names are split on purpose, one variable each
 unset $(git rev-parse --local-env-vars)
 
-# The project's own checks, one shell command per line; blank lines and # comments are skipped.
+# The project's own checks, one shell command per line. Blank lines and comments are skipped,
+# indented ones included: run as commands, they would pass as checks that check nothing.
 commands=()
 if [ -f "$list" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in ''|'#'*) continue ;; esac
+    case "${line#"${line%%[![:space:]]*}"}" in ''|'#'*) continue ;; esac
     commands+=("$line")
   done < "$list"
 fi

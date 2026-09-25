@@ -14,7 +14,9 @@
 set -u
 
 action="${1:-}"
-payload="$(cat 2>/dev/null || true)"
+# The hook's JSON payload. Run by hand on a terminal there is none, and reading would wait for ever.
+payload=""
+[ -t 0 ] || payload="$(cat 2>/dev/null || true)"
 # jq is required to read the payload (BOOTSTRAP.md, row 10b). Without it, or without a usable id,
 # nothing is written: a missing snapshot is harmless, a shared or mis-placed one is not.
 session_id=""
