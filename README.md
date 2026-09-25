@@ -84,9 +84,36 @@ Outside it, the installer only touches the files listed after it.
 Run the installed installer with the new tag:
 `"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" /path/to/project v16`. It
 replaces `playbook/` only once the new one is complete, rewrites `playbook.manifest`, appends to
-`install.log` and leaves the rest of `.agent-squad/` alone. Tell the agents, who re-read the changed sections: a running
-session keeps the charter it loaded until it restarts or compacts. `CHANGELOG.md` says what each
-version changes.
+`install.log` and leaves the rest of `.agent-squad/` alone. Tell the agents, who re-read the
+changed sections: a running session keeps the charter it loaded until it restarts or compacts.
+`CHANGELOG.md` says what each version changes.
+
+### From v14
+Up to v14 a project carried the method as tracked copies. Moving to v15 takes one PR and an
+announced stop:
+1. **Stop.** Announce it. DEV and QA leave their worktrees clean, with their shells in the main
+   checkout; the CTO's ephemeral worktrees are merged and removed first.
+2. **One PR, from a CTO worktree:**
+   - `git rm SQUAD.md BOOTSTRAP.md scripts/squad-handoff.sh scripts/squad-merge-gate.sh scripts/squad-checks.sh .githooks/pre-push`;
+   - `git mv .squad/checks .agent-squad-checks`;
+   - remove the squad's hooks from `.claude/settings.json` (the whole file, if they are all it holds);
+   - in `.gitignore`, replace `.claude/handoff/` and `evidence/`, with their comments, by
+     `.agent-squad/` and `.claude/settings.local.json`;
+   - in `AGENTS.md`, add the *Squad* section of `templates/AGENTS.md`, update the directories,
+     and point every reference to the removed files (the introduction, *Compact instructions*,
+     the README) at `.agent-squad/playbook/`.
+
+   Its push runs no gate, because `core.hooksPath` points at the `.githooks/` it removes: run the
+   checks by hand and say so in the PR.
+3. **After the merge, in the main checkout:** `git pull --ff-only`; delete `.claude/handoff/`;
+   `git config --unset core.hooksPath`; `mkdir -p .agent-squad/worktrees`;
+   `git worktree move ../<repo>.worktrees/dev .agent-squad/worktrees/dev`, and the same for `qa`.
+   In each moved worktree, delete any environment that stores absolute paths (a Python virtualenv:
+   `rm -rf .venv`, then recreate it, e.g. `uv sync`), and QA moves any `evidence/` left in its
+   worktree to `.agent-squad/evidence/`. Then run the installer and `--check`.
+4. **Open branches:** a branch started on v14 has no `.agent-squad-checks`, so the gate refuses
+   it. DEV merges `main` into every open branch before its next push; QA rests on
+   `git switch --detach origin/main`.
 
 ## Things to know
 - **Tools that do not honour `.gitignore`** walk into `.agent-squad/worktrees/` from the main

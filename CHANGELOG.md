@@ -29,6 +29,10 @@
   requires `--check` to pass entirely.
 - README rewritten: requirements, install, a map of every directory, upgrade, tooling traps
   (#26); no portable file names a project.
+- **From v14:** a project that carries the v14 copies follows the README, *Upgrade*, *From v14*:
+  one PR that removes the copies and moves `.squad/checks`, then an announced stop to unset
+  `core.hooksPath`, move the worktrees (and rebuild any environment with absolute paths), install
+  and `--check`. Rehearsed end to end on a clone of a v14 project.
 
 ## v14 — 2026-09-24
 - Fix: `scripts/squad-checks.sh` clears git's own variables (`git rev-parse --local-env-vars`)
