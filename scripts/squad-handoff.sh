@@ -39,6 +39,16 @@ handoff_dir="$main_checkout/.agent-squad/handoff"
 handoff_file="$handoff_dir/$session_id.md"
 charter="$main_checkout/.agent-squad/playbook/SQUAD.md"
 
+# gh lists 30 items unless told otherwise, and a cut list reads as a complete one. Both listings
+# ask for this many, and `limit_note <count> <what> <command>` says so, on a line of its own, when
+# one of them reaches it.
+limit=100
+limit_note() {
+  if [ "$1" -ge "$limit" ]; then
+    echo "($1 $2 read, the limit of this snapshot; there may be more: $3)"
+  fi
+}
+
 # Objective facts a compacted session needs to re-orient itself. Everything comes from git and
 # GitHub, nothing from the conversation, so it is exact even if the summary is not.
 snapshot() {
@@ -52,7 +62,7 @@ snapshot() {
   # commit is no longer the head, which is exactly the merge gate), and unresolved review threads.
   owner="$(gh repo view --json owner --jq .owner.login 2>/dev/null || true)"
   repo="$(gh repo view --json name --jq .name 2>/dev/null || true)"
-  prs="$(gh pr list --json number,title,headRefName,headRefOid,labels 2>/dev/null || true)"
+  prs="$(gh pr list --state open --limit "$limit" --json number,title,headRefName,headRefOid,labels 2>/dev/null || true)"
   if [ -z "$prs" ]; then
     echo "(gh unavailable)"
   else
@@ -74,12 +84,20 @@ snapshot() {
         --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length' 2>/dev/null || echo "unknown")"
       echo "  verdict $verdict; unresolved threads $threads"
     done
+    limit_note "$(printf '%s' "$prs" | jq length)" "open pull requests" "gh pr list --limit 1000"
   fi
   echo
   echo "## Issues in progress, in review or blocked"
-  gh issue list --json number,title,labels \
-    --jq '.[] | select([.labels[].name] | any(startswith("🚧") or startswith("👀") or startswith("⛔"))) | "- #\(.number) \(.title) labels: \([.labels[].name] | join(", "))"' 2>/dev/null \
-    || echo "(gh unavailable)"
+  # Filtered here, on the labels' first character: gh's own --label filter silently finds nothing
+  # for labels whose emoji is a ZWJ sequence (#56).
+  issues="$(gh issue list --state open --limit "$limit" --json number,title,labels 2>/dev/null || true)"
+  if [ -z "$issues" ]; then
+    echo "(gh unavailable)"
+  else
+    printf '%s' "$issues" \
+      | jq -r '.[] | select([.labels[].name] | any(startswith("🚧") or startswith("👀") or startswith("⛔"))) | "- #\(.number) \(.title) labels: \([.labels[].name] | join(", "))"'
+    limit_note "$(printf '%s' "$issues" | jq length)" "open issues" "gh issue list --limit 1000"
+  fi
   echo
   echo "## main"
   git log origin/main --oneline -3 2>/dev/null || git log --oneline -3 2>/dev/null || true
