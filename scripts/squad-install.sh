@@ -265,7 +265,7 @@ gate_refusal() {
 }
 
 check_installation() {
-  local why version agent worktree changed expected actual path
+  local why version agent worktree changed expected actual path branch
 
   # 9 first, as the heading of the report: which version is installed, and since when.
   version="$(grep -o '^> \*\*Version:\*\* [0-9]*' "$playbook/SQUAD.md" 2>/dev/null | grep -o '[0-9]*$')"
@@ -365,7 +365,7 @@ check_installation() {
   #     the gate falls back to main, whatever the remote's default is (#72).
   why=""
   branch="$(known_default_branch)" \
-    || why="origin/HEAD is not set, so the gate protects main; set it with: git remote set-head origin --auto"
+    || why="origin/HEAD is not set, so the gate protects main; the installer records it once the remote's default branch has a commit"
   verdict "git knows the remote's default branch${branch:+ ($branch)}, the one the gate protects" "$why"
 
   [ "$failed_items" -eq 0 ]
@@ -550,6 +550,11 @@ if base="$(known_default_branch)"; then
   say branch "the remote's default branch is $base (origin/HEAD), the one the gate protects"
 elif git -C "$project" remote set-head origin --auto >/dev/null 2>&1 && base="$(known_default_branch)"; then
   say branch "recorded origin/HEAD -> origin/$base, as the remote answered: the gate protects $base"
+elif refs="$(git -C "$project" ls-remote origin 2>/dev/null)" && [ -z "$refs" ]; then
+  # The remote answers, but has no branch yet: a new project before its bootstrap commit.
+  base=""
+  say branch "NOT YET: the remote has no branch yet, so the gate protects main; run the installer again once the default branch has a commit"
+  needs_decision=1
 else
   base=""
   say branch "NOT KNOWN: origin/HEAD is not set and the remote could not be asked, so the gate protects main; set it with git remote set-head origin --auto and run again"
@@ -562,7 +567,7 @@ for agent in dev qa; do
   if [ -e "$worktree" ]; then
     say worktrees ".agent-squad/worktrees/$agent exists, kept"
   elif [ -z "$base" ]; then
-    say worktrees "NOT CREATED: .agent-squad/worktrees/$agent, because the remote's default branch is not known"
+    say worktrees "NOT CREATED: .agent-squad/worktrees/$agent, because the remote's default branch is not known yet"
     needs_decision=1
   elif ! git -C "$project" rev-parse -q --verify "origin/$base^{commit}" >/dev/null; then
     say worktrees "NOT CREATED: .agent-squad/worktrees/$agent, because origin/$base does not exist yet; run again once it does"

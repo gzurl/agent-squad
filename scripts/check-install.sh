@@ -659,4 +659,27 @@ check "when the remote cannot tell its default branch, the installer exits 1" [ 
 check "and says it does not know it, instead of assuming main" contains "$out" "branch     NOT KNOWN"
 check "and makes no worktree" absent "$lab/unknown" .agent-squad/worktrees/dev .agent-squad/worktrees/qa
 
+# An empty remote, as every new project's first install has it (BOOTSTRAP installs before row 5):
+# the remote answers, with no branch yet. The installer says so and asks for a second run, not for
+# a set-head that would fail; after the bootstrap commit, pushed as the approved exception, the
+# second run records origin/HEAD and makes the worktrees.
+git init -q --bare -b main "$lab/empty.git" && git clone -q "$lab/empty.git" "$lab/new-project" 2>/dev/null || exit 2
+out="$("$install" "$lab/new-project" va 2>&1)"
+code=$?
+check "with an empty remote, the installer exits 1" [ "$code" -eq 1 ]
+check "and says the remote has no branch yet, to run it again after the first commit" \
+  contains "$out" "branch     NOT YET: the remote has no branch yet"
+check "and does not say the remote could not be asked" lacks "$out" "could not be asked"
+check "and makes no worktree yet" absent "$lab/new-project" .agent-squad/worktrees/dev
+printf '# the sandbox checks\ntrue\n' > "$lab/new-project/.agent-squad-checks"
+git -C "$lab/new-project" add .agent-squad-checks && git -C "$lab/new-project" commit -qm "the bootstrap commit"
+check "the bootstrap commit reaches main as the approved exception" \
+  env SQUAD_MAIN_EXCEPTION='#1' git -C "$lab/new-project" push -q origin HEAD:refs/heads/main
+out="$("$install" "$lab/new-project" va 2>&1)"
+code=$?
+check "then a second run exits 0 and records origin/HEAD" \
+  bash -c '[ "$1" -eq 0 ] && grep -qF "recorded origin/HEAD -> origin/main" <<<"$2"' _ "$code" "$out"
+check "and makes the worktrees at origin/main" \
+  detached_at "$lab/new-project" "$lab/new-project/.agent-squad/worktrees/dev" main
+
 exit "$status"
