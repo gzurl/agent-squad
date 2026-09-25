@@ -60,7 +60,7 @@ Outside it, the installer only touches the files listed after it.
 
 | Path (from the project's main checkout) | What it holds | Written by | In git | On upgrade | Removed when |
 |---|---|---|---|---|---|
-| `.agent-squad/playbook/` | The installed `agent-squad` tag, as GitHub's tarball of it: `SQUAD.md`, `BOOTSTRAP.md`, this README, `CHANGELOG.md`, `scripts/`, `templates/` | Installer | No | Replaced whole, only once the new one is complete | Never; reinstall to restore it |
+| `.agent-squad/playbook/` | The installed `agent-squad` tag, as GitHub's tarball of it: `SQUAD.md`, `BOOTSTRAP.md`, this README, `CHANGELOG.md`, `scripts/`, `.githooks/` (the gate the shim runs), the `.github/` templates, `templates/` | Installer | No | Replaced whole, only once the new one is complete | Never; reinstall to restore it |
 | `.agent-squad/playbook/scripts/` | The compaction hooks' script, the merge gate, the checks runner, the installer | Installer | No | Replaced with the playbook | — |
 | `.agent-squad/worktrees/dev/`, `qa/` | DEV's and QA's checkouts (git worktrees) | Installer creates; DEV and QA work there | No | Untouched | Persistent |
 | `.agent-squad/worktrees/cto-<topic>/` | The CTO's checkout for one PR | CTO | No | Untouched | After its PR merges |
@@ -79,8 +79,8 @@ Outside it, the installer only touches the files listed after it.
 ## Upgrade
 Run the installed installer with the new tag:
 `"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" /path/to/project v16`. It
-replaces `playbook/` only once the new one is complete, leaves the rest of `.agent-squad/` alone
-and appends to `install.log`. Tell the agents, who re-read the changed sections: a running
+replaces `playbook/` only once the new one is complete, rewrites `playbook.manifest`, appends to
+`install.log` and leaves the rest of `.agent-squad/` alone. Tell the agents, who re-read the changed sections: a running
 session keeps the charter it loaded until it restarts or compacts. `CHANGELOG.md` says what each
 version changes.
 

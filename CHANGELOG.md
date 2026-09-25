@@ -7,13 +7,17 @@
   a failing check; an upgrade is the same command with a newer tag. Outside `.agent-squad/` it
   only merges the compaction hooks into `.claude/settings.local.json`, appends two ignore lines,
   creates the GitHub templates when missing and writes a `pre-push` shim in the shared git
-  directory (#34, #35, #36).
+  directory (#34, #35, #36). `.agent-squad/playbook.manifest` records the playbook's checksums for
+  `--check`. The tag's tarball leaves out this repository's own files (`.gitattributes`), so a
+  project's agent never loads this repository's `CLAUDE.md` from inside the playbook.
 - `.agent-squad/` also holds the worktrees (`worktrees/dev`, `qa`, `cto-<topic>`), the compaction
   snapshots (`handoff/`), the review evidence (`evidence/`) and `install.log` (§2.4, §5).
 - The project's list of checks is `.agent-squad-checks`, tracked (§4.2). The gate no longer uses
   `core.hooksPath`, which silently disabled every other hook in `.git/hooks/`; a project's own
   `pre-push` runs first and the shim refuses the push when the playbook is missing. Every push
-  runs every check.
+  that carries commits runs every check. `squad-checks.sh` skips blank lines and indented comments,
+  which used to pass as checks; the hook refuses when its runner is not a file; `squad-handoff.sh`
+  no longer waits for input on a terminal (#42).
 - `AGENTS.md` imports the charter with `@.agent-squad/playbook/SQUAD.md`, so every session has it
   from the start and after each compaction (templates in `BOOTSTRAP.md` and `templates/`).
 - §4.9: the merge gate is reached from any worktree through the shared git directory.
