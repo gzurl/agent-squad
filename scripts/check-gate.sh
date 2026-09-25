@@ -186,6 +186,24 @@ mv "$lab/squad-checks.sh.aside" "$runner"
 chmod -x "$runner"
 refused_for_runner "a hook whose squad-checks.sh is not executable" HEAD:refs/heads/wt
 chmod +x "$runner"
+mv "$runner" "$lab/squad-checks.sh.aside"
+mkdir "$runner"
+refused_for_runner "a hook with a directory in place of squad-checks.sh" HEAD:refs/heads/wt
+rmdir "$runner"
+mv "$lab/squad-checks.sh.aside" "$runner"
+
+# 6b. A list whose lines are only an indented comment and blanks runs no check: the gate says it
+#     lists no command and refuses the push, instead of reporting those lines as passing checks.
+list "$wt" '  # an indented comment
+   '
+commit "$wt" "a list with no command" >/dev/null
+if errors="$(git -C "$wt" push -q origin HEAD:refs/heads/wt 2>&1)"; then
+  fail "a list of an indented comment and blanks let the push through"
+elif grep -q 'lists no command' <<<"$errors"; then
+  pass "a list of an indented comment and blanks refuses the push: it lists no command"
+else
+  fail "a list of an indented comment and blanks refused the push for another reason: $errors"
+fi
 
 # 7. The same hook at the root of a repository, as this one has it: tracked, next to scripts/, and
 #    reached through a relative core.hooksPath from the worktree that pushes. The recording check
