@@ -44,7 +44,11 @@ every action it takes or skips, and what it leaves to you:
 2. **`.agent-squad-checks`**, the list of commands the pre-push gate runs: the ones your CI runs,
    one per line. Until it lists one, the gate refuses every push.
 3. **A PR with what it changed in tracked files** (`.gitignore`, and the GitHub templates when it
-   created them), together with the two files above.
+   created them), together with the two files above. The installer wrote them in the main
+   checkout, which stays on `main`: copy them into a worktree (for instance
+   `.agent-squad/worktrees/cto-squad/`) and open the PR from there. Once it merges, drop the
+   main checkout's local copies before pulling, or `git pull --ff-only` refuses to overwrite them:
+   `git checkout -- .gitignore` if it was already tracked, and delete the files that were new.
 
 Then run `"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" --check /path/to/project`:
 it changes nothing and prints the installed version and the last `install.log` entry, then one
@@ -71,8 +75,8 @@ Outside it, the installer only touches the files listed after it.
 | `.agent-squad-checks` | The project's checks for the pre-push gate | The project | **Yes** | Untouched | — |
 | `AGENTS.md`, `CLAUDE.md` → `AGENTS.md` | The project's conventions and the *Squad* section | The project | **Yes** | Untouched | — |
 | `.claude/settings.local.json` | The four compaction hooks, next to Claude Code's own local settings | Installer merges ours, keeps the rest | No | Our entries rewritten | — |
-| `.gitignore` | Two lines: `.agent-squad/` and `.claude/settings.local.json` | Installer appends when missing | **Yes** | Untouched | — |
-| `.github/ISSUE_TEMPLATE/task.md`, `.github/PULL_REQUEST_TEMPLATE.md` | Issue and PR templates | Installer only if missing; then the project | **Yes** | Untouched | — |
+| `.gitignore` | Two lines: `.agent-squad/` and `.claude/settings.local.json` | Installer appends when missing | **Yes** | Re-added if missing | — |
+| `.github/ISSUE_TEMPLATE/task.md`, `.github/PULL_REQUEST_TEMPLATE.md` | Issue and PR templates | Installer only if missing; then the project | **Yes** | Re-created if missing | — |
 | `.git/hooks/pre-push` | A shim that runs the playbook's gate and refuses the push if it is missing | Installer | No | Rewritten | — |
 | `.git/hooks/pre-push.local` | The project's previous `pre-push`, if it had one; the shim runs it first | Installer moves it | No | Untouched | — |
 
@@ -89,8 +93,8 @@ version changes.
   checkout and see the other agents' copies of the project: `grep -r`, a test runner without a
   path restriction (pytest without `testpaths`, mypy without `files`), some IDE indexers and
   bundlers. Restrict them to the project's paths; `rg` and ruff honour `.gitignore`.
-- **Never run `git clean -x` or `-X` in the main checkout:** it skips the worktrees but deletes the
-  playbook, the snapshots and the evidence.
+- **Never run `git clean -d` with `-x` or `-X` in the main checkout:** it deletes the playbook, the
+  snapshots, the evidence and `.claude/settings.local.json` (with `-ff`, the worktrees too).
 - **Tooling traps:** `gh api --slurp` cannot be combined with `--jq` (pipe into `jq` instead);
   `addPullRequestReviewThreadReply` takes a `pullRequestReviewThreadId`; `jq` takes one variable
   name per `--arg`; zsh does not word-split unquoted variables, so multi-file loops belong in bash.

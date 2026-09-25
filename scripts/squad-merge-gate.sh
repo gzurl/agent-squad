@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Merge gate of SQUAD.md §4.9, checked by API. Prints the verified head SHA on stdout and exits 0
 # when every condition holds; otherwise prints the reason on stderr and exits non-zero, so that
-#   head=$(scripts/squad-merge-gate.sh <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
+# SQUAD.md §4.9's command, which reaches this script through the playbook from any worktree,
+#   p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" &&
+#   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
 # cannot merge over an open thread, a stale verdict, a missing label, an unsettled body-only
 # finding, a red or absent CI, or a head that moved between the check and the merge.
 #
-# Usage: scripts/squad-merge-gate.sh <pr-number> [owner/repo]
+# Usage: squad-merge-gate.sh <pr-number> [owner/repo]
 set -u
 pr="${1:-}"
 case "$pr" in ""|*[!0-9]*) echo "gate: usage: $0 <pr-number> [owner/repo]" >&2; exit 2 ;; esac

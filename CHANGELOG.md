@@ -19,11 +19,14 @@
   which used to pass as checks; the hook refuses when its runner is not a file; `squad-handoff.sh`
   no longer waits for input on a terminal (#42).
 - `AGENTS.md` imports the charter with `@.agent-squad/playbook/SQUAD.md`, so every session has it
-  from the start and after each compaction (templates in `BOOTSTRAP.md` and `templates/`).
+  from the start and after each compaction (the *Squad* section of `templates/AGENTS.md`, which
+  the installer prints); the re-orientation after a compaction names that charter.
 - §4.9: the merge gate is reached from any worktree through the shared git directory.
 - §7: the method's repository has its own CTO; projects' CTOs open issues there and take one to a
   PR only when assigned. `.claude/settings.json` and the GitHub templates are no longer portable
-  copies (#16). `BOOTSTRAP.md` rows 0, 9, 9b, 10, 10b, 11 and 13 run the installer and `--check`.
+  copies (#16). `BOOTSTRAP.md` rows 0, 9, 9b, 10b and 13 now rely on the installer and `--check`, row 10
+  points at the *Squad* section of `templates/AGENTS.md`, row 11 drops `evidence/`, and row 14
+  requires `--check` to pass entirely.
 - README rewritten: requirements, install, a map of every directory, upgrade, tooling traps
   (#26); no portable file names a project.
 
