@@ -192,10 +192,37 @@ gate_refusal() {
     return
   fi
   # The sandbox's hooks are the project's playbook: it goes away even when the run is interrupted.
-  trap '[ -z "$lab" ] || rm -rf "$lab"; exit 130' INT TERM HUP
-  # A template, so that TMPDIR is honoured on every system and a leftover is recognisable.
+  # Its name is fixed before the directory exists, under TMPDIR, so that an interrupt at any moment
+  # finds in the trap exactly the sandbox or nothing: not TMPDIR itself, and never a directory made
+  # but not yet named, as mktemp's is until it prints its path (#71). mkdir either makes the
+  # directory or fails, so the name is this run's alone.
   lab="${TMPDIR:-/tmp}"
-  lab="$(mktemp -d "${lab%/}/squad-check.XXXXXX")" || { echo "cannot create a temporary directory"; return; }
+  lab="${lab%/}/squad-check.$$.$RANDOM$RANDOM"
+  # The sandbox runs as a job with a process group of its own, which everything it starts inherits,
+  # a process forked just as the interrupt arrives included: such a straggler escapes the signal
+  # and would write into the sandbox after it was removed (#71). `clear_sandbox <job>` stops the
+  # whole group, waits until none of it is left, and only then removes the directory. The trap
+  # reads the job from $!, which is set from the moment the job exists.
+  # shellcheck disable=SC2317,SC2329 # invoked by the trap below
+  clear_sandbox() {
+    local polls=0
+    if [ -n "$1" ]; then
+      kill -KILL -- "-$1" 2>/dev/null
+      wait "$1" 2>/dev/null
+      while kill -0 -- "-$1" 2>/dev/null && [ "$polls" -lt 500 ]; do
+        sleep 0.01
+        polls=$((polls + 1))
+      done
+    fi
+    rm -rf "$lab"
+  }
+  trap 'clear_sandbox "${!:-}"; exit 130' INT TERM HUP
+  if ! mkdir -m 700 "$lab" 2>/dev/null; then
+    trap - INT TERM HUP
+    echo "cannot create a temporary directory"
+    return
+  fi
+  set -m
   (
     # The machine's own git configuration (signing, protocols, templates, hooks) stays out.
     export HOME="$lab" XDG_CONFIG_HOME="$lab" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
@@ -215,7 +242,9 @@ gate_refusal() {
     push_with false && exit 4
     push_with true || exit 5
     exit 0
-  )
+  ) &
+  set +m
+  wait "$!"
   code=$?
   rm -rf "$lab"
   trap - INT TERM HUP

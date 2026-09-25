@@ -497,24 +497,50 @@ check "without the playbook the gate item says so, and does not blame the gate" 
   check_reason "$item_gate" "the playbook has no executable .githooks/pre-push to test"
 mv "$lab/playbook-aside" "$squad/playbook"
 
-# Interrupted while the gate's sandbox exists, --check leaves nothing behind. The run gets its own
-# process group, which is what a Ctrl-C signals.
-mkdir -p "$lab/tmp"
-interrupted_leaves_nothing() {
-  local pid tries=0
+# Interrupted while the gate's sandbox exists, --check leaves no sandbox and touches nothing else in
+# TMPDIR (#71). The run gets its own process group, which is what a Ctrl-C signals, and is
+# interrupted at a state, not after a delay: as soon as the sandbox's directory exists, and once it
+# holds its repositories. Two wrappers make both states last: a mktemp that waits between creating a
+# directory and printing its name (the window in which a cleanup that learns the name from mktemp
+# has nothing to remove, or removes TMPDIR itself), and a git whose push waits.
+real_mktemp="$(command -v mktemp)" real_git="$(command -v git)"
+mkdir -p "$lab/slow"
+printf '#!/usr/bin/env bash\ndir="$(%q "$@")" || exit\nsleep 1\necho "$dir"\n' "$real_mktemp" > "$lab/slow/mktemp"
+printf '#!/usr/bin/env bash\n[ "${3:-}" = push ] && sleep 1\nexec %q "$@"\n' "$real_git" > "$lab/slow/git"
+chmod +x "$lab/slow/mktemp" "$lab/slow/git"
+# `sandboxes` lists the gate's sandboxes in the test's TMPDIR.
+sandboxes() { find "$lab/tmp" -maxdepth 1 -name 'squad-check.*' 2>/dev/null; }
+# `interrupted_at <created|populated>` runs --check, interrupts it at that state, and passes when the
+# run was really interrupted (exit 130), no sandbox is left, and the file that is not the
+# installer's is still there.
+interrupted_at() {
+  local pid code sandbox tries=0
+  rm -rf "$lab/tmp" && mkdir -p "$lab/tmp" && echo "not the installer's" > "$lab/tmp/keep-me"
   set -m
-  TMPDIR="$lab/tmp" "$install" --check "$project" >/dev/null 2>&1 &
+  PATH="$lab/slow:$PATH" TMPDIR="$lab/tmp" "$install" --check "$project" >/dev/null 2>&1 &
   pid=$!
   set +m
-  while [ -z "$(ls -A "$lab/tmp")" ] && [ "$tries" -lt 200 ]; do sleep 0.05; tries=$((tries + 1)); done
-  [ -n "$(ls -A "$lab/tmp")" ] || return 1
+  until sandbox="$(sandboxes | head -1)" && [ -n "$sandbox" ] \
+    && { [ "$1" = created ] || [ -d "$sandbox/remote.git" ]; }; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 2000 ] || ! kill -0 "$pid" 2>/dev/null; then
+      kill -INT -- "-$pid" 2>/dev/null
+      return 1
+    fi
+    sleep 0.005
+  done
   kill -INT -- "-$pid" 2>/dev/null
   wait "$pid" 2>/dev/null
+  code=$?
+  # What is left of the run gets a moment to finish its cleanup.
   tries=0
-  while [ -n "$(ls -A "$lab/tmp")" ] && [ "$tries" -lt 100 ]; do sleep 0.05; tries=$((tries + 1)); done
-  [ -z "$(ls -A "$lab/tmp")" ]
+  while [ -n "$(sandboxes)" ] && [ "$tries" -lt 100 ]; do sleep 0.05; tries=$((tries + 1)); done
+  [ "$code" -eq 130 ] && [ -z "$(sandboxes)" ] && [ -f "$lab/tmp/keep-me" ]
 }
-check "an interrupted --check leaves no sandbox behind" interrupted_leaves_nothing
+check "an --check interrupted as soon as its sandbox exists leaves none, and nothing else goes" \
+  interrupted_at created
+check "an --check interrupted once its sandbox holds its repositories leaves none, and nothing else goes" \
+  interrupted_at populated
 
 broken "$squad/playbook/scripts/squad-checks.sh"
 printf '#!/bin/sh\nexit 0\n' > "$squad/playbook/scripts/squad-checks.sh"
