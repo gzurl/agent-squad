@@ -23,7 +23,8 @@
   ZWJ-emoji labels, so the squad's scripts never filter by label (a check guards it) and the
   compaction snapshot lists with explicit limits and says when it may be truncated (#56, #63);
   a milestone ships with its user-facing documentation, reviewed by the CEO (#29).
-- **Installer and gate fixes:** a CRLF checks list runs without carriage returns (#46); the
+- **Installer and gate fixes:** an interrupted `--check` could delete the user's `TMPDIR` or leave
+  its sandbox behind; it no longer can (#71). A CRLF checks list runs without carriage returns (#46); the
   bootstrap commit of an empty repository carries a first `.agent-squad-checks` (BOOTSTRAP row 5); *By hand*
   lists the squad's tracked files still uncommitted, from `git status` (#49); `.gitignore` stays
   out of the tag's tarball (#50).
