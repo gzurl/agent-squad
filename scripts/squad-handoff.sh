@@ -94,7 +94,7 @@ case "$action" in
   restore)
     echo "Context was compacted. Re-orient before doing anything else:"
     echo "1. Your role is your session name (CTO, DEV or QA); sign as SQUAD.md says."
-    echo "2. Re-read AGENTS.md and SQUAD.md; then the issue you own that carries a status label, its last milestone comment, and any PR of yours: its latest review, verdict and open threads."
+    echo "2. Re-read AGENTS.md and the charter it imports (in a project, .agent-squad/playbook/SQUAD.md); then the issue you own that carries a status label, its last milestone comment, and any PR of yours: its latest review, verdict and open threads."
     echo "3. Anything you promised another agent by message may be missing from the summary; state on the issue or PR what you are about to do before doing it."
     echo
     if [ -n "$session_id" ] && [ -f "$handoff_file" ]; then

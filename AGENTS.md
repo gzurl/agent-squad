@@ -11,18 +11,15 @@ This file does not restate those rules; it only adds what is specific to this re
 The CEO's language is Spanish: messages between agents, and with the CEO, are written in it.
 
 ## This is the upstream
-This repository is where the method is maintained. The portable files that §7 of `SQUAD.md` lists
-are **edited here, through PRs** reviewed like any other; §7's "never edited" applies to the copies
-in projects.
+This repository is where the method is maintained: its files are **edited here, through PRs**
+reviewed like any other, and projects install tagged versions of it (§7).
 
 **`CTO:agent-squad` owns this repository:** the backlog, the design, the PRs (its own or
 `DEV:agent-squad`'s, each merged by its author as §4.9 says), the review with `QA:agent-squad`, the
 tags and the notices to the projects. The CTOs of other projects open issues
 here freely, with the incident that motivated them; they do not create branches, open PRs, merge or
 tag, unless `CTO:agent-squad` assigns them a PR explicitly in its issue, and `QA:agent-squad`
-reviews such a PR. For this repository, this replaces the §7 sentence by which a project's CTO
-takes an issue to a PR here and any project's QA may review it, until v15 carries the
-project-agnostic rule ([#23](https://github.com/gzurl/agent-squad/issues/23)).
+reviews such a PR (§7).
 
 ## Compact instructions
 When compacting this conversation, always preserve: my role and signature; the issue and PR I am
@@ -44,8 +41,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 | DEV | `agent-squad.worktrees/dev/` |
 | QA | `agent-squad.worktrees/qa/` |
 
-[#23](https://github.com/gzurl/agent-squad/issues/23) moves the worktrees under
-`agent-squad/.agent-squad/worktrees/` in v15; until it is released, this table holds.
+The charter (v15) puts the worktrees under `.agent-squad/worktrees/` and reaches the scripts
+through `.agent-squad/playbook/`. This repository follows it once
+[#38](https://github.com/gzurl/agent-squad/issues/38) installs v15 here; until then this table
+holds, and the scripts are the ones at the root: the §4.9 merge gate is
+`head=$(scripts/squad-merge-gate.sh <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"`.
 
 ## Environment facts
 - GitHub account arrangement: **shared**, one account (`gzurl`) for the three agents.
@@ -59,11 +59,12 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   squash commit subject.
 
 ## Releases
-- A PR that changes a portable file (§7) also bumps the `Version:` line of `SQUAD.md` and adds the
-  matching entry at the top of [CHANGELOG.md](CHANGELOG.md), in the same PR;
-  `scripts/check-version.sh` fails when they disagree. `templates/` counts as portable here:
-  projects start from the tagged copy. A PR that only touches the README, this file, the CI or
-  this repository's own scripts does not bump the version.
+- A PR that changes a file that goes into the tag's tarball (everything `.gitattributes` does not
+  mark `export-ignore`: the charter, `BOOTSTRAP.md`, the README, the scripts and hooks the playbook
+  runs, the templates) also bumps the `Version:` line of `SQUAD.md` and adds the matching entry at
+  the top of [CHANGELOG.md](CHANGELOG.md), in the same PR; `scripts/check-version.sh` fails when
+  they disagree. A PR that only touches files kept out of the tarball (this file, the CI, this
+  repository's own checks and tests) does not bump the version.
 - A release built over several PRs lands on `main` one PR at a time, each naming the release's
   parent issue; only its **last** PR bumps `Version:` and writes the CHANGELOG entry. Projects
   install tags only, so `main` between two tags is never installed. This repository is the

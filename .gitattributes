@@ -5,3 +5,4 @@
 /.github/workflows export-ignore
 /.agent-squad-checks export-ignore
 /scripts/check-*.sh export-ignore
+/.claude export-ignore
