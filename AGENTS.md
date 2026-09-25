@@ -53,8 +53,10 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 
 ## Environment facts
 - GitHub account arrangement: **shared**, one account (`gzurl`) for the three agents.
-- `main` protection: **unprotected, gates by discipline.** The plan answers 403 to branch
-  protection and to rulesets, so no bypass exists either.
+- `main` protection: **unprotected on GitHub** (the plan answers 403 to branch protection and to
+  rulesets); **the pre-push gate refuses pushes to `main`**, and an exception approved by the CEO
+  on an issue is pushed with `SQUAD_MAIN_EXCEPTION=#<issue>` (§2.3). The other gates hold by
+  discipline.
 
 ## Git conventions
 - **Commits:** Conventional Commits, in English.
