@@ -32,7 +32,7 @@ Two situations are different throughout:
 | 11 | `.env` conventions | `.env` is git-ignored; `.env.example` lists the variable names with empty values | Create | Check; add what is missing |
 | 12 | `openspec/` layout | `vision.md`, `project.md`, `research/` exist | Create; ask the CEO for the vision | Ask the CEO whether OpenSpec applies to this project; if it does, create |
 | 13 | Worktrees | `git worktree list` shows `.agent-squad/worktrees/dev` and `.agent-squad/worktrees/qa`, both detached at `origin/main` | The installer creates them once `origin/main` exists: on an empty repository, run it again after row 5 | Same |
-| 14 | Team ready | DEV and QA acknowledged the charter and their directories | Ping both with their role, directory and first task | Same |
+| 14 | Team ready | `--check` passes, every item; DEV and QA acknowledged the charter and their directories | Ping both with their role, directory and first task | Same |
 
 ## Compact instructions template for `AGENTS.md`
 ```
