@@ -26,7 +26,9 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME="Install check" GIT_AUTHOR_EMAIL=install@example.com
 export GIT_COMMITTER_NAME="Install check" GIT_COMMITTER_EMAIL=install@example.com
 
-lab="$(mktemp -d)" || exit 2
+# The lab goes under TMPDIR, through a template: macOS's mktemp -d alone ignores TMPDIR.
+lab="${TMPDIR:-/tmp}"
+lab="$(mktemp -d "${lab%/}/squad-check-install.XXXXXX")" || exit 2
 trap 'rm -rf "$lab"' EXIT
 status=0
 
@@ -530,10 +532,14 @@ check "a missing list fails the list item" check_reports "$item_list"
 mv "$lab/list-aside" "$project/.agent-squad-checks"
 
 broken "$project/.agent-squad-checks"
-for content in '' '# only a comment' '  # an indented comment' '   '; do
+for content in '' '# only a comment' '  # an indented comment' '   ' $'# a CRLF comment\r\n\r'; do
   printf '%s\n' "$content" > "$project/.agent-squad-checks"
-  check "a list with no command ('$content') fails the list item" check_reports "$item_list"
+  # Shown with its carriage returns and newlines escaped, so that the report stays one line each.
+  shown="${content//$'\r'/\\r}"
+  check "a list with no command ('${shown//$'\n'/\\n}') fails the list item" check_reports "$item_list"
 done
+printf '# the sandbox checks\r\n./records.sh\r\n' > "$project/.agent-squad-checks"
+check "a CRLF list with a command passes the list item" check_reports
 mended "$project/.agent-squad-checks"
 
 mv "$squad/worktrees/qa" "$lab/qa-aside"

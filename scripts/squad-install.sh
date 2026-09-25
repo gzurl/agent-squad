@@ -111,9 +111,10 @@ hooks_path_settings() {
   done
 }
 # `lists_a_command <file>` passes when the file has a line that squad-checks.sh runs, by the same
-# rule: neither blank nor a comment, indentation aside. Without one, the gate refuses every push.
+# rule: neither blank nor a comment, indentation and a CRLF line ending aside. Without one, the gate
+# refuses every push.
 lists_a_command() {
-  awk '{ sub(/^[[:space:]]+/, "") } $0 != "" && !/^#/ { found = 1 } END { exit !found }' "$1" 2>/dev/null
+  awk '{ sub(/\r$/, ""); sub(/^[[:space:]]+/, "") } $0 != "" && !/^#/ { found = 1 } END { exit !found }' "$1" 2>/dev/null
 }
 # `imports_charter <file>` passes when the file imports the charter where Claude Code evaluates
 # an import: a whole line at the margin (trailing blanks allowed), outside fenced code blocks and
