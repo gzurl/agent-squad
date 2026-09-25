@@ -53,28 +53,45 @@ total="${runs%% *}"; not_green="${runs##* }"
 #    world, and the base may have moved under it since it was approved (#57). When the PR is behind
 #    its base, say by how many commits and which files they touched, marking those the PR also
 #    changes or names in its description; the result of the gate does not change.
+# `names_it <file>` passes when the PR's description names the file: its path or its base name in
+# backticks, or as a whole word when the name is distinctive enough to be one (it has a dot or a
+# slash). A bare word such as `a` is not taken for a file.
+names_it() {
+  local base="${1##*/}" name
+  for name in "$1" "$base"; do
+    grep -qF -- "\`$name\`" <<<"$body" && return 0
+    case "$name" in
+      *.*|*/*) grep -qwF -- "$name" <<<"$body" && return 0 ;;
+    esac
+  done
+  return 1
+}
 base="$(gh api "repos/$repo/pulls/$pr" --jq .base.ref 2>/dev/null)"
+behind=""
 if [ -n "$base" ] && compare="$(gh api "repos/$repo/compare/$head...$base" \
   --jq '{ahead_by, files: [.files[].filename]}' 2>/dev/null)"; then
-  behind="$(jq -r .ahead_by <<<"$compare")"
-  if [ "$behind" -gt 0 ]; then
+  behind="$(jq -r '.ahead_by // empty' <<<"$compare" 2>/dev/null)"
+fi
+case "$behind" in
+  ''|*[!0-9]*)
+    echo "gate note: cannot tell whether PR #$pr is behind its base; compare it by hand before merging" >&2 ;;
+  0) ;;
+  *)
     pr_files="$(gh api --paginate --slurp "repos/$repo/pulls/$pr/files" 2>/dev/null | jq -r 'add[].filename' 2>/dev/null)"
     body="$(gh api "repos/$repo/pulls/$pr" --jq '.body // ""' 2>/dev/null)"
     echo "gate WARNING: PR #$pr is behind $base by $behind commit(s), which changed since the merge base:" >&2
     jq -r '.files[]' <<<"$compare" | while IFS= read -r file; do
       if grep -qxF -- "$file" <<<"$pr_files"; then
         echo "  $file (the PR changes it too)"
-      elif grep -qF -- "$file" <<<"$body" || grep -qF -- "${file##*/}" <<<"$body"; then
+      elif names_it "$file"; then
         echo "  $file (the PR's description names it)"
       else
         echo "  $file"
       fi
     done >&2
     echo "  Before merging, check the PR's claims against $base; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
-  fi
-else
-  echo "gate note: cannot tell whether PR #$pr is behind its base; compare it by hand before merging" >&2
-fi
+    ;;
+esac
 
 echo "gate OK: PR #$pr at $head may be merged" >&2
 echo "$head"

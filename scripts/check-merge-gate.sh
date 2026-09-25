@@ -29,7 +29,8 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 
 # GitHub, as far as the gate is concerned. PR 7 of o/r is the branch `pr` of the scratch repository
 # SCRATCH, against `main`, approved on its head, with no open thread, the approved label and green
-# CI. `compare` and the PR's files come from git; GATE_COMPARE=fail makes the comparison fail.
+# CI. `compare` and the PR's files come from git; GATE_COMPARE=fail makes the comparison fail, and
+# GATE_COMPARE=no-count makes it answer without the count of commits.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -62,6 +63,12 @@ case "$endpoint" in
     json='{"check_runs":[{"conclusion":"success"}]}' ;;
   repos/o/r/compare/*)
     [ "${GATE_COMPARE:-}" != fail ] || exit 1
+    if [ "${GATE_COMPARE:-}" = no-count ]; then
+      json='{"files":[]}'
+      [ "$slurp" -eq 0 ] || json="[$json]"
+      printf '%s' "$json" | jq -r "${filter:-.}"
+      exit 0
+    fi
     spec="${endpoint#repos/o/r/compare/}"
     from="${spec%%...*}"
     to="${spec##*...}"
@@ -90,7 +97,7 @@ for f in README.md tool.sh other.txt; do echo "first $f" > "$scratch/$f"; done
 git -C "$scratch" add -A && git -C "$scratch" commit -qm "the base" || exit 2
 git -C "$scratch" switch -q -c pr && echo "the PR's change" >> "$scratch/tool.sh" \
   && git -C "$scratch" commit -qam "the PR" || exit 2
-export SCRATCH="$scratch" PR_BODY="Makes tool.sh faster, as the README.md explains."
+export SCRATCH="$scratch" PR_BODY="Makes tool.sh faster, as the README.md explains. It leaves a note in \`notes\`."
 head="$(git -C "$scratch" rev-parse pr)"
 
 # `run_gate` runs the gate on PR 7, leaving its stdout in $out, its stderr in $err and its exit code
@@ -118,10 +125,12 @@ else
   pass "up to date: no warning"
 fi
 
-# 2. Behind: main gains two commits, touching all three files.
+# 2. Behind: main gains two commits, touching the three files and adding two: `a`, which the
+#    description only seems to name ("a note"), and `notes`, which it names in backticks.
 git -C "$scratch" switch -q main
 echo "main's change" >> "$scratch/README.md" && echo "main's change" >> "$scratch/other.txt"
-git -C "$scratch" commit -qam "main moves"
+echo "new" > "$scratch/a" && echo "new" > "$scratch/notes"
+git -C "$scratch" add -A && git -C "$scratch" commit -qm "main moves"
 echo "main's change" >> "$scratch/tool.sh" && git -C "$scratch" commit -qam "main moves again"
 run_gate
 result_unchanged "behind"
@@ -131,8 +140,9 @@ else
   fail "behind: no count of the commits main gained: $err"
 fi
 if grep -qxF '  tool.sh (the PR changes it too)' <<<"$err" \
-  && grep -qxF "  README.md (the PR's description names it)" <<<"$err" && grep -qxF '  other.txt' <<<"$err"; then
-  pass "behind: it lists the files main touched, marking those the PR changes or names"
+  && grep -qxF "  README.md (the PR's description names it)" <<<"$err" && grep -qxF '  other.txt' <<<"$err" \
+  && grep -qxF "  notes (the PR's description names it)" <<<"$err" && grep -qxF '  a' <<<"$err"; then
+  pass "behind: it lists the files main touched, marking those the PR changes or names, and only those"
 else
   fail "behind: the files are not listed as expected: $err"
 fi
@@ -151,6 +161,17 @@ if grep -qF 'cannot tell whether PR #7 is behind' <<<"$err"; then
   pass "no comparison: the gate says it cannot tell"
 else
   fail "no comparison: no note: $err"
+fi
+
+# 4. GitHub compares, but without the count of commits: the same note, not a shell error.
+export GATE_COMPARE=no-count
+run_gate
+unset GATE_COMPARE
+result_unchanged "no count"
+if grep -qF 'cannot tell whether PR #7 is behind' <<<"$err" && ! grep -q 'integer expected' <<<"$err"; then
+  pass "no count: the gate says it cannot tell"
+else
+  fail "no count: no note, or a shell error: $err"
 fi
 
 exit "$status"
