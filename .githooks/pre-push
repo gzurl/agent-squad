@@ -5,11 +5,12 @@
 # a repository (.githooks/ next to scripts/) and inside an installed playbook.
 set -u
 
-# The runner of the checks sits in ../scripts/ from this hook. A gate that cannot find it cannot
-# run, and a gate that cannot run refuses the push instead of letting it through.
+# The runner of the checks sits in ../scripts/ from this hook, as an executable file. A gate that
+# cannot find it cannot run, and a gate that cannot run refuses the push instead of letting it
+# through, with its own message even when a directory stands in the runner's place.
 hook_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
 checks="$(dirname "$hook_dir")/scripts/squad-checks.sh"
-if [ ! -x "$checks" ]; then
+if [ ! -f "$checks" ] || [ ! -x "$checks" ]; then
   echo "pre-push: $checks is missing or not executable; the gate cannot run, so the push is refused" >&2
   exit 1
 fi

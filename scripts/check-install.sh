@@ -530,7 +530,7 @@ check "a missing list fails the list item" check_reports "$item_list"
 mv "$lab/list-aside" "$project/.agent-squad-checks"
 
 broken "$project/.agent-squad-checks"
-for content in '' '# only a comment'; do
+for content in '' '# only a comment' '  # an indented comment' '   '; do
   printf '%s\n' "$content" > "$project/.agent-squad-checks"
   check "a list with no command ('$content') fails the list item" check_reports "$item_list"
 done
