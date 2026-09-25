@@ -103,23 +103,31 @@ else
 fi
 
 # 6. Run by hand, with a terminal as stdin and no payload, restore does not wait for input.
-# `on_a_terminal <out> <command...>` runs the command with a pseudo-terminal as stdin that stays
-# open for five seconds, its output in <out>, and passes when it returns well before that. script(1)
-# comes in a util-linux form and a BSD one (macOS).
+# `on_a_terminal <out> <last line> <command...>` runs the command with a pseudo-terminal as stdin
+# that stays open for five seconds, its output in <out>, and passes when the command's last line is
+# out within three seconds. It does not wait for script(1) itself, which may outlive the command
+# until its own stdin closes. script(1) comes in a util-linux form and a BSD one (macOS).
 on_a_terminal() {
-  local out="$1" start
-  shift
+  local out="$1" last="$2" pid tries=0
+  shift 2
   command -v script >/dev/null 2>&1 || return 1
-  start="$(date +%s)"
   if script -q -c true /dev/null </dev/null >/dev/null 2>&1; then
-    script -q -c "$(printf '%q ' "$@")" /dev/null > "$out" 2>&1 < <(sleep 5)
+    script -q -c "$(printf '%q ' "$@")" /dev/null > "$out" 2>&1 < <(sleep 5) &
   else
-    script -q /dev/null "$@" > "$out" 2>&1 < <(sleep 5)
+    script -q /dev/null "$@" > "$out" 2>&1 < <(sleep 5) &
   fi
-  [ $(($(date +%s) - start)) -lt 3 ]
+  pid=$!
+  while ! grep -qF -- "$last" "$out" 2>/dev/null && [ "$tries" -lt 60 ]; do
+    sleep 0.05
+    tries=$((tries + 1))
+  done
+  kill "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+  grep -qF -- "$last" "$out"
 }
-if (cd "$beside" && on_a_terminal "$lab/tty.out" "$handoff" restore) \
-  && grep -q 'Context was compacted' "$lab/tty.out"; then
+# restore's last line when no session id came with the payload.
+last_line="(no handoff file was saved for this session; rely on GitHub and the repository)"
+if (cd "$beside" && on_a_terminal "$lab/tty.out" "$last_line" "$handoff" restore); then
   pass "restore run by hand on a terminal does not wait for input"
 else
   fail "restore run by hand on a terminal waited for input, or did not run"
