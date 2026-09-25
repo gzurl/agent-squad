@@ -38,7 +38,7 @@ Your session name tells you who you are: `CTO:<project>`, `DEV:<project>` or `QA
 
 ## Environment facts (from the bootstrap)
 - GitHub account arrangement: <shared | separate>.
-- `main` protection: <protected with bypass | unprotected: gates by discipline>.
+- `main` protection: <protected: a PR required, no bypass | unprotected: the pre-push gate refuses pushes to `main`, the other gates hold by discipline>.
 
 ## Git conventions
 - **Commits:** Conventional Commits, in English.
