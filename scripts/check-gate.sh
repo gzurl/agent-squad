@@ -5,7 +5,9 @@
 # alone, and a push that only deletes runs no check at all. The hook finds squad-checks.sh through
 # its own location (#34): the gate is tested as an installed playbook (git-ignored, nested in the
 # main checkout), then at the root of a repository as this one has it, and a hook that cannot find
-# its runner must refuse the push. Everything happens in a temporary directory: this script never
+# its runner must refuse the push. Only a PR changes main (#59): a push to the remote's default
+# branch is refused unless SQUAD_MAIN_EXCEPTION names an approved exception's issue, and branches
+# and tags are not affected. Everything happens in a temporary directory: this script never
 # touches the repository it is run from.
 set -u
 
@@ -14,6 +16,8 @@ root="$(git rev-parse --show-toplevel)" || exit 2
 # point every one of its commands at the repository being pushed (#19).
 # shellcheck disable=SC2046 # the names are split on purpose, one variable each
 unset $(git rev-parse --local-env-vars)
+# Nor may an exception exported in the environment of whoever runs this change the outcome.
+unset SQUAD_MAIN_EXCEPTION
 
 # The lab goes under TMPDIR, through a template: macOS's mktemp -d alone ignores TMPDIR.
 lab="${TMPDIR:-/tmp}"
@@ -54,7 +58,7 @@ echo ".agent-squad/" > "$work/.gitignore"
 git -C "$work" config core.hooksPath "$playbook/.githooks"
 list "$work" true
 commit "$work" "the sandbox" >/dev/null || exit 2
-if ! git -C "$work" push -q origin HEAD:refs/heads/main 2>/dev/null; then
+if ! git -C "$work" push -q origin HEAD:refs/heads/start 2>/dev/null; then
   fail "the first push, with a passing check, was refused: the gate cannot run from a playbook"
   exit 1
 fi
@@ -108,7 +112,7 @@ fi
 # 3. And from the main checkout.
 list "$work" true
 commit "$work" "a passing check in the main checkout" >/dev/null
-if git -C "$work" push -q origin HEAD:refs/heads/main 2>/dev/null; then
+if git -C "$work" push -q origin HEAD:refs/heads/from-main-checkout 2>/dev/null; then
   pass "a passing check lets the push through, from the main checkout"
 else
   fail "a passing check refused the push from the main checkout"
@@ -240,5 +244,86 @@ if git -C "$wt" push -q origin HEAD:refs/heads/wt 2>/dev/null \
 else
   fail "the hook at the root of a repository did not run the checks"
 fi
+
+# 8. Only a PR changes main (#59). The worktree's list is the recording check, so that a refusal
+#    can be told apart from a failing check. `push_to <refspec> [<VAR=value>...]` commits something
+#    new in the worktree and pushes it there, with the variables given in the environment; git's
+#    messages are left in $errors.
+push_to() {
+  local refspec="$1"
+  shift
+  echo "$refspec" >> "$wt/pushed.txt"
+  commit "$wt" "a push to $refspec" >/dev/null
+  errors="$(env "$@" git -C "$wt" push -q origin "$refspec" 2>&1)"
+}
+runs() { wc -l < "$lab/ran.txt" 2>/dev/null | tr -d ' ' || echo 0; }
+
+runs_before="$(runs)"
+if push_to HEAD:refs/heads/main; then
+  fail "a push to main went through"
+elif grep -q 'only a PR' <<<"$errors" && grep -q 'SQUAD_MAIN_EXCEPTION' <<<"$errors" \
+  && [ "$(runs)" = "$runs_before" ]; then
+  pass "a push to main is refused before any check runs, saying how an exception is pushed"
+else
+  fail "a push to main was refused, but not by the rule, or after running the checks: $errors"
+fi
+
+for exception in '#12' 12; do
+  runs_before="$(runs)"
+  if push_to HEAD:refs/heads/main SQUAD_MAIN_EXCEPTION="$exception" \
+    && grep -q 'exception the CEO approved on #12' <<<"$errors" && [ "$(runs)" -gt "$runs_before" ]; then
+    pass "SQUAD_MAIN_EXCEPTION=$exception lets the push to main through, names the issue and runs the checks"
+  else
+    fail "SQUAD_MAIN_EXCEPTION=$exception did not let the push to main through as announced: $errors"
+  fi
+done
+
+for exception in abc '#' 12a 012 0 '#-1' '1 2'; do
+  if push_to HEAD:refs/heads/main SQUAD_MAIN_EXCEPTION="$exception"; then
+    fail "SQUAD_MAIN_EXCEPTION='$exception' let the push to main through"
+  elif grep -q 'is not an issue number' <<<"$errors"; then
+    pass "SQUAD_MAIN_EXCEPTION='$exception' is not an issue number, and the push to main is refused"
+  else
+    fail "SQUAD_MAIN_EXCEPTION='$exception' refused the push for another reason: $errors"
+  fi
+done
+
+if push_to HEAD:refs/heads/a-branch && push_to HEAD:refs/heads/a-branch SQUAD_MAIN_EXCEPTION=abc; then
+  pass "a branch push is not affected, whatever SQUAD_MAIN_EXCEPTION holds"
+else
+  fail "a branch push was refused: $errors"
+fi
+
+git -C "$wt" tag -a v99 -m "a release" HEAD
+runs_before="$(runs)"
+if errors="$(git -C "$wt" push -q origin refs/tags/v99 2>&1)" && [ "$(runs)" -gt "$runs_before" ]; then
+  pass "a tag push is not a push to main: it goes through, after the checks"
+else
+  fail "a tag push was refused, or ran no check: $errors"
+fi
+
+echo "two refs" >> "$wt/pushed.txt"
+commit "$wt" "a push to a branch and to main at once" >/dev/null
+if errors="$(git -C "$wt" push -q origin HEAD:refs/heads/a-branch HEAD:refs/heads/main 2>&1)"; then
+  fail "a push to a branch and to main at once went through"
+else
+  pass "a push to a branch and to main at once is refused"
+fi
+
+# The protected branch is the remote's default one when git knows it, as git records it for origin.
+git -C "$work" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+if push_to HEAD:refs/heads/trunk; then
+  fail "a push to the remote's default branch, trunk, went through"
+elif grep -q 'only a PR' <<<"$errors"; then
+  pass "a push to the remote's default branch, when it is not main, is refused"
+else
+  fail "a push to trunk was refused for another reason: $errors"
+fi
+if push_to HEAD:refs/heads/main; then
+  pass "and main, then an ordinary branch, is not protected"
+else
+  fail "a push to main was refused although the remote's default branch is trunk: $errors"
+fi
+git -C "$work" symbolic-ref --delete refs/remotes/origin/HEAD
 
 exit "$status"
