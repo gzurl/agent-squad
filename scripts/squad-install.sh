@@ -365,7 +365,7 @@ check_installation() {
   #     the gate falls back to main, whatever the remote's default is (#72).
   why=""
   branch="$(known_default_branch)" \
-    || why="origin/HEAD is not set, so the gate protects main; the installer records it once the remote's default branch has a commit"
+    || why="origin/HEAD is not set, so the gate protects main; run the installer again, which records it (in an empty repository, once the default branch has a commit)"
   verdict "git knows the remote's default branch${branch:+ ($branch)}, the one the gate protects" "$why"
 
   [ "$failed_items" -eq 0 ]
