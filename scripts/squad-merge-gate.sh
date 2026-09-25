@@ -5,7 +5,8 @@
 #   p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" &&
 #   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
 # cannot merge over an open thread, a stale verdict, a missing label, an unsettled body-only
-# finding, a red or absent CI, or a head that moved between the check and the merge.
+# finding, a red or absent CI, or a head that moved between the check and the merge. When the PR is
+# behind its base, it also warns, without failing, what the base changed since (#64).
 #
 # Usage: squad-merge-gate.sh <pr-number> [owner/repo]
 set -u
@@ -47,6 +48,33 @@ runs="$(gh api "repos/$repo/commits/$head/check-runs" --jq '"\(.check_runs | len
 total="${runs%% *}"; not_green="${runs##* }"
 [ "$total" != "0" ] || fail "no check runs on $head"
 [ "$not_green" = "0" ] || fail "$not_green of $total check run(s) not successful on $head"
+
+# 6. Not a condition, a warning: a verdict binds to a commit, but what a PR says binds to the
+#    world, and the base may have moved under it since it was approved (#57). When the PR is behind
+#    its base, say by how many commits and which files they touched, marking those the PR also
+#    changes or names in its description; the result of the gate does not change.
+base="$(gh api "repos/$repo/pulls/$pr" --jq .base.ref 2>/dev/null)"
+if [ -n "$base" ] && compare="$(gh api "repos/$repo/compare/$head...$base" \
+  --jq '{ahead_by, files: [.files[].filename]}' 2>/dev/null)"; then
+  behind="$(jq -r .ahead_by <<<"$compare")"
+  if [ "$behind" -gt 0 ]; then
+    pr_files="$(gh api --paginate --slurp "repos/$repo/pulls/$pr/files" 2>/dev/null | jq -r 'add[].filename' 2>/dev/null)"
+    body="$(gh api "repos/$repo/pulls/$pr" --jq '.body // ""' 2>/dev/null)"
+    echo "gate WARNING: PR #$pr is behind $base by $behind commit(s), which changed since the merge base:" >&2
+    jq -r '.files[]' <<<"$compare" | while IFS= read -r file; do
+      if grep -qxF -- "$file" <<<"$pr_files"; then
+        echo "  $file (the PR changes it too)"
+      elif grep -qF -- "$file" <<<"$body" || grep -qF -- "${file##*/}" <<<"$body"; then
+        echo "  $file (the PR's description names it)"
+      else
+        echo "  $file"
+      fi
+    done >&2
+    echo "  Before merging, check the PR's claims against $base; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
+  fi
+else
+  echo "gate note: cannot tell whether PR #$pr is behind its base; compare it by hand before merging" >&2
+fi
 
 echo "gate OK: PR #$pr at $head may be merged" >&2
 echo "$head"
