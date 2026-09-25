@@ -17,10 +17,12 @@ list=".agent-squad-checks"
 unset $(git rev-parse --local-env-vars)
 
 # The project's own checks, one shell command per line. Blank lines and comments are skipped,
-# indented ones included: run as commands, they would pass as checks that check nothing.
+# indented ones included: run as commands, they would pass as checks that check nothing. A list
+# saved with CRLF line endings has its carriage returns dropped: kept, they would end every command.
 commands=()
 if [ -f "$list" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
     case "${line#"${line%%[![:space:]]*}"}" in ''|'#'*) continue ;; esac
     commands+=("$line")
   done < "$list"

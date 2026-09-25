@@ -15,7 +15,9 @@ handoff="$root/scripts/squad-handoff.sh"
 # shellcheck disable=SC2046 # the names are split on purpose, one variable each
 unset $(git rev-parse --local-env-vars)
 
-lab="$(mktemp -d)" || exit 2
+# The lab goes under TMPDIR, through a template: macOS's mktemp -d alone ignores TMPDIR.
+lab="${TMPDIR:-/tmp}"
+lab="$(mktemp -d "${lab%/}/squad-check-handoff.XXXXXX")" || exit 2
 trap 'rm -rf "$lab"' EXIT
 status=0
 

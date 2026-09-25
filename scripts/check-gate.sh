@@ -15,7 +15,9 @@ root="$(git rev-parse --show-toplevel)" || exit 2
 # shellcheck disable=SC2046 # the names are split on purpose, one variable each
 unset $(git rev-parse --local-env-vars)
 
-lab="$(mktemp -d)" || exit 2
+# The lab goes under TMPDIR, through a template: macOS's mktemp -d alone ignores TMPDIR.
+lab="${TMPDIR:-/tmp}"
+lab="$(mktemp -d "${lab%/}/squad-check-gate.XXXXXX")" || exit 2
 trap 'rm -rf "$lab"' EXIT
 status=0
 
@@ -203,6 +205,25 @@ elif grep -q 'lists no command' <<<"$errors"; then
   pass "a list of an indented comment and blanks refuses the push: it lists no command"
 else
   fail "a list of an indented comment and blanks refused the push for another reason: $errors"
+fi
+
+# 6c. A list saved with CRLF line endings runs its commands without the carriage return, and a
+#     CRLF list of only a comment and a blank line lists no command (#46).
+printf '# the sandbox checks\r\ntrue\r\n' > "$wt/.agent-squad-checks"
+commit "$wt" "a CRLF list" >/dev/null
+if errors="$(git -C "$wt" push -q origin HEAD:refs/heads/wt 2>&1)"; then
+  pass "a CRLF list runs its commands and lets the push through"
+else
+  fail "a CRLF list refused the push: $errors"
+fi
+printf '# only a comment\r\n\r\n' > "$wt/.agent-squad-checks"
+commit "$wt" "a CRLF list with no command" >/dev/null
+if errors="$(git -C "$wt" push -q origin HEAD:refs/heads/wt 2>&1)"; then
+  fail "a CRLF list of a comment and a blank line let the push through"
+elif grep -q 'lists no command' <<<"$errors"; then
+  pass "a CRLF list of a comment and a blank line refuses the push: it lists no command"
+else
+  fail "a CRLF list of a comment and a blank line refused the push for another reason: $errors"
 fi
 
 # 7. The same hook at the root of a repository, as this one has it: tracked, next to scripts/, and
