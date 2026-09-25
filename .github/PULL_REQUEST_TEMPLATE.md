@@ -1,8 +1,11 @@
 emoji[ROLE]: Closes #N.
 
 ## What this PR announces
-What changes and why, in the words QA will verify against.
+Numbered claims, each a sentence a reviewer can prove false:
+1. Claim 1
+2. Claim 2
 
 ## How to verify
-- Step or claim 1
-- Step or claim 2
+For each claim, the command or the steps that check it:
+1. Check for claim 1
+2. Check for claim 2
