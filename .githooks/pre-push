@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# pre-push hook of SQUAD.md §4: no commit reaches the remote before the project's checks pass on it.
+# pre-push hook of SQUAD.md §4: no commit reaches the remote before the project's checks pass on it,
+# and none reaches main except through a PR (§2.3) or as an exception the CEO approved on an issue.
 # Enabled once per clone (BOOTSTRAP.md); `--no-verify` skips it, and whoever uses it says so in the
 # PR body. It finds squad-checks.sh through its own location, so the same file works at the root of
 # a repository (.githooks/ next to scripts/) and inside an installed playbook.
@@ -18,9 +19,17 @@ fi
 head="$(git rev-parse HEAD)" || exit 1
 zero=0000000000000000000000000000000000000000
 
+# The branch that only a PR changes: the remote's default one, as git records it for this remote,
+# or main when git does not know it.
+remote="${1:-}"
+protected="$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null)"
+protected="${protected#"$remote"/}"
+[ -n "$protected" ] || protected=main
+
 # The checks test the working tree, so every commit being pushed must be the one checked out.
 pushes_code=0
-while read -r local_ref local_sha _ _; do
+to_protected=0
+while read -r local_ref local_sha remote_ref _; do
   [ "$local_sha" = "$zero" ] && continue # a deletion pushes no code
   commit="$(git rev-parse -q --verify "$local_sha^{commit}")" || continue
   if [ "$commit" != "$head" ]; then
@@ -28,8 +37,26 @@ while read -r local_ref local_sha _ _; do
     exit 1
   fi
   pushes_code=1
+  [ "$remote_ref" = "refs/heads/$protected" ] && to_protected=1
 done
 [ "$pushes_code" -eq 1 ] || exit 0 # only deletions: nothing to check
+
+# Only a PR reviewed by QA changes the protected branch. An exception is approved by the CEO on an
+# issue first, and named here; --no-verify is not the way, since it would skip the checks too.
+if [ "$to_protected" -eq 1 ]; then
+  if [ -z "${SQUAD_MAIN_EXCEPTION:-}" ]; then
+    echo "pre-push: this push updates $protected, which only a PR reviewed by QA may change (SQUAD.md §2.3), so it is refused. For an exception the CEO approved on an issue, push again with SQUAD_MAIN_EXCEPTION=#<issue>" >&2
+    exit 1
+  fi
+  issue="${SQUAD_MAIN_EXCEPTION#\#}"
+  case "$issue" in
+    ''|0*|*[!0-9]*)
+      echo "pre-push: SQUAD_MAIN_EXCEPTION='$SQUAD_MAIN_EXCEPTION' is not an issue number (#123 or 123), so the push to $protected is refused" >&2
+      exit 1
+      ;;
+  esac
+  echo "pre-push: pushing to $protected as the exception the CEO approved on #$issue; the checks still run" >&2
+fi
 
 # Uncommitted changes would be checked in place of what is pushed.
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then

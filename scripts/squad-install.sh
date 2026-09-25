@@ -204,12 +204,13 @@ gate_refusal() {
     git -C "$work" config core.hooksPath "$playbook/.githooks"
     git -C "$work" config user.name "Squad check" && git -C "$work" config user.email check@example.com
     git -C "$work" remote add origin "$lab/remote.git"
-    # `push_with <check>` commits a list with that one check and pushes it; a commit that fails is
-    #  the sandbox's failure, not a verdict on the gate.
+    # `push_with <check>` commits a list with that one check and pushes it, to a branch, since the
+    #  gate refuses a push to main; a commit that fails is the sandbox's failure, not a verdict on
+    #  the gate.
     push_with() {
       printf '%s\n' "$1" > "$work/.agent-squad-checks"
       { git -C "$work" add -A && git -C "$work" commit -qm "$1"; } >/dev/null 2>&1 || exit 3
-      git -C "$work" push -q origin HEAD:refs/heads/main >/dev/null 2>&1
+      git -C "$work" push -q origin HEAD:refs/heads/squad-check >/dev/null 2>&1
     }
     push_with false && exit 4
     push_with true || exit 5
