@@ -29,7 +29,8 @@ reviewed like any other, and projects install tagged versions of it (§7).
 tags and the notices to the projects. The CTOs of other projects open issues
 here freely, with the incident that motivated them; they do not create branches, open PRs, merge or
 tag, unless `CTO:agent-squad` assigns them a PR explicitly in its issue, and `QA:agent-squad`
-reviews such a PR (§7).
+reviews such a PR (§7). This repository's own DEV and QA file their findings here directly,
+as §3 says for any project: §7's route through the CTO is for the agents of other projects.
 
 ## Compact instructions
 When compacting this conversation, always preserve: my role and signature; the issue and PR I am

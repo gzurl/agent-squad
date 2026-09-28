@@ -19,9 +19,11 @@
   its v14 worktree before anything moves; v14 → v16 or later also needs *From v15*; keep
   `evidence/` in `.gitignore` until the evidence has moved; move the worktrees before the
   installer (a move keeps ignored data); clear `__pycache__`, `.mypy_cache` and `.ruff_cache`
-  with the `.venv`; `git worktree remove --force` for a `uv run` virtualenv (#78).
-- README: the install and upgrade commands resolve the latest release tag with `gh` instead of
-  naming one, so a release no longer has to edit them.
+  with the `.venv`; QA repoints its `file://` links to the moved evidence; nobody compacts or
+  branches until the relaunch; *Things to know* states when `git worktree remove` needs
+  `--force` (#78).
+- README: the install and upgrade commands resolve the latest release tag (the highest `vN`) with
+  `gh` instead of naming one, so a release no longer has to edit them.
 
 ## v16 — 2026-09-25
 - **Nothing reaches `main` without a PR reviewed by QA**, documentation and OpenSpec minutes

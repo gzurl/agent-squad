@@ -26,7 +26,7 @@ projects, without touching what the project owns.
 
 ```bash
 tag=$(gh api repos/gzurl/agent-squad/git/matching-refs/tags/v \
-  --jq '[.[].ref | ltrimstr("refs/tags/")] | sort_by(ltrimstr("v") | tonumber) | last')
+  --jq '[.[].ref | ltrimstr("refs/tags/") | select(test("^v[0-9]+$"))] | sort_by(ltrimstr("v") | tonumber) | last')
 tmp=$(mktemp -d)
 gh api "repos/gzurl/agent-squad/tarball/$tag" | tar -xz -C "$tmp" --strip-components=1
 "$tmp/scripts/squad-install.sh" /path/to/project "$tag"
@@ -98,7 +98,7 @@ release tag; to install another one, set `tag` to it instead (`tag=v16`):
 
 ```bash
 tag=$(gh api repos/gzurl/agent-squad/git/matching-refs/tags/v \
-  --jq '[.[].ref | ltrimstr("refs/tags/")] | sort_by(ltrimstr("v") | tonumber) | last')
+  --jq '[.[].ref | ltrimstr("refs/tags/") | select(test("^v[0-9]+$"))] | sort_by(ltrimstr("v") | tonumber) | last')
 tmp=$(mktemp -d)
 gh api "repos/gzurl/agent-squad/tarball/$tag" | tar -xz -C "$tmp" --strip-components=1
 "$tmp/scripts/squad-install.sh" /path/to/project "$tag"
@@ -181,7 +181,7 @@ Run the installed installer with the latest tag (or set `tag` to the one you wan
 
 ```bash
 tag=$(gh api repos/gzurl/agent-squad/git/matching-refs/tags/v \
-  --jq '[.[].ref | ltrimstr("refs/tags/")] | sort_by(ltrimstr("v") | tonumber) | last')
+  --jq '[.[].ref | ltrimstr("refs/tags/") | select(test("^v[0-9]+$"))] | sort_by(ltrimstr("v") | tonumber) | last')
 "/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" /path/to/project "$tag"
 ```
 
@@ -241,13 +241,15 @@ and an announced stop. Going to v16 or later, the same PR also carries
    (`find <worktree> -name __pycache__ -type d -prune -exec rm -rf {} +`, `.mypy_cache`,
    `.ruff_cache`), whose files keep pointing at the old directory. From the main checkout, move
    any evidence QA left in its worktree: `mv .agent-squad/worktrees/qa/evidence/* .agent-squad/evidence/`
-   (create the target first). Then run the installer and `--check`.
+   (create the target first); QA then points the `file://` links of its open reviews and messages
+   at `.agent-squad/evidence/`. Then run the installer and `--check`.
 4. **Open branches:** a branch started on v14 has no `.agent-squad-checks`, so the gate refuses
    it. DEV merges `main` into every open branch before its next push; QA rests on
    `git switch --detach origin/main`.
 5. **Relaunch the three sessions** from the main checkout and tell DEV and QA their new
    directories: a session started on v14 keeps v14's hooks, which call the removed
-   `scripts/squad-handoff.sh` and would save no snapshot and inject no re-orientation.
+   `scripts/squad-handoff.sh` and would save no snapshot and inject no re-orientation. Until the
+   relaunch, nobody compacts a session or creates a branch.
 
 
 ## ⚠️ Things to know
@@ -257,9 +259,9 @@ and an announced stop. Going to v16 or later, the same PR also carries
   bundlers. Test runners and type checkers skip dot-directories by default (pytest and mypy do),
   and are affected only when configured to enter them, for instance pytest with `norecursedirs`
   overridden. Restrict such tools to the project's paths; `rg` and ruff honour `.gitignore`.
-- **`git worktree remove` refuses a worktree with untracked files,** such as the `.venv` that
-  `uv run` creates in an ephemeral worktree. Check with `git -C <worktree> status --ignored` that
-  nothing else is there, then use `--force`.
+- **`git worktree remove` refuses a worktree with modified or untracked files;** ignored files
+  do not stop it. When it refuses, `git -C <worktree> status` shows what is in the way: commit it,
+  or discard it once you are sure it is not needed, and use `--force` only then.
 - **Never run `git clean -d` with `-x` or `-X` in the main checkout:** it deletes the playbook, the
   snapshots, the evidence and `.claude/settings.local.json` (with `-ff`, the worktrees too).
 - **`gh issue list --label` returns nothing, silently,** for a label whose emoji is a sequence of
