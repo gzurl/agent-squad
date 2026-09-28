@@ -81,50 +81,67 @@ acknowledges() {
   [ -n "$1" ] && [ "${#acknowledged}" -ge 7 ] && [ -z "${acknowledged//[0-9a-f]/}" ] \
     && [ "${1#"$acknowledged"}" != "$1" ]
 }
+# `cannot_tell <why>` answers when the gate cannot see whether the base moved under the PR: an
+# acknowledgement of the base after a manual comparison lets it pass; anything else stops it.
+cannot_tell() {
+  if acknowledges "$base_sha"; then
+    echo "gate note: $1, and PR #$pr was checked by hand against $base at ${base_sha:0:7} (SQUAD_BEHIND_CHECKED)" >&2
+  elif [ -n "$base_sha" ]; then
+    echo "gate FAILED: cannot tell whether PR #$pr is behind $base: $1. Compare them by hand: if the PR's claims hold, merge again with SQUAD_BEHIND_CHECKED=$base_sha in front of the command." >&2
+    exit 3
+  else
+    echo "gate FAILED: cannot tell whether PR #$pr is behind its base: its tip could not be read. Run the gate again." >&2
+    exit 3
+  fi
+}
+# `read_pr_files` prints every name the PR's files go by, and fails when GitHub does not list them.
+read_pr_files() {
+  local pages
+  pages="$(gh api --paginate --slurp "repos/$repo/pulls/$pr/files" 2>/dev/null)" \
+    && jq -r 'add[] | .filename, (.previous_filename // empty)' <<<"$pages" 2>/dev/null
+}
 # The base's tip is read first and compared by SHA, so that the count, the files and the SHA an
-# acknowledgement must match all describe one base.
+# acknowledgement must match all describe one base. A renamed file counts under both of its names,
+# on either side: GitHub lists it under the new one, with the old one as previous_filename.
 base="$(gh api "repos/$repo/pulls/$pr" --jq .base.ref 2>/dev/null)"
 base_sha=""
 [ -z "$base" ] || base_sha="$(gh api "repos/$repo/commits/$base" --jq .sha 2>/dev/null)"
 behind=""
 if [ -n "$base_sha" ] && compare="$(gh api "repos/$repo/compare/$head...$base_sha" \
-  --jq '{ahead_by, files: [.files[].filename]}' 2>/dev/null)"; then
+  --jq '{ahead_by, count: (.files | length), files: [.files[] | .filename, (.previous_filename // empty)]}' 2>/dev/null)"; then
   behind="$(jq -r '.ahead_by // empty' <<<"$compare" 2>/dev/null)"
 fi
+# No overlap means something only when both lists are complete: GitHub lists at most 300 files in
+# a comparison, and a PR changes at least one file.
 case "$behind" in
-  ''|*[!0-9]*)
-    if acknowledges "$base_sha"; then
-      echo "gate note: GitHub did not compare PR #$pr with $base, and it was checked by hand against $base at ${base_sha:0:7} (SQUAD_BEHIND_CHECKED)" >&2
-    elif [ -n "$base_sha" ]; then
-      echo "gate FAILED: cannot tell whether PR #$pr is behind $base: GitHub did not compare it with $base at $base_sha. Compare them by hand: if the PR's claims hold, merge again with SQUAD_BEHIND_CHECKED=$base_sha in front of the command." >&2
-      exit 3
-    else
-      echo "gate FAILED: cannot tell whether PR #$pr is behind its base: its tip could not be read. Run the gate again." >&2
-      exit 3
-    fi
-    ;;
+  ''|*[!0-9]*) cannot_tell "GitHub did not compare it with $base at $base_sha" ;;
   0) ;;
   *)
-    pr_files="$(gh api --paginate --slurp "repos/$repo/pulls/$pr/files" 2>/dev/null | jq -r 'add[].filename' 2>/dev/null)"
-    body="$(gh api "repos/$repo/pulls/$pr" --jq '.body // ""' 2>/dev/null)"
-    echo "gate WARNING: PR #$pr is behind $base by $behind commit(s), which changed since the merge base:" >&2
-    jq -r '.files[]' <<<"$compare" | while IFS= read -r file; do
-      if grep -qxF -- "$file" <<<"$pr_files"; then
-        echo "  $file (the PR changes it too)"
-      elif names_it "$file"; then
-        echo "  $file (the PR's description names it)"
-      else
-        echo "  $file"
-      fi
-    done >&2
-    in_common="$(jq -r '.files[]' <<<"$compare" | grep -xF -f <(printf '%s\n' "$pr_files"))"
-    if [ -z "$in_common" ]; then
-      echo "  Before merging, check the PR's claims against $base; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
-    elif acknowledges "$base_sha"; then
-      echo "gate note: PR #$pr changes files that $base changed too, and was checked against $base at ${base_sha:0:7} (SQUAD_BEHIND_CHECKED)" >&2
+    if [ "$(jq -r '.count' <<<"$compare")" -ge 300 ]; then
+      cannot_tell "GitHub listed its maximum of 300 files changed on $base, which may not be all of them"
+    elif ! pr_files="$(read_pr_files)" || [ -z "$pr_files" ]; then
+      cannot_tell "GitHub did not list the files the PR changes"
     else
-      echo "gate FAILED: PR #$pr is behind $base, which changed files the PR changes too. Check the PR's claims against $base at $base_sha: if they hold, merge again with SQUAD_BEHIND_CHECKED=$base_sha in front of the command; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
-      exit 3
+      body="$(gh api "repos/$repo/pulls/$pr" --jq '.body // ""' 2>/dev/null)"
+      echo "gate WARNING: PR #$pr is behind $base by $behind commit(s), which changed since the merge base:" >&2
+      jq -r '.files[]' <<<"$compare" | while IFS= read -r file; do
+        if grep -qxF -- "$file" <<<"$pr_files"; then
+          echo "  $file (the PR changes it too)"
+        elif names_it "$file"; then
+          echo "  $file (the PR's description names it)"
+        else
+          echo "  $file"
+        fi
+      done >&2
+      in_common="$(jq -r '.files[]' <<<"$compare" | grep -xF -f <(printf '%s\n' "$pr_files"))"
+      if [ -z "$in_common" ]; then
+        echo "  Before merging, check the PR's claims against $base; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
+      elif acknowledges "$base_sha"; then
+        echo "gate note: PR #$pr changes files that $base changed too, and was checked against $base at ${base_sha:0:7} (SQUAD_BEHIND_CHECKED)" >&2
+      else
+        echo "gate FAILED: PR #$pr is behind $base, which changed files the PR changes too. Check the PR's claims against $base at $base_sha: if they hold, merge again with SQUAD_BEHIND_CHECKED=$base_sha in front of the command; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
+        exit 3
+      fi
     fi
     ;;
 esac

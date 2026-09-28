@@ -4,8 +4,10 @@
 # and the head alone on stdout. Behind, with a file the PR also changes: the gate stops, exit 3 and
 # nothing on stdout, naming the base's SHA (#80), unless SQUAD_BEHIND_CHECKED holds that SHA, which
 # acknowledges that base and no other. When the gate cannot tell (no comparison, no count, no base
-# SHA), it stops the same way, and an acknowledgement after a manual comparison lets it pass. The
-# comparison is of the base whose SHA was read, even when the base moves between the two calls.
+# SHA, no files of the PR, a comparison cut at GitHub's 300 files), it stops the same way, and an
+# acknowledgement after a manual comparison lets it pass. A rename counts under both of its names,
+# on either side. The comparison is of the base whose SHA was read, even when the base moves
+# between the two calls.
 # GitHub is replaced by a gh that answers every call the gate makes, computing the comparison from a
 # scratch repository; this script touches neither the repository it is run from nor GitHub.
 set -u
@@ -32,8 +34,12 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # GitHub, as far as the gate is concerned. PR 7 of o/r is the branch `pr` of the scratch repository
 # SCRATCH, against `main`, approved on its head, with no open thread, the approved label and green
 # CI. `compare` and the PR's files come from git; GATE_COMPARE=fail makes the comparison fail,
-# GATE_COMPARE=no-count makes it answer without the count of commits, GATE_BASE=unreadable makes
-# the base's tip unreadable, and GATE_BASE=moves lands a commit on main right after its SHA is read.
+# GATE_COMPARE=no-count makes it answer without the count of commits, GATE_COMPARE=300 makes it
+# answer with GitHub's maximum of 300 files, GATE_BASE=unreadable makes the base's tip unreadable,
+# GATE_BASE=moves lands a commit on main right after its SHA is read, GATE_FILES=fail makes the
+# listing of the PR's files fail after printing part of it (a gate that read the output of a failed
+# call would take it for the whole), and GATE_FILES=none makes it empty. Files are reported as
+# GitHub does: a rename under its new name, with the old one as previous_filename.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -53,13 +59,19 @@ while [ $# -gt 0 ]; do
 done
 g() { git -C "$SCRATCH" "$@"; }
 head="$(g rev-parse pr)"
+# `changed <from> <to>` prints the files changed between two commits as GitHub's API lists them.
+changed() {
+  g diff --name-status -M "$1" "$2" | jq -R 'split("\t") | if .[0] | startswith("R")
+    then {filename: .[2], previous_filename: .[1]} else {filename: .[1]} end' | jq -s .
+}
 case "$endpoint" in
   graphql)
     json='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":true}]}}}}}' ;;
   repos/o/r/pulls/7/reviews)
     json="$(jq -n --arg head "$head" '[{commit_id: $head, body: "a review\n\nQA-VERDICT: APPROVED"}]')" ;;
   repos/o/r/pulls/7/files)
-    json="$(g diff --name-only "$(g merge-base pr main)" pr | jq -R . | jq -s 'map({filename: .})')" ;;
+    if [ "${GATE_FILES:-}" = fail ]; then printf '[[{"filename":"page/one.txt"}]]\n'; exit 1; fi
+    if [ "${GATE_FILES:-}" = none ]; then json='[]'; else json="$(changed "$(g merge-base pr main)" pr)"; fi ;;
   repos/o/r/issues/7/comments)
     json='[]' ;;
   repos/o/r/commits/*/check-runs)
@@ -81,8 +93,11 @@ case "$endpoint" in
     spec="${endpoint#repos/o/r/compare/}"
     from="${spec%%...*}"
     to="${spec##*...}"
-    json="$(g diff --name-only "$(g merge-base "$from" "$to")" "$to" | jq -R . \
-      | jq -s --argjson ahead "$(g rev-list --count "$from..$to")" '{ahead_by: $ahead, files: map({filename: .})}')" ;;
+    json="$(changed "$(g merge-base "$from" "$to")" "$to" \
+      | jq --argjson ahead "$(g rev-list --count "$from..$to")" '{ahead_by: $ahead, files: .}')"
+    if [ "${GATE_COMPARE:-}" = 300 ]; then
+      json="$(jq '.files = [range(300) | {filename: "bulk/\(.)"}]' <<<"$json")"
+    fi ;;
   repos/o/r/pulls/7)
     json="$(jq -n --arg head "$head" --arg body "${PR_BODY:-}" \
       '{head: {sha: $head}, base: {ref: "main"}, labels: [{name: "✅ status:approved"}], body: $body}')" ;;
@@ -257,5 +272,65 @@ if ! grep -q 'late.txt' <<<"$err"; then
 else
   fail "a base that moves during the gate: it compared with a newer base than the SHA it read: $err"
 fi
+
+# 10. The PR's files cannot be read, or come back empty: the gate cannot tell whether the base
+#     changed one of them, so it stops, naming the base's SHA, which an acknowledgement lets through.
+for files in fail none; do
+  export GATE_FILES="$files"
+  run_gate
+  stopped "the PR's files: $files"
+  if grep -qF "cannot tell whether PR #7 is behind main" <<<"$err" && grep -qF 'SQUAD_BEHIND_CHECKED=' <<<"$err"; then
+    pass "the PR's files: $files: it says it cannot tell, and names the base's SHA to acknowledge"
+  else
+    fail "the PR's files: $files: the reason is not as expected: $err"
+  fi
+  unset GATE_FILES
+done
+tip="$(git -C "$scratch" rev-parse main)"
+export GATE_FILES=fail SQUAD_BEHIND_CHECKED="$tip"
+run_gate
+unset GATE_FILES SQUAD_BEHIND_CHECKED
+result_unchanged "the PR's files unreadable, checked by hand"
+
+# 11. A comparison that lists GitHub's maximum of 300 files may hide the file in common: it stops.
+export GATE_COMPARE=300
+run_gate
+unset GATE_COMPARE
+stopped "a comparison cut at 300 files"
+if grep -qF "cannot tell whether PR #7 is behind main" <<<"$err"; then
+  pass "a comparison cut at 300 files: it says it cannot tell"
+else
+  fail "a comparison cut at 300 files: the reason is not as expected: $err"
+fi
+
+# 12. Renames count under both names. A fresh repository, whose PR changes tool.sh: main renames
+#     tool.sh; then, in another, the PR renames other.txt while main changes it.
+renames="$lab/renames"
+git init -q -b main "$renames" || exit 2
+for f in tool.sh other.txt; do printf 'first %s\nwith enough lines\nfor git to see a rename\n' "$f" > "$renames/$f"; done
+git -C "$renames" add -A && git -C "$renames" commit -qm "the base" || exit 2
+git -C "$renames" switch -q -c pr && echo "the PR's change" >> "$renames/tool.sh" \
+  && git -C "$renames" mv other.txt other2.txt && git -C "$renames" commit -qam "the PR" || exit 2
+git -C "$renames" switch -q main && git -C "$renames" mv tool.sh tool2.sh \
+  && git -C "$renames" commit -qm "main renames the PR's file" || exit 2
+export SCRATCH="$renames"
+head="$(git -C "$renames" rev-parse pr)"
+run_gate
+stopped "the base renames a file the PR changes"
+if grep -qxF '  tool.sh (the PR changes it too)' <<<"$err"; then
+  pass "the base renames a file the PR changes: the old name is marked as the PR's"
+else
+  fail "the base renames a file the PR changes: tool.sh is not marked: $err"
+fi
+git -C "$renames" reset -q --hard HEAD~1 && echo "main's change" >> "$renames/other.txt" \
+  && git -C "$renames" commit -qam "main changes a file the PR renames" || exit 2
+run_gate
+stopped "the PR renames a file the base changes"
+if grep -qxF '  other.txt (the PR changes it too)' <<<"$err"; then
+  pass "the PR renames a file the base changes: it is marked as the PR's"
+else
+  fail "the PR renames a file the base changes: other.txt is not marked: $err"
+fi
+export SCRATCH="$scratch"
 
 exit "$status"
