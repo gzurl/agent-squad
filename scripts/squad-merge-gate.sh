@@ -114,7 +114,7 @@ fi
 # No overlap means something only when both lists are complete: GitHub lists at most 300 files in
 # a comparison, and a PR changes at least one file.
 case "$behind" in
-  ''|*[!0-9]*) cannot_tell "GitHub did not compare it with $base at $base_sha" ;;
+  ''|*[!0-9]*) cannot_tell "GitHub did not compare the PR with $base" ;;
   0) ;;
   *)
     if [ "$(jq -r '.count' <<<"$compare")" -ge 300 ]; then
