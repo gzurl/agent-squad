@@ -20,6 +20,8 @@
   `evidence/` in `.gitignore` until the evidence has moved; move the worktrees before the
   installer (a move keeps ignored data); clear `__pycache__`, `.mypy_cache` and `.ruff_cache`
   with the `.venv`; `git worktree remove --force` for a `uv run` virtualenv (#78).
+- README: the install and upgrade commands resolve the latest release tag with `gh` instead of
+  naming one, so a release no longer has to edit them.
 
 ## v16 — 2026-09-25
 - **Nothing reaches `main` without a PR reviewed by QA**, documentation and OpenSpec minutes

@@ -25,9 +25,11 @@ projects, without touching what the project owns.
 ### ▶️ Quick start
 
 ```bash
+tag=$(gh api repos/gzurl/agent-squad/git/matching-refs/tags/v \
+  --jq '[.[].ref | ltrimstr("refs/tags/")] | sort_by(ltrimstr("v") | tonumber) | last')
 tmp=$(mktemp -d)
-gh api repos/gzurl/agent-squad/tarball/v17 | tar -xz -C "$tmp" --strip-components=1
-"$tmp/scripts/squad-install.sh" /path/to/project v17
+gh api "repos/gzurl/agent-squad/tarball/$tag" | tar -xz -C "$tmp" --strip-components=1
+"$tmp/scripts/squad-install.sh" /path/to/project "$tag"
 rm -rf "$tmp"
 ```
 
@@ -91,12 +93,15 @@ one-time setup of a project.
 
 ## 🛠️ Install
 
-From anywhere, with the tag to install and the path of the project's main checkout:
+From anywhere, with the path of the project's main checkout. The first line finds the latest
+release tag; to install another one, set `tag` to it instead (`tag=v16`):
 
 ```bash
+tag=$(gh api repos/gzurl/agent-squad/git/matching-refs/tags/v \
+  --jq '[.[].ref | ltrimstr("refs/tags/")] | sort_by(ltrimstr("v") | tonumber) | last')
 tmp=$(mktemp -d)
-gh api repos/gzurl/agent-squad/tarball/v17 | tar -xz -C "$tmp" --strip-components=1
-"$tmp/scripts/squad-install.sh" /path/to/project v17
+gh api "repos/gzurl/agent-squad/tarball/$tag" | tar -xz -C "$tmp" --strip-components=1
+"$tmp/scripts/squad-install.sh" /path/to/project "$tag"
 rm -rf "$tmp"
 ```
 
@@ -172,10 +177,12 @@ Outside it, the installer only touches the files listed after it.
 
 ## ⬆️ Upgrade
 
-Run the installed installer with the new tag:
+Run the installed installer with the latest tag (or set `tag` to the one you want):
 
 ```bash
-"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" /path/to/project v17
+tag=$(gh api repos/gzurl/agent-squad/git/matching-refs/tags/v \
+  --jq '[.[].ref | ltrimstr("refs/tags/")] | sort_by(ltrimstr("v") | tonumber) | last')
+"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" /path/to/project "$tag"
 ```
 
 It replaces `playbook/` only once the new one is complete, rewrites `playbook.manifest`, appends
