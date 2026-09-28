@@ -55,8 +55,8 @@ if [ "$mode" = install ] && [ -z "$source_dir" ]; then
   command -v gh >/dev/null 2>&1 || die "gh is required to download the tag"
 fi
 
-# The project is named by its main checkout, the one directory every worktree shares (D7 of
-# agent-squad #23).
+# The project is named by its main checkout (D7 of agent-squad #23), the one directory every
+# worktree shares.
 project="$(CDPATH='' cd -- "$1" 2>/dev/null && pwd -P)" || die "$1 is not a directory"
 common_dir="$(git -C "$project" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
   || die "$project is not a git checkout (or git is older than 2.31)"
@@ -149,12 +149,14 @@ restore_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" restore; else $miss
 startup_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" startup; else $missing; fi"
 
 # The pre-push shim (D8 of agent-squad #23), written into the common git directory so that every
-# worktree runs it.
+# worktree runs it. --check requires it byte for byte, comments included, and an upgrade runs the
+# installed installer, which writes its own shim: a release that changes this text leaves --check
+# failing until a second install, and says so.
 hooks_dir="$common_dir/hooks"
 shim="$(cat <<'SHIM'
 #!/usr/bin/env bash
-# agent-squad pre-push shim, written by squad-install.sh, which rewrites it on every install. Runs
-# the project's own pre-push (pre-push.local), if any, then the squad's pre-push gate from the main
+# agent-squad pre-push shim, written by squad-install.sh, which rewrites it on every install.
+# Runs the project's own pre-push (pre-push.local), if any, then the squad's gate from the main
 # checkout's .agent-squad/playbook/. When the gate cannot be found, the push is refused.
 set -u
 hooks_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
