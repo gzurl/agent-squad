@@ -22,7 +22,7 @@ When compacting this conversation, always preserve: my role and signature; the i
 working on, with their status labels, the PR's `headRefOid`, its latest verdict and open threads;
 the exact step I am at and what I was about to do next; anything I promised another agent by
 message; decisions taken in this session that are not yet on GitHub. After compaction, re-read
-`AGENTS.md` and `.agent-squad/playbook/SQUAD.md` before acting. (Charter rule: SQUAD.md, section 7.)
+`AGENTS.md` and `.agent-squad/playbook/SQUAD.md` before acting. (Charter rule: SQUAD.md §7.)
 
 ## Status
 The product decisions agreed so far live in [openspec/project.md](openspec/project.md).

@@ -13,8 +13,9 @@ projects, without touching what the project owns.
 - **Clear roles:** the CEO decides what and why; the CTO turns it into issues; DEV writes code and
   tests; QA reviews every PR in two parts, code review and black-box tests.
 - **Gates enforced by scripts, not by memory:** before every push (the project's checks must pass,
-  and nothing is pushed to `main`) and before every merge (an approved verdict bound to the head,
-  no open thread, CI green, and a warning when `main` has moved under the PR).
+  and nothing is pushed to `main`) and before every merge (an approved verdict on the head, no open
+  thread, body-only findings settled, the approved label, CI green, and a stop when the base changed
+  the PR's files).
 - **A clean install:** everything lives in a git-ignored `.agent-squad/`; the installer never
   overwrites a project file, and `--check` proves the installation works.
 - **Sessions that keep their bearings:** every session loads the charter by itself, and a
@@ -61,7 +62,7 @@ the project's main checkout, and tell the CTO to follow `.agent-squad/playbook/B
 | **Who works** | One session per role, named `CTO:<project>`, `DEV:<project>`, `QA:<project>`, launched from the project's main checkout | One account, usually shared by the three agents (`AGENTS.md` says which); signatures and labels tell them apart |
 | **How they talk** | Messages between sessions | Issues, PRs, reviews and comments: the durable record |
 | **What they follow** | `AGENTS.md` imports the charter into every session with an `@` import | The charter's rules for issues, labels, PRs and merges |
-| **What keeps them on track** | Hooks: a snapshot before each compaction, re-injected after it | The merge gate reads verdicts, threads, labels and CI through `gh` |
+| **What keeps them on track** | Hooks: a snapshot before each compaction, re-injected after it | The merge gate checks through `gh`: an approved verdict on the head, no open thread, body-only findings settled, the approved label, CI green, and a stop when the base changed the PR's files |
 
 ### How the team works
 
@@ -72,7 +73,7 @@ flowchart LR
   DEV -- "branch, code, tests" --> PUSH["pre-push gate:<br/>checks pass, nothing to main"]
   PUSH --> PR["PR that closes its issue"]
   PR -- "ping with the head" --> QA
-  QA -- "code review + black-box, one review,<br/>verdict bound to the commit" --> MERGE["merge gate:<br/>verdict on the head, no open thread,<br/>label, CI green"]
+  QA -- "code review + black-box, one review,<br/>verdict bound to the commit" --> MERGE["merge gate:<br/>verdict on the head, no open thread,<br/>findings settled, label, CI green,<br/>stops if the base changed its files"]
   MERGE -- "squash merge by the author" --> MAIN["main"]
 ```
 
@@ -117,8 +118,10 @@ tracked files that `git status` shows as not yet committed, whichever run wrote 
 - **The tracked files the installer changed** (`.gitignore`, and the GitHub templates when it
   created them), to commit.
 
-All of it reaches `main` through one PR. The main checkout stays on `main`, so write it in a
-worktree, `git -C /path/to/project worktree add .agent-squad/worktrees/cto-squad -b chore/squad origin/main`,
+All of it reaches `main` through one PR (in an empty repository, the bootstrap commit of
+`BOOTSTRAP.md` row 5 comes first, and this PR follows it). The main checkout stays on `main`, so
+write it in a worktree,
+`git -C /path/to/project worktree add .agent-squad/worktrees/cto-squad -b chore/squad origin/main`,
 copy there the tracked files the installer changed, and open the PR from it; remove the worktree
 after the merge. Then clear the installer's changes in the main checkout before pulling, or
 `git pull --ff-only` refuses to overwrite them: `git checkout -- <file>` for each tracked file it
@@ -214,9 +217,6 @@ A project on v14 or earlier, which still carries the method as tracked copies, f
 - **`gh issue list --label` returns nothing, silently,** for a label whose emoji is a sequence of
   several characters, as the owner labels and `needs-ceo` are. Filter on GitHub's web page, or with
   `gh issue list --json labels` and `jq`.
-- **Tooling traps:** `gh api --slurp` cannot be combined with `--jq` (pipe into `jq` instead);
-  `addPullRequestReviewThreadReply` takes a `pullRequestReviewThreadId`; `jq` takes one variable
-  name per `--arg`; zsh does not word-split unquoted variables, so multi-file loops belong in bash.
 
 
 ## 📦 This repository
@@ -227,12 +227,14 @@ A project on v14 or earlier, which still carries the method as tracked copies, f
 | `scripts/squad-*.sh`, `.githooks/pre-push` | Installer, compaction hooks, merge gate, checks runner, gate | Yes |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates and skeletons the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |
-| `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, Claude Code settings, checks, CI and tests | No: `.gitattributes` keeps them out of the tag's tarball, so a project's agent never loads this repository's `CLAUDE.md` |
+| `.gitattributes` | What the tag's tarball leaves out | It ships, and is not used there |
+| `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, checks, CI and tests | No: `.gitattributes` keeps them out of the tag's tarball, so a project's agent never loads this repository's `CLAUDE.md` |
 
 
 ## 🔄 How it evolves
 
-Upstream first (`SQUAD.md`, section 7): any agent who finds a flaw or an improvement in the method
-opens an issue **here**, with the incident that motivated it; this repository's CTO owns the PRs,
-reviewed with the same protocol. Versions are tags `vN` matching the `Version:` line of
-`SQUAD.md`; `CHANGELOG.md` says what each one changes. A project upgrades when its CTO decides.
+Upstream first (`SQUAD.md` §7): an agent who finds a flaw or an improvement in the method tells its
+CTO, who opens an issue **here**, crediting who found it, with the incident that motivated it; this
+repository's CTO owns the PRs, reviewed with the same protocol. Versions are tags `vN` matching the
+`Version:` line of `SQUAD.md`; `CHANGELOG.md` says what each one changes. A project upgrades when
+its CTO decides.

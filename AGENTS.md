@@ -14,15 +14,14 @@ tell the CTO that the squad is not installed.
 
 @.agent-squad/playbook/SQUAD.md
 
-Here the charter the agents work by is the installed release; `SQUAD.md` at the root is the next
-version, being written, and binds nobody until it is tagged and installed.
-
 ## Language
 The CEO's language is Spanish: messages between agents, and with the CEO, are written in it.
 
 ## This is the upstream
 This repository is where the method is maintained: its files are **edited here, through PRs**
-reviewed like any other, and projects install tagged versions of it (§7).
+reviewed like any other, and projects install tagged versions of it (§7). The charter this
+repository's agents work by is the installed release, imported above; `SQUAD.md` at the root is
+the next version, being written, and binds nobody until it is tagged and installed.
 
 **`CTO:agent-squad` owns this repository:** the backlog, the design, the PRs (its own or
 `DEV:agent-squad`'s, each merged by its author as §4.9 says), the review with `QA:agent-squad`, the
@@ -37,7 +36,7 @@ When compacting this conversation, always preserve: my role and signature; the i
 working on, with their status labels, the PR's `headRefOid`, its latest verdict and open threads;
 the exact step I am at and what I was about to do next; anything I promised another agent by
 message; decisions taken in this session that are not yet on GitHub. After compaction, re-read
-`AGENTS.md` and `.agent-squad/playbook/SQUAD.md` before acting. (Charter rule: SQUAD.md, section 7.)
+`AGENTS.md` and `.agent-squad/playbook/SQUAD.md` before acting. (Charter rule: SQUAD.md §7.)
 
 ## Status
 There is no `openspec/` here: decisions live in the issues and, once released, in
@@ -78,11 +77,15 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   installed release too; what its agents run from `main` is only its own checks list, CI and
   tests, which each intermediate PR keeps working, recording in this file anything that changes
   for the agents.
+- The text of the pre-push shim does not change without saying so: an upgrade writes the shim with
+  the installer already installed, the old one, and `--check` compares it byte for byte, so a new
+  shim text makes `--check` fail until a second install. A release that changes it says, in the
+  README's *Upgrade* and the CHANGELOG, to run the installer twice.
 - A tag's tarball, which is what projects install, leaves out what [.gitattributes](.gitattributes)
   marks `export-ignore`: this repository's own conventions, CI, checks list and tests. A new file
   that only this repository uses goes there too.
 - After the merge, whoever merged tags the squash commit from a checkout of it, because the
-  `pre-push` hook refuses to push a tag whose commit is not the one checked out: in the main
+  pre-push gate refuses to push a tag whose commit is not the one checked out: in the main
   checkout `git pull --ff-only`, in a worktree `git fetch && git switch --detach origin/main`; then
   `git tag -a vN -m "Charter vN: <summary>" HEAD && git push origin vN`. Then they notify the
   agents of this repository and the CTOs of the projects (`ListAgents`), who decide when their
@@ -98,6 +101,12 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   The scripts at the root are the next version's; `scripts/check-*.sh` test them.
 - From the main checkout, `.agent-squad/playbook/scripts/squad-install.sh --check .` verifies this
   installation; after a release, upgrade it like a project does (README, *Upgrade*).
+
+## Tooling traps
+Met while writing this repository's scripts: `gh api --slurp` cannot be combined with `--jq` (pipe
+into `jq` instead); `addPullRequestReviewThreadReply` takes a `pullRequestReviewThreadId`; `jq`
+takes one variable name per `--arg`; zsh does not word-split unquoted variables, so multi-file
+loops belong in bash.
 
 ## Local services and ports
 None.

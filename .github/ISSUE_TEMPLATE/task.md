@@ -5,7 +5,7 @@ title: ""
 labels: ""
 ---
 
-emoji[ROLE]: Context: link to the spec, decision or review finding this comes from.
+<signature, SQUAD.md §6>: Context: link to the spec, decision or review finding this comes from.
 
 ## Scope
 What must be done, concretely.
