@@ -2,7 +2,8 @@
 
 ## v18 — 2026-09-28
 - §4.9: **the merge gate stops the chained merge** when the PR is behind its base and the base
-  changed a file the PR also changes, printing what the base changed; after checking the PR's
+  changed a file the PR also changes, or when it cannot tell whether the base moved (exit 3),
+  printing what it knows; after checking the PR's
   claims against that base, `SQUAD_BEHIND_CHECKED=<base sha>` lets it pass for that base only. A
   PR behind with no file in common keeps the warning. The v17 warning was read only after the merge
   it was chained to (#80).
