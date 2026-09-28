@@ -15,7 +15,9 @@ tell the CTO that the squad is not installed.
 @.agent-squad/playbook/SQUAD.md
 
 ## Language
-The CEO's language is <language>: messages between agents, and with the CEO, are written in it.
+The CEO's language is <language>: everything addressed to the CEO is written in it, whoever
+writes it. Messages between agents are written in English, like everything in the repository and
+on GitHub.
 
 ## Compact instructions
 When compacting this conversation, always preserve: my role and signature; the issue and PR I am

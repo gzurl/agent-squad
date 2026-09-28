@@ -12,7 +12,8 @@ agent-squad needs both.
 ### ✅ Features
 
 - **A team with clear roles:**
-  - 👨🏻‍💼 **CEO, you.** You decide what to build and why, and you only need to talk to the CTO.
+  - 👨🏻‍💼 **CEO, you.** You decide what to build and why, and you only need to talk to the CTO. The
+    agents write to you in your language, and to each other in English.
   - 👷🏼‍♂️ **CTO.** Your partner on the product. It talks through with you what to build, helps you
     shape the vision and choose the stack, and plans the work as GitHub issues. It settles any
     disagreement between DEV and QA, and brings you the decisions that are yours, as options with a
@@ -56,8 +57,9 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
    claude -n "QA:<project-name>"
    ```
 
-3. **Tell the CTO:** *"Follow `.agent-squad/playbook/BOOTSTRAP.md`."* It finishes setting up the
-   repository, asks you what it needs to know, and then asks what you want to build.
+3. **Tell the CTO:** *"Follow `.agent-squad/playbook/BOOTSTRAP.md`."* It asks which language to
+   use with you, finishes setting up the repository, asks you what it needs to know, and then asks
+   what you want to build.
 
 
 ## 📔 Contents
