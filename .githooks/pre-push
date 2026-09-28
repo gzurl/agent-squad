@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# pre-push hook of SQUAD.md §4: no commit reaches the remote before the project's checks pass on it,
-# and none reaches main except through a PR (§2.3) or as an exception the CEO approved on an issue.
-# Enabled once per clone (BOOTSTRAP.md); `--no-verify` skips it, and whoever uses it says so in the
-# PR body. It finds squad-checks.sh through its own location, so the same file works at the root of
-# a repository (.githooks/ next to scripts/) and inside an installed playbook.
+# Pre-push gate of SQUAD.md §4.2: no commit reaches the remote before the project's checks pass on
+# it, and none reaches main except through a PR (§2.3) or as an exception the CEO approved on an
+# issue. Run by the pre-push shim that squad-install.sh writes into the common git directory
+# (hooks/pre-push); `--no-verify` skips it, and whoever uses it says so in the PR body. It finds
+# squad-checks.sh through its own location, so the same file works at the root of a repository
+# (.githooks/ next to scripts/) and inside an installed playbook.
 set -u
 
-# The runner of the checks sits in ../scripts/ from this hook, as an executable file. A gate that
+# The runner of the checks sits in ../scripts/ from this script, as an executable file. A gate that
 # cannot find it cannot run, and a gate that cannot run refuses the push instead of letting it
 # through, with its own message even when a directory stands in the runner's place.
 hook_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
@@ -51,7 +52,7 @@ if [ "$to_protected" -eq 1 ]; then
   issue="${SQUAD_MAIN_EXCEPTION#\#}"
   case "$issue" in
     ''|0*|*[!0-9]*)
-      echo "pre-push: SQUAD_MAIN_EXCEPTION='$SQUAD_MAIN_EXCEPTION' is not an issue number (#123 or 123), so the push to $protected is refused" >&2
+      echo "pre-push: SQUAD_MAIN_EXCEPTION='$SQUAD_MAIN_EXCEPTION' is not an issue number (digits, with or without a leading #), so the push to $protected is refused" >&2
       exit 1
       ;;
   esac

@@ -19,7 +19,7 @@ jobs:
         run: scripts/check-links.sh
       - name: Charter version matches the changelog
         run: scripts/check-version.sh
-      - name: The push gate behaves as the charter says
+      - name: The pre-push gate behaves as the charter says
         run: scripts/check-gate.sh
       - name: The merge gate stops when a PR is behind main on a file it changes
         run: scripts/check-merge-gate.sh

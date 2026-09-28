@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Check that scripts/squad-install.sh behaves as agent-squad #35 and #36 say, in throw-away
-# repositories:
-# a fresh install from a tag's tarball, a second run that changes nothing, a project's own
-# settings, pre-push and pre-commit kept working, the gate refusing a failing check through the
-# shim and refusing every push when the playbook is missing, the hook commands warning when it is
-# missing, an upgrade that replaces the playbook and nothing else, a failed download that leaves it
-# as it was, the steps that need a decision, and --check passing on a good installation and failing
-# on the right line for each item broken on purpose. GitHub is replaced by a `gh` that serves a tarball
-# built here with `git archive`, as GitHub builds it; this script never touches the repository it
-# is run from.
+# repositories: a fresh install from a tag's tarball, a second run that changes nothing, a project's
+# own settings, pre-push and pre-commit kept working, the pre-push gate refusing a failing check
+# through the shim and refusing every push when the playbook is missing, the hook commands warning
+# when it is missing, an upgrade that replaces the playbook and nothing else, a failed download that
+# leaves it as it was, the steps that need a decision, and --check passing on a good installation
+# and failing on the right line for each item broken on purpose, the remote's default branch
+# recorded and protected whatever its name (agent-squad #72), and an interrupted --check that leaves
+# no sandbox behind (agent-squad #71). GitHub is replaced by a `gh` that serves a tarball built here
+# with `git archive`, as GitHub builds it; this script never touches the repository it is run from.
 # shellcheck disable=SC2016,SC2317,SC2329 # jq programs use jq variables; the predicates run through check
 set -u
 
