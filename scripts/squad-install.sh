@@ -149,9 +149,9 @@ restore_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" restore; else $miss
 startup_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" startup; else $missing; fi"
 
 # The pre-push shim (D8 of agent-squad #23), written into the common git directory so that every
-# worktree runs it. --check requires it byte for byte, comments included, and an upgrade runs the
-# installed installer, which writes its own shim: a release that changes this text leaves --check
-# failing until a second install, and says so.
+# worktree runs it. --check requires it byte for byte, comments included, as this installer writes
+# it. install.sh runs the chosen tag's own installer, which writes that tag's text in the same run;
+# an older installer run with a newer tag writes its own, and --check fails until the newer runs.
 hooks_dir="$common_dir/hooks"
 shim="$(cat <<'SHIM'
 #!/usr/bin/env bash

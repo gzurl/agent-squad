@@ -77,10 +77,16 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   installed release too; what its agents run from `main` is only its own checks list, CI and
   tests, which each intermediate PR keeps working, recording in this file anything that changes
   for the agents.
-- The text of the pre-push shim does not change without saying so: an upgrade writes the shim with
-  the installer already installed, the old one, and `--check` compares it byte for byte, so a new
-  shim text makes `--check` fail until a second install. A release that changes it says, in the
-  README's *Upgrade* and the CHANGELOG, to run the installer twice.
+- `install.sh`, at the root, is the one file projects run from `main` instead of from a tag: the
+  one-line install fetches it from `main`, and it runs the chosen tag's own
+  `scripts/squad-install.sh`. [.gitattributes](.gitattributes) keeps it out of the tarball, so a PR
+  that changes it bumps no version and takes effect when merged. Such a PR keeps every tag that
+  `install.sh` accepts installable (v15 and later, whose installers all take `<project> <tag>`),
+  and `scripts/check-one-line-install.sh` tests it with a stub `gh`.
+- The text of the pre-push shim changes only on purpose: `--check` compares it byte for byte with
+  what the installed installer writes. `install.sh` runs the new tag's installer, which writes the
+  new text in the same run; an older installer run with a newer tag leaves `--check` failing until
+  the newer one runs, and the CHANGELOG entry of a release that changes the text says so.
 - A tag's tarball, which is what projects install, leaves out what [.gitattributes](.gitattributes)
   marks `export-ignore`: this repository's own conventions, CI, checks list and tests. A new file
   that only this repository uses goes there too.

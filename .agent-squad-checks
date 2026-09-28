@@ -1,10 +1,11 @@
 # agent-squad's own checks: the commands its CI runs, one per line (scripts/squad-checks.sh).
-for f in scripts/*.sh .githooks/*; do bash -n "$f" || exit 1; done
-uvx --from shellcheck-py shellcheck scripts/*.sh .githooks/*
+for f in scripts/*.sh .githooks/* install.sh; do bash -n "$f" || exit 1; done
+uvx --from shellcheck-py shellcheck scripts/*.sh .githooks/* install.sh
 scripts/check-links.sh
 scripts/check-version.sh
 scripts/check-gate.sh
 scripts/check-merge-gate.sh
 scripts/check-handoff.sh
 scripts/check-install.sh
+scripts/check-one-line-install.sh
 scripts/check-gh-filters.sh

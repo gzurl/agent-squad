@@ -12,9 +12,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Shell syntax and shellcheck
         run: |
-          for f in scripts/*.sh .githooks/*; do bash -n "$f"; done
+          for f in scripts/*.sh .githooks/* install.sh; do bash -n "$f"; done
           sudo apt-get install -y -qq shellcheck >/dev/null
-          shellcheck scripts/*.sh .githooks/*
+          shellcheck scripts/*.sh .githooks/* install.sh
       - name: Relative Markdown links resolve
         run: scripts/check-links.sh
       - name: Charter version matches the changelog
@@ -27,5 +27,7 @@ jobs:
         run: scripts/check-handoff.sh
       - name: The installer installs, upgrades and refuses as it says
         run: scripts/check-install.sh
+      - name: install.sh installs the chosen tag with that tag's own installer
+        run: scripts/check-one-line-install.sh
       - name: No squad script filters gh by label
         run: scripts/check-gh-filters.sh
