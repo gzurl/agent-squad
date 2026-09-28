@@ -196,7 +196,7 @@ else, and an exception approved by the CEO on an issue is pushed with
 
 A project on v14 or earlier, which still carries the method as tracked copies, follows
 *Upgrade → From v14* in the README of tag `v17`
-(`gh api repos/gzurl/agent-squad/contents/README.md?ref=v17 --jq .content | base64 -d`).
+(`gh api 'repos/gzurl/agent-squad/contents/README.md?ref=v17' --jq .content | base64 -d`).
 
 
 ## ⚠️ Things to know
