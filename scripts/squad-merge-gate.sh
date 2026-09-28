@@ -6,9 +6,12 @@
 #   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
 # cannot merge over an open thread, a stale verdict, a missing label, an unsettled body-only
 # finding, a red or absent CI, or a head that moved between the check and the merge. When the PR is
-# behind its base, it also warns, without failing, what the base changed since (#64).
+# behind its base, it says what the base changed since (#64), and stops when the base changed a
+# file the PR changes too, until the author acknowledges that base with SQUAD_BEHIND_CHECKED (#80).
 #
-# Usage: squad-merge-gate.sh <pr-number> [owner/repo]
+# Usage: [SQUAD_BEHIND_CHECKED=<base sha>] squad-merge-gate.sh <pr-number> [owner/repo]
+# Exit: 0 may be merged; 1 a condition failed; 2 bad usage; 3 behind a base that changed a file the
+#       PR changes too, and not acknowledged for that base.
 set -u
 pr="${1:-}"
 case "$pr" in ""|*[!0-9]*) echo "gate: usage: $0 <pr-number> [owner/repo]" >&2; exit 2 ;; esac
@@ -49,10 +52,15 @@ total="${runs%% *}"; not_green="${runs##* }"
 [ "$total" != "0" ] || fail "no check runs on $head"
 [ "$not_green" = "0" ] || fail "$not_green of $total check run(s) not successful on $head"
 
-# 6. Not a condition, a warning: a verdict binds to a commit, but what a PR says binds to the
-#    world, and the base may have moved under it since it was approved (#57). When the PR is behind
-#    its base, say by how many commits and which files they touched, marking those the PR also
-#    changes or names in its description; the result of the gate does not change.
+# 6. A verdict binds to a commit, but what a PR says binds to the world, and the base may have
+#    moved under it since it was approved (#57). When the PR is behind its base, say by how many
+#    commits and which files they touched, marking those the PR also changes or names in its
+#    description. If none is one the PR changes, that is a warning. If one is, the gate stops with
+#    exit 3, since a warning inside §4.9's chained command is read only after the merge (#80): the
+#    author checks the PR's claims against that base and acknowledges it with
+#    SQUAD_BEHIND_CHECKED=<its SHA>, which counts for that base and no other. When the gate cannot
+#    tell whether the base moved, it stops the same way: a gate that passes when it cannot see is
+#    the failure #80 is about.
 # `names_it <file>` passes when the PR's description names the file: its path or its base name in
 # backticks, or as a whole word when the name is distinctive enough to be one (it has a dot or a
 # slash). A bare word such as `a` is not taken for a file.
@@ -66,15 +74,35 @@ names_it() {
   done
   return 1
 }
+# `acknowledges <sha>` passes when SQUAD_BEHIND_CHECKED names that commit: its full SHA, or a
+# prefix of 7 or more of its lowercase hex digits.
+acknowledges() {
+  local acknowledged="${SQUAD_BEHIND_CHECKED:-}"
+  [ -n "$1" ] && [ "${#acknowledged}" -ge 7 ] && [ -z "${acknowledged//[0-9a-f]/}" ] \
+    && [ "${1#"$acknowledged"}" != "$1" ]
+}
+# The base's tip is read first and compared by SHA, so that the count, the files and the SHA an
+# acknowledgement must match all describe one base.
 base="$(gh api "repos/$repo/pulls/$pr" --jq .base.ref 2>/dev/null)"
+base_sha=""
+[ -z "$base" ] || base_sha="$(gh api "repos/$repo/commits/$base" --jq .sha 2>/dev/null)"
 behind=""
-if [ -n "$base" ] && compare="$(gh api "repos/$repo/compare/$head...$base" \
+if [ -n "$base_sha" ] && compare="$(gh api "repos/$repo/compare/$head...$base_sha" \
   --jq '{ahead_by, files: [.files[].filename]}' 2>/dev/null)"; then
   behind="$(jq -r '.ahead_by // empty' <<<"$compare" 2>/dev/null)"
 fi
 case "$behind" in
   ''|*[!0-9]*)
-    echo "gate note: cannot tell whether PR #$pr is behind its base; compare it by hand before merging" >&2 ;;
+    if acknowledges "$base_sha"; then
+      echo "gate note: GitHub did not compare PR #$pr with $base, and it was checked by hand against $base at ${base_sha:0:7} (SQUAD_BEHIND_CHECKED)" >&2
+    elif [ -n "$base_sha" ]; then
+      echo "gate FAILED: cannot tell whether PR #$pr is behind $base: GitHub did not compare it with $base at $base_sha. Compare them by hand: if the PR's claims hold, merge again with SQUAD_BEHIND_CHECKED=$base_sha in front of the command." >&2
+      exit 3
+    else
+      echo "gate FAILED: cannot tell whether PR #$pr is behind its base: its tip could not be read. Run the gate again." >&2
+      exit 3
+    fi
+    ;;
   0) ;;
   *)
     pr_files="$(gh api --paginate --slurp "repos/$repo/pulls/$pr/files" 2>/dev/null | jq -r 'add[].filename' 2>/dev/null)"
@@ -89,7 +117,15 @@ case "$behind" in
         echo "  $file"
       fi
     done >&2
-    echo "  Before merging, check the PR's claims against $base; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
+    in_common="$(jq -r '.files[]' <<<"$compare" | grep -xF -f <(printf '%s\n' "$pr_files"))"
+    if [ -z "$in_common" ]; then
+      echo "  Before merging, check the PR's claims against $base; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
+    elif acknowledges "$base_sha"; then
+      echo "gate note: PR #$pr changes files that $base changed too, and was checked against $base at ${base_sha:0:7} (SQUAD_BEHIND_CHECKED)" >&2
+    else
+      echo "gate FAILED: PR #$pr is behind $base, which changed files the PR changes too. Check the PR's claims against $base at $base_sha: if they hold, merge again with SQUAD_BEHIND_CHECKED=$base_sha in front of the command; if one no longer holds, merge $base in and fix it, which takes a new verdict." >&2
+      exit 3
+    fi
     ;;
 esac
 
