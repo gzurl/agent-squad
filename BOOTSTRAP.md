@@ -15,7 +15,7 @@ Two situations are different throughout:
 
 | # | Artifact | Check | Empty repository | Repository with history |
 |---|---|---|---|---|
-| 0 | The squad, installed at the chosen tag | `"$p/scripts/squad-install.sh" --check .` passes, where `p` is `.agent-squad/playbook` of the main checkout, except its items for `.agent-squad-checks` and the `AGENTS.md` import, which rows 9b and 10 complete, and, on an empty repository, the worktrees and the default branch, which rows 5 and 13 complete | Run the installer as the `agent-squad` README says (*Install*) | Same; it never overwrites a project file: resolve with the CEO what it reports instead (for instance a `core.hooksPath` already set) |
+| 0 | The squad, installed at the chosen tag | `"$p/scripts/squad-install.sh" --check .` passes, where `p` is `.agent-squad/playbook` of the main checkout, except its items for `.agent-squad-checks` and the `AGENTS.md` import, which rows 9b and 10 complete, and, on an empty repository, the worktrees and the default branch, which rows 5 and 13 complete | Run the installer as the `agent-squad` README says (*Install*); what it changes reaches `main` as *The installer's files* below says | Same; it never overwrites a project file: resolve with the CEO what it reports instead (for instance a `core.hooksPath` already set) |
 | 1 | Three sessions, `CTO:<project>`, `DEV:<project>`, `QA:<project>`, launched from `<repo>/` | `ListAgents` shows DEV and QA; each confirms it started from the main checkout | Ask the CEO to launch or relaunch the missing ones from `<repo>/` | Same |
 | 2 | `gh` authenticated with `repo` and `workflow` scopes | `gh auth status` lists both scopes | Ask the CEO to run `gh auth refresh -h github.com -s workflow` | Same |
 | 3 | Toolchains for the stack | The stack's interpreter, package manager and linters run | Ask the CEO to install what is missing | Same |
@@ -33,6 +33,9 @@ Two situations are different throughout:
 | 12 | `openspec/` layout | `vision.md`, `project.md`, `research/` exist | Create; ask the CEO for the vision | Ask the CEO whether OpenSpec applies to this project; if it does, create |
 | 13 | Worktrees | `git worktree list` shows `.agent-squad/worktrees/dev` and `.agent-squad/worktrees/qa`, both detached at the remote's default branch (`origin/HEAD`) | The installer creates them once that branch has a commit: on an empty repository, run it again after row 5 | Same |
 | 14 | Team ready | `--check` passes, every item; DEV and QA acknowledged the charter and their directories | Ping both with their role, directory and first task | Same |
+
+## The installer's files
+What the installer lists under *By hand* (rows 9b and 10) and the tracked files it changed (`.gitignore`, and the GitHub templates when it created them) reach `main` through one PR, like any change; in an empty repository the bootstrap commit of row 5 comes first. The main checkout stays on `main`, so write the PR in a worktree, `git worktree add .agent-squad/worktrees/cto-squad -b chore/squad origin/main`, copy there the tracked files the installer changed, and open the PR from it; remove the worktree after the merge. Before pulling in the main checkout, clear the installer's changes there, or `git pull --ff-only` refuses to overwrite them: `git checkout -- <file>` for each tracked file it modified, and delete each file it created.
 
 ## Compact instructions template for `AGENTS.md`
 ```
