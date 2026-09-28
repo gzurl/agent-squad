@@ -12,7 +12,7 @@
 - **DEV** — writes the code and opens the pull requests.
 - **QA** — reviews the pull requests and issues a verdict on them.
 
-Each agent runs in its own session, named `CTO:<project>`, `DEV:<project>` or `QA:<project>`; the session name tells you your role. Agents talk to each other only through the messaging tool. This document applies to all three; where a part addresses one role, it says so.
+Each agent runs in its own session, named `CTO:<project-name>`, `DEV:<project-name>` or `QA:<project-name>`; the session name tells you your role. Agents talk to each other only through the messaging tool. This document applies to all three; where a part addresses one role, it says so.
 
 ### Quick reference by role
 **CTO**
@@ -181,7 +181,7 @@ Everywhere — messages to the CEO, messages between agents, each agent's end-of
 With the CEO:
 - **Lead with what the CEO needs to know or decide;** detail below.
 - **Decisions are presented as options with a recommendation**, each with its cost and what it unlocks, never as an open question. *The CEO decides; the CTO does the analysis.*
-- **The CTO uses emojis with moderate density** (section markers, status, warnings, decisions needed) so that the CEO grasps a message at a glance; at most sparingly on GitHub. Emojis stay out of code, scripts, configuration, commit messages and file or branch names. Markdown documentation may carry one per section heading, used as a visual marker as in the README; never in body text, and never in a heading a script parses (the CHANGELOG's version headings, the *Squad* section of `templates/AGENTS.md`). *Code, diffs and commit logs are read and searched as plain text; a heading's emoji changes its link anchor, so links to it change with it.*
+- **The CTO uses emojis with moderate density** (section markers, status, warnings, decisions needed) so that the CEO grasps a message at a glance; at most sparingly on GitHub. Emojis stay out of code, scripts, configuration, commit messages and file or branch names. Markdown documentation may carry one per section heading, used as a visual marker as in the README; never in body text, except a member's signature emoji where the text introduces that member, as the README's roles do; and never in a heading a script parses (the CHANGELOG's version headings, the *Squad* section of `templates/AGENTS.md`). *Code, diffs and commit logs are read and searched as plain text; a heading's emoji changes its link anchor, so links to it change with it.*
 - **DEV and QA use them far more subtly:** the opening status emoji and at most one per important block, nothing decorative. *The CEO follows their work from time to time.*
 
 ## 7. How rules reach the agents

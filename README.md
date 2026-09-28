@@ -1,23 +1,28 @@
 # agent-squad
 
-**A software team of Claude Code agents that works the way a good team does.** A CTO plans the
-work, a developer writes the code, and a QA reviews every change. You are the CEO: you decide what
-gets built, and the agents come to you when a decision is yours.
+**You, the human, are the CEO of a small software team of Claude Code agents.** You decide what
+gets built. A CTO turns your ideas into a plan, a developer writes the code, and a QA reviews every
+change. The team works the way a good team does, and comes to you when a decision is yours.
 
-Put several Claude Code sessions on one project and they soon get in each other's way. They edit
-the same files, forget what they agreed once their context is compacted, merge work nobody
-reviewed, and push straight to `main`. agent-squad gives each session a role, a place of its own
-to work and a workflow on GitHub, and it enforces with scripts the rules that good intentions
-alone do not keep.
-
-It is built for **Claude Code** and **GitHub**, and needs both.
+The agents run on **Claude Code** and coordinate on **GitHub**: issues hold the work to do, pull
+requests carry each change and its review, and milestones show how far along each goal is.
+agent-squad needs both.
 
 
 ### ✅ Features
 
-- **Clear roles.** You decide what to build and why. The CTO turns that into GitHub issues, DEV
-  writes the code and its tests, and QA reviews every pull request in two ways: it reads the code,
-  and it tests what the pull request says it does.
+- **A team with clear roles:**
+  - 👨🏻‍💼 **CEO, you.** You decide what to build and why, and you only need to talk to the CTO.
+  - 👷🏼‍♂️ **CTO.** Your partner on the product. It talks through with you what to build, helps you
+    shape the vision and choose the stack, and plans the work as GitHub issues. It settles any
+    disagreement between DEV and QA, and brings you the decisions that are yours, as options with a
+    recommendation.
+  - 👨🏼‍💻 **DEV.** Writes the code and its tests, and opens a pull request for each issue.
+  - 👩🏼‍🔬 **QA.** Reviews every pull request in two ways: it reads the code, and it tests what the
+    pull request says it does.
+- **A team that coordinates itself.** Each agent works in its own git worktree, a separate copy of
+  the project, so nobody touches another's files. They message each other and follow the work on
+  GitHub, without you in the middle.
 - **Rules that scripts enforce.** Before every push, your project's checks must pass, and nothing
   goes straight to `main`. Before every merge, QA must have approved the latest commit and every
   comment must be settled.
@@ -43,12 +48,12 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
    leave that to the CTO, who deals with it in step 3.
 
 2. **Start three Claude Code sessions** in that same folder, each in its own terminal, named after
-   its role and your project:
+   its role and your project (replace `<project-name>`):
 
    ```bash
-   claude -n "CTO:my-project"
-   claude -n "DEV:my-project"
-   claude -n "QA:my-project"
+   claude -n "CTO:<project-name>"
+   claude -n "DEV:<project-name>"
+   claude -n "QA:<project-name>"
    ```
 
 3. **Tell the CTO:** *"Follow `.agent-squad/playbook/BOOTSTRAP.md`."* It finishes setting up the
@@ -57,6 +62,7 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
 
 ## 📔 Contents
 
+- [💡 Why agent-squad](#-why-agent-squad)
 - [🔭 Overview](#-overview)
   - [Built on Claude Code and GitHub](#built-on-claude-code-and-github)
   - [How the team works](#how-the-team-works)
@@ -65,23 +71,42 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
 - [🗂️ What goes where](#️-what-goes-where)
 - [⚠️ Things to know](#️-things-to-know)
 - [📦 This repository](#-this-repository)
-- [🔄 How it evolves](#-how-it-evolves)
+
+
+## 💡 Why agent-squad
+
+I built agent-squad for myself. For several months I tried different ways of working with Claude
+Code agents on real projects, and this is the one that fits me best: I decide what to build and
+why, and the team does the rest, with reviews I can trust.
+
+Put several Claude Code sessions on one project without a method and they soon get in each other's
+way. They edit the same files, forget what they agreed once their context is compacted, merge work
+nobody reviewed, and push straight to `main`. Every rule in [SQUAD.md](SQUAD.md) comes from
+something like that, and records the incident that led to it. The rules that matter most are
+enforced by scripts, because good intentions alone do not keep them.
+
+The method keeps changing as it is used: when an agent finds a flaw in it, the fix comes back here
+as a new release, and [CHANGELOG.md](CHANGELOG.md) says what each release changed.
 
 
 ## 🔭 Overview
 
 ### Built on Claude Code and GitHub
 
-**Claude Code runs the agents.** Each agent is a Claude Code session named after its role:
-`CTO:<project>`, `DEV:<project>` and `QA:<project>`. All three start in the project's main folder,
-which is what lets them share Claude Code's memory, and they send each other messages. Every
-session loads the charter through `AGENTS.md`, and hooks save the project's state before Claude
-Code compacts a session and hand it back afterwards.
+**Claude Code runs the agents.** Each agent is a Claude Code session named after its role and the
+project: `CTO:<project-name>`, `DEV:<project-name>` and `QA:<project-name>`. All three start in the
+project's main folder, which lets them share Claude Code's memory, and each works in a worktree of
+its own under `.agent-squad/worktrees/`. They send each other messages. Every session loads the
+charter through `AGENTS.md`, and hooks save the project's state before Claude Code compacts a
+session and hand it back afterwards.
 
-**GitHub holds the work.** Issues are the backlog, pull requests carry the changes, and reviews
-carry QA's verdicts. The agents usually share one GitHub account, so they sign everything they
-write and use labels to show who owns what. Before a merge, a script asks GitHub, through `gh`,
-whether the pull request is really ready.
+**GitHub holds the work.** Issues are the backlog, grouped into milestones; pull requests carry the
+changes, and reviews carry QA's verdicts. While setting up, the CTO creates a set of labels the
+agents coordinate with: who owns an issue (CTO, DEV or QA), its type and priority, and its status
+(in progress, in review, approved or blocked). One more label, `needs-ceo`, marks what is waiting
+for you, so filtering by it gives you your inbox. The agents usually share one GitHub account, so
+they sign everything they write. Before a merge, a script asks GitHub, through `gh`, whether the
+pull request is really ready.
 
 ### How the team works
 
@@ -118,7 +143,11 @@ disagreement between an author and QA. Every rule, with the incident that led to
 - **A GitHub repository** for your project.
 - **The GitHub CLI, `gh`**, logged in with the `repo` and `workflow` scopes and with access to
   `gzurl/agent-squad`, which is private for now.
-- **bash**, **git** 2.31 or later, and **jq**.
+- **bash**, **git** 2.31 or later, **jq** and **tar**.
+
+Before it touches anything, the installer checks that `gh`, git, jq and tar are there, and that
+`gh` is logged in and can read `gzurl/agent-squad`. If something is missing, it stops and says
+what; it does not install anything for you.
 
 
 ## 🛠️ Install
@@ -226,12 +255,3 @@ what, and when.
 | `CHANGELOG.md` | What each version changes | Yes, to read |
 | `.gitattributes` | What a release leaves out | Yes, unused there |
 | `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
-
-
-## 🔄 How it evolves
-
-The method grows out of real incidents. When an agent finds a flaw in it, or a better way, it tells
-its CTO, who opens an issue here saying what happened and who found it. This repository's CTO turns
-issues into pull requests, reviewed by its QA like any other. Each release is a tag, `vN`, matching
-the `Version:` line of `SQUAD.md`, and [CHANGELOG.md](CHANGELOG.md) says what changed. A project
-upgrades when its CTO decides.

@@ -28,7 +28,7 @@ message; decisions taken in this session that are not yet on GitHub. After compa
 The product decisions agreed so far live in [openspec/project.md](openspec/project.md).
 
 ## Directories
-Your session name tells you who you are: `CTO:<project>`, `DEV:<project>` or `QA:<project>`.
+Your session name tells you who you are: `CTO:<project-name>`, `DEV:<project-name>` or `QA:<project-name>`.
 
 | Agent | Directory |
 |---|---|
