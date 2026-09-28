@@ -1,4 +1,4 @@
-emoji[ROLE]: Closes #N.
+<signature, SQUAD.md §6>: Closes #N.
 
 ## What this PR announces
 Numbered claims, each a sentence a reviewer can prove false:

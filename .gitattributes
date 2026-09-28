@@ -5,5 +5,6 @@
 /.github/workflows export-ignore
 /.agent-squad-checks export-ignore
 /scripts/check-*.sh export-ignore
+# Nothing is tracked under .claude/ today; the line guards against a settings file added later.
 /.claude export-ignore
 /.gitignore export-ignore

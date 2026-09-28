@@ -1,5 +1,17 @@
 # Changelog
 
+## v19 — 2026-09-28
+- **Coherence across every document**, from two independent passes (#84): the charter's owner is
+  `agent-squad`'s CTO; the README says who opens issues upstream (§7) and summarises the merge
+  gate as §4.9 does; the main checkout writes nothing but the bootstrap commit, which the CTO makes
+  there (§2.4, `BOOTSTRAP.md` row 5); OpenSpec applies unless the CEO decided otherwise at
+  bootstrap (§3, §9); `BOOTSTRAP.md` rows 0, 6 and 13 match the installer and the template;
+  "Claude Code" instead of "harness"; one name for the pre-push gate and one notation for
+  sections (§N.N); `{owner}/{repo}` in every `gh api` of the table; the issue and PR templates
+  start with `<signature>`; the *Squad* section of this repository's `AGENTS.md` is the
+  template's, word for word; the README's tooling traps for script authors move to `AGENTS.md`;
+  the CHANGELOG names no project. The scripts' own text follows (#85).
+
 ## v18 — 2026-09-28
 - §4.9: **the merge gate stops the chained merge** (exit 3) when the PR is behind its base and the
   base changed a file the PR also changes, or when it cannot tell whether it did (a failed or
@@ -109,7 +121,7 @@
 - Fix: `scripts/squad-checks.sh` clears git's own variables (`git rev-parse --local-env-vars`)
   before running any check. A hook runs with `GIT_DIR` and others set, and a check that uses git,
   such as a test that builds a repository in a temporary directory, acted on the pushing
-  repository instead: in rogue-trader it committed into the pushing branch and set `core.bare` in
+  repository instead: in one project it committed into the pushing branch and set `core.bare` in
   the shared config. Any project on v13 that enabled the hook should check its `core.bare` and its
   branches. Closes #19.
 
@@ -156,7 +168,7 @@
   settings (squash only, PR title and body as the squash message). Closes issues #1 and #2.
 
 ## v8 — 2026-09-18
-- First release from this repository. Charter v7 of `rogue-trader` plus the upstream-first rule
+- First release from this repository. Charter v7 of the project the method came from, plus the upstream-first rule
   (SQUAD.md section 7), header naming this repository as home, and BOOTSTRAP.md row 0 (copy the
   tagged files). Includes the compaction hooks, the handoff snapshot script, the issue and PR
   templates, and the `AGENTS.md` / `openspec/` skeletons.
