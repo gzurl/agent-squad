@@ -183,4 +183,36 @@ else
   fail "with 5 PRs and issues, the snapshot did not list them plainly"
 fi
 
+# 8. The snapshot's last section is the remote's default branch as git records it (origin/HEAD),
+#    whatever its name, not origin/main (#85); when git does not know it, the section says that it
+#    shows the local log instead.
+# `branch_section` saves a snapshot from the main checkout and prints its default branch section.
+branch_section() {
+  rm -f "$handoff_dir/branch.md"
+  run "$main" save '{"session_id":"branch"}'
+  sed -n '/^## Default branch/,$p' "$handoff_dir/branch.md" 2>/dev/null
+}
+# `commit_on <subject>` makes a commit on top of the local HEAD, without moving any branch.
+commit_on() {
+  git -C "$main" -c user.email=handoff@example.com -c user.name="Handoff check" \
+    commit-tree 'HEAD^{tree}' -p HEAD -m "$1"
+}
+section="$(branch_section)"
+if grep -qx '## Default branch: unknown to git, so the local log' <<<"$section" \
+  && grep -q 'the sandbox' <<<"$section"; then
+  pass "without origin/HEAD, the snapshot says so and shows the local log"
+else
+  fail "without origin/HEAD, the snapshot's last section was: $section"
+fi
+git -C "$main" update-ref refs/remotes/origin/main "$(commit_on "on main")" || exit 2
+git -C "$main" update-ref refs/remotes/origin/trunk "$(commit_on "on trunk")" || exit 2
+git -C "$main" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk || exit 2
+section="$(branch_section)"
+if grep -qx '## Default branch: origin/trunk' <<<"$section" && grep -q 'on trunk' <<<"$section" \
+  && ! grep -q 'on main' <<<"$section"; then
+  pass "with origin/HEAD at origin/trunk, the snapshot shows origin/trunk, not origin/main"
+else
+  fail "with origin/HEAD at origin/trunk, the snapshot's last section was: $section"
+fi
+
 exit "$status"

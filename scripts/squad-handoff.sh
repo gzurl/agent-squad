@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Squad handoff for context compaction (SQUAD.md, "How rules reach the agents").
+# Squad handoff for context compaction (SQUAD.md §7).
 #
 #   save     PreCompact hook: snapshot the objective state of the project into a per-session file.
 #   restore  SessionStart(compact) hook: print that snapshot plus re-orientation instructions, so
@@ -89,7 +89,7 @@ snapshot() {
   echo
   echo "## Issues in progress, in review or blocked"
   # Filtered here, on the labels' first character: gh's own --label filter silently finds nothing
-  # for labels whose emoji is a ZWJ sequence (#56).
+  # for labels whose emoji is a ZWJ sequence (agent-squad #56).
   issues="$(gh issue list --state open --limit "$limit" --json number,title,labels 2>/dev/null || true)"
   if [ -z "$issues" ]; then
     echo "(gh unavailable)"
@@ -99,8 +99,15 @@ snapshot() {
     limit_note "$(printf '%s' "$issues" | jq length)" "open issues" "gh issue list --limit 1000"
   fi
   echo
-  echo "## main"
-  git log origin/main --oneline -3 2>/dev/null || git log --oneline -3 2>/dev/null || true
+  # The remote's default branch, which need not be main (agent-squad #72); when git does not know
+  # it, the local log, and the heading says so.
+  if default="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)"; then
+    echo "## Default branch: $default"
+    git log "$default" --oneline -3 2>/dev/null || true
+  else
+    echo "## Default branch: unknown to git, so the local log"
+    git log --oneline -3 2>/dev/null || true
+  fi
 }
 
 case "$action" in

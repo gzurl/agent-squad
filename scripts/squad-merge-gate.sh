@@ -6,8 +6,9 @@
 #   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
 # cannot merge over an open thread, a stale verdict, a missing label, an unsettled body-only
 # finding, a red or absent CI, or a head that moved between the check and the merge. When the PR is
-# behind its base, it says what the base changed since (#64), and stops when the base changed a
-# file the PR changes too, until the author acknowledges that base with SQUAD_BEHIND_CHECKED (#80).
+# behind its base, it says what the base changed since (agent-squad #64), and stops when the base
+# changed a file the PR changes too, until the author acknowledges that base with
+# SQUAD_BEHIND_CHECKED (agent-squad #80).
 #
 # Usage: [SQUAD_BEHIND_CHECKED=<base sha>] squad-merge-gate.sh <pr-number> [owner/repo]
 # Exit: 0 may be merged; 1 a condition failed; 2 bad usage; 3 behind a base that changed a file the
@@ -52,15 +53,15 @@ total="${runs%% *}"; not_green="${runs##* }"
 [ "$total" != "0" ] || fail "no check runs on $head"
 [ "$not_green" = "0" ] || fail "$not_green of $total check run(s) not successful on $head"
 
-# 6. A verdict binds to a commit, but what a PR says binds to the world, and the base may have
-#    moved under it since it was approved (#57). When the PR is behind its base, say by how many
-#    commits and which files they touched, marking those the PR also changes or names in its
+# 6. A verdict binds to a commit, but what a PR says binds to the world, and the base may have moved
+#    under it since it was approved (agent-squad #57). When the PR is behind its base, say by how
+#    many commits and which files they touched, marking those the PR also changes or names in its
 #    description. If none is one the PR changes, that is a warning. If one is, the gate stops with
-#    exit 3, since a warning inside §4.9's chained command is read only after the merge (#80): the
-#    author checks the PR's claims against that base and acknowledges it with
+#    exit 3, since a warning inside §4.9's chained command is read only after the merge
+#    (agent-squad #80): the author checks the PR's claims against that base and acknowledges it with
 #    SQUAD_BEHIND_CHECKED=<its SHA>, which counts for that base and no other. When the gate cannot
 #    tell whether the base moved, it stops the same way: a gate that passes when it cannot see is
-#    the failure #80 is about.
+#    the failure agent-squad #80 is about.
 # `names_it <file>` passes when the PR's description names the file: its path or its base name in
 # backticks, or as a whole word when the name is distinctive enough to be one (it has a dot or a
 # slash). A bare word such as `a` is not taken for a file.
