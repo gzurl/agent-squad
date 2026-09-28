@@ -129,8 +129,8 @@ In your project's main checkout (the folder you cloned, not a worktree), run:
 gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh | bash
 ```
 
-That installs the latest release. To pick a version or another folder, add them after
-`bash -s --`:
+That installs the latest release. To pick a version (v15 or later) or another folder, add them
+after `bash -s --`:
 
 ```bash
 gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh \
