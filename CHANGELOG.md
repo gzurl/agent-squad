@@ -1,5 +1,26 @@
 # Changelog
 
+## v20 — 2026-09-28
+- **Install in one line** (#89): `install.sh`, fetched from `main` (while the repository is private,
+  `gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh |
+  bash`), installs or upgrades the squad with the chosen tag's own installer: the latest release by
+  default, or `--tag vN` from v15 on, in the current directory or the one given. An upgrade
+  therefore writes the new tag's pre-push shim in the same run. It is the one file projects run
+  from `main`, and no tag ships it.
+- **A README for people** (#88): it opens with you, the CEO, and the team you direct; why GitHub,
+  and why the method exists (*Why agent-squad*); one bullet per member, the CTO as the one the CEO
+  talks to; the agents coordinating by themselves, each in its own worktree; the labels they
+  coordinate with, `needs-ceo` as the CEO's inbox; the quick start in three steps; *How the team
+  works* as a sequence diagram that reads top to bottom and shows the review loop; the merge gate's
+  conditions once, pointing at §4.9; *Requirements* without branch protection, which
+  `BOOTSTRAP.md` row 6 handles, and saying what the installer checks; no *Upgrade*, since
+  upgrading is running the install line again; *What goes where* as an annotated tree; no *How it
+  evolves*.
+- §6: a member's signature emoji may appear in body text where the text introduces that member,
+  as the README's roles do. Session names read `CTO:<project-name>` everywhere.
+- `BOOTSTRAP.md`: *The installer's files*, how the CTO takes what the installer changed to `main`
+  through a PR, moves there from the README; row 0 points at it.
+
 ## v19 — 2026-09-28
 - **Coherence across every document**, from two independent passes (#84): the charter's owner is
   `agent-squad`'s CTO; the README says who opens issues upstream (§7) and summarises the merge gate
