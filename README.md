@@ -190,66 +190,13 @@ to `install.log` and leaves the rest of `.agent-squad/` alone. Tell the agents, 
 changed sections: a running session keeps the charter it loaded until it restarts or compacts.
 `CHANGELOG.md` says what each version changes.
 
-From v16 on, the pre-push gate refuses any push to `main`: OpenSpec minutes go through a PR like
-everything else, and an exception approved by the CEO on an issue is pushed with
+The pre-push gate refuses any push to `main`: OpenSpec minutes go through a PR like everything
+else, and an exception approved by the CEO on an issue is pushed with
 `SQUAD_MAIN_EXCEPTION=#<issue> git push …`.
 
-### From v15
-
-Besides running the installer, a project on v15 does three things by hand, in one PR:
-1. **The PR template.** The installer never overwrites a project's templates, so copy
-   `.agent-squad/playbook/.github/PULL_REQUEST_TEMPLATE.md` over yours if yours is the one an
-   earlier install created: v16 asks a PR to announce numbered claims.
-2. **`main`'s protection.** Remove any GitHub bypass left for `openspec/`.
-3. **`AGENTS.md`.** Update its line on `main`'s protection as `templates/AGENTS.md` now words it,
-   and send OpenSpec minutes through PRs.
-
-### From v14
-
-Up to v14 a project carried the method as tracked copies. Moving to v15 or later takes one PR
-and an announced stop. Going to v16 or later, the same PR also carries
-[From v15](#from-v15)'s three items.
-
-1. **Prepare.** Announce the stop. The CTO's ephemeral worktrees are merged and removed first.
-   Download the new tag as in [Install](#️-install), into `$tmp`: step 2 takes the *Squad*
-   section from `$tmp/templates/AGENTS.md`, and step 3 runs `$tmp/scripts/squad-install.sh`.
-2. **One PR, from a CTO worktree** in the v14 layout (`../<repo>.worktrees/cto-squad/`, removed
-   after the merge):
-   - `git rm SQUAD.md BOOTSTRAP.md scripts/squad-handoff.sh scripts/squad-merge-gate.sh scripts/squad-checks.sh .githooks/pre-push`;
-   - `git mv .squad/checks .agent-squad-checks`;
-   - remove the squad's hooks from `.claude/settings.json` (the whole file, if they are all it holds);
-   - in `.gitignore`, replace `.claude/handoff/` by `.agent-squad/` and
-     `.claude/settings.local.json`, and **keep `evidence/`** until step 3 has moved QA's evidence
-     (without it, the linters of QA's worktree read QA's scripts in `evidence/`; drop the line in
-     a later PR);
-   - in `AGENTS.md`, add the *Squad* section of `templates/AGENTS.md`, update the directories,
-     point every reference to the removed files (the introduction, *Compact instructions*, the
-     README) at `.agent-squad/playbook/`, and every reference to `.squad/checks` at
-     `.agent-squad-checks`.
-
-   Its push runs no gate, because `core.hooksPath` points at the `.githooks/` it removes: run the
-   checks by hand and say so in the PR. **QA reviews it from its own v14 worktree;** once the PR
-   is merged, QA returns that worktree to a clean detached `origin/main`, and DEV and QA bring
-   their shells to the main checkout. Nothing moves before that.
-3. **After the merge, in the main checkout:** `git pull --ff-only`; delete `.claude/handoff/`;
-   `git config --unset core.hooksPath`; `mkdir -p .agent-squad/worktrees`;
-   `git worktree move ../<repo>.worktrees/dev .agent-squad/worktrees/dev`, and the same for `qa`.
-   **Move them before running the installer**, which otherwise creates empty `dev` and `qa` of
-   its own; a move keeps everything in the worktree, ignored and untracked files included, so
-   large downloaded data is not lost. In each moved worktree, delete what stores the old path: a
-   Python virtualenv (`rm -rf .venv`, then recreate it, e.g. `uv sync`) and the caches
-   (`find <worktree> -name __pycache__ -type d -prune -exec rm -rf {} +`, `.mypy_cache`,
-   `.ruff_cache`), whose files keep pointing at the old directory. From the main checkout, move
-   any evidence QA left in its worktree: `mv .agent-squad/worktrees/qa/evidence/* .agent-squad/evidence/`
-   (create the target first); QA then points the `file://` links of its open reviews and messages
-   at `.agent-squad/evidence/`. Then run the installer and `--check`.
-4. **Open branches:** a branch started on v14 has no `.agent-squad-checks`, so the gate refuses
-   it. DEV merges `main` into every open branch before its next push; QA rests on
-   `git switch --detach origin/main`.
-5. **Relaunch the three sessions** from the main checkout and tell DEV and QA their new
-   directories: a session started on v14 keeps v14's hooks, which call the removed
-   `scripts/squad-handoff.sh` and would save no snapshot and inject no re-orientation. Until the
-   relaunch, nobody compacts a session or creates a branch.
+A project on v14 or earlier, which still carries the method as tracked copies, follows
+*Upgrade → From v14* in the README of tag `v17`
+(`gh api repos/gzurl/agent-squad/contents/README.md?ref=v17 --jq .content | base64 -d`).
 
 
 ## ⚠️ Things to know

@@ -1,5 +1,15 @@
 # Changelog
 
+## v18 — 2026-09-28
+- §4.9: **the merge gate stops the chained merge** when the PR is behind its base and the base
+  changed a file the PR also changes, printing what the base changed; after checking the PR's
+  claims against that base, `SQUAD_BEHIND_CHECKED=<base sha>` lets it pass for that base only. A
+  PR behind with no file in common keeps the warning. The v17 warning was read only after the merge
+  it was chained to (#80).
+- README: *From v14* and *From v15* are gone, since no project is on those versions any more; a
+  project on v14 or earlier follows the README of tag `v17`. The note on pushes to `main` is part
+  of *Upgrade*'s general text.
+
 ## v17 — 2026-09-28
 - **The installer and `--check` use the remote's default branch** (`origin/HEAD`, set when
   missing), not `main`; the worktrees start from it, and `--check` has a tenth item saying it is
