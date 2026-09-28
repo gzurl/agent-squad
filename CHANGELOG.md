@@ -1,5 +1,30 @@
 # Changelog
 
+## v17 — 2026-09-28
+- **The installer and `--check` use the remote's default branch** (`origin/HEAD`, set when
+  missing), not `main`; the worktrees start from it, and `--check` has a tenth item saying it is
+  known. From git 2.48, `git fetch` sets `origin/HEAD` by itself; it is missing mostly with older
+  git or after `git remote add` without a fetch (#72).
+- §7: an agent who finds a flaw in the method tells its CTO, who opens the issue in `agent-squad`,
+  crediting who found it (#54).
+- §5: a source that refuses scripts is investigated by DEV (a plain client, a headless browser as
+  it identifies itself, a client that identifies as a person's browser; `robots.txt`, terms of
+  use) and decided by the CEO per source; only DEV, only for that analysis, gets past the refusal,
+  never with credentials or challenges (#55).
+- §3 and §6: anything another agent will act on is written on the issue or PR first, and the
+  message only notifies; a message may not arrive; a message that asks for something gets one
+  acknowledgement, one that only informs gets none, and a decision always gets a notification
+  (#61).
+- README, *Upgrade → From v14*, after the first real migration: QA reviews the migration PR from
+  its v14 worktree before anything moves; v14 → v16 or later also needs *From v15*; keep
+  `evidence/` in `.gitignore` until the evidence has moved; move the worktrees before the
+  installer (a move keeps ignored data); clear `__pycache__`, `.mypy_cache` and `.ruff_cache`
+  with the `.venv`; QA repoints its `file://` links to the moved evidence; nobody compacts or
+  branches until the relaunch; *Things to know* states when `git worktree remove` needs
+  `--force` (#78).
+- README: the install and upgrade commands resolve the latest release tag (the highest `vN`) with
+  `gh` instead of naming one, so a release no longer has to edit them.
+
 ## v16 — 2026-09-25
 - **Nothing reaches `main` without a PR reviewed by QA**, documentation and OpenSpec minutes
   included (§2.3). An exception is approved by the CEO on an issue before the push; the bootstrap
