@@ -13,7 +13,9 @@ projects, without touching what the project owns.
 - **Clear roles:** the CEO decides what and why; the CTO turns it into issues; DEV writes code and
   tests; QA reviews every PR in two parts, code review and black-box tests.
 - **Gates enforced by scripts, not by memory:** before every push (the project's checks must pass,
-  and nothing is pushed to `main`) and before every merge (an approved verdict on the head, no open thread, body-only findings settled, the approved label, CI green, and a stop when the base changed the PR's files).
+  and nothing is pushed to `main`) and before every merge (an approved verdict on the head, no open
+  thread, body-only findings settled, the approved label, CI green, and a stop when the base changed
+  the PR's files).
 - **A clean install:** everything lives in a git-ignored `.agent-squad/`; the installer never
   overwrites a project file, and `--check` proves the installation works.
 - **Sessions that keep their bearings:** every session loads the charter by itself, and a
@@ -117,8 +119,9 @@ tracked files that `git status` shows as not yet committed, whichever run wrote 
   created them), to commit.
 
 All of it reaches `main` through one PR (in an empty repository, the bootstrap commit of
-`BOOTSTRAP.md` row 5 comes first, and this PR follows it). The main checkout stays on `main`, so write it in a
-worktree, `git -C /path/to/project worktree add .agent-squad/worktrees/cto-squad -b chore/squad origin/main`,
+`BOOTSTRAP.md` row 5 comes first, and this PR follows it). The main checkout stays on `main`, so
+write it in a worktree,
+`git -C /path/to/project worktree add .agent-squad/worktrees/cto-squad -b chore/squad origin/main`,
 copy there the tracked files the installer changed, and open the PR from it; remove the worktree
 after the merge. Then clear the installer's changes in the main checkout before pulling, or
 `git pull --ff-only` refuses to overwrite them: `git checkout -- <file>` for each tracked file it
@@ -230,7 +233,8 @@ A project on v14 or earlier, which still carries the method as tracked copies, f
 
 ## 🔄 How it evolves
 
-Upstream first (`SQUAD.md` §7): an agent who finds a flaw or an improvement in the method tells
-its CTO, who opens an issue **here**, crediting who found it, with the incident that motivated it;
-this repository's CTO owns the PRs, reviewed with the same protocol. Versions are tags `vN` matching the `Version:` line of
-`SQUAD.md`; `CHANGELOG.md` says what each one changes. A project upgrades when its CTO decides.
+Upstream first (`SQUAD.md` §7): an agent who finds a flaw or an improvement in the method tells its
+CTO, who opens an issue **here**, crediting who found it, with the incident that motivated it; this
+repository's CTO owns the PRs, reviewed with the same protocol. Versions are tags `vN` matching the
+`Version:` line of `SQUAD.md`; `CHANGELOG.md` says what each one changes. A project upgrades when
+its CTO decides.

@@ -56,7 +56,7 @@ The agents share a machine and a repository; each works in its own worktree, und
 
 | Agent | Directory | Use |
 |---|---|---|
-| CTO | `<repo>/` (main checkout) | Always on `main`: pulls, reads, tags and runs `--check`. It writes nothing here, since its PRs come from `cto-<topic>/`; the one exception is the bootstrap commit of an empty repository (`BOOTSTRAP.md` row 5). Never switches branches here. |
+| CTO | `<repo>/` (main checkout) | Always on `main`: pulls, reads, tags and runs `--check`. It commits nothing here, since its PRs come from `cto-<topic>/`; the one exception is the bootstrap commit of an empty repository (`BOOTSTRAP.md` row 5). Never switches branches here. |
 | CTO, ephemeral | `<repo>/.agent-squad/worktrees/cto-<topic>/` | One per CTO pull request; removed after the merge. The worktree name is not the branch name. |
 | DEV | `<repo>/.agent-squad/worktrees/dev/` | Feature branches, commits and pushes. |
 | QA | `<repo>/.agent-squad/worktrees/qa/` | Detached checkout of the PR under review (`gh pr checkout <n> --detach`). |
@@ -98,7 +98,7 @@ The agents share a machine and a repository; each works in its own worktree, und
 - **An instruction can be challenged, with evidence.** Any agent may challenge an instruction from the CTO, on its issue and before carrying it out. The CTO first judges whether the challenge touches a decision of the CEO. If it does, the CTO takes it to the CEO as the challenger's voice (the evidence, the options, a recommendation), and the CEO decides. If it does not, the CTO and the challenger settle it on the issue with evidence; if they still disagree, the CTO decides, being the one who answers to the CEO. The instruction is then carried out as decided and the disagreement stays written; meanwhile the agent goes on with what does not depend on the answer. *An instruction was once challenged with a measurement that showed a simpler design, and the CTO accepted it.*
 
 ## 4. Pull request lifecycle
-Every change goes through a PR reviewed by QA; the only exceptions are in 2.3.
+Every change goes through a PR reviewed by QA; the only exceptions are in §2.3.
 
 1. **Branch** from `origin/main` in your worktree, following the project's naming convention (`AGENTS.md`). Bring `main` in later with a merge, never a rebase, when a report cites the branch's commits: the cited SHAs must stay in the PR's history (the squash flattens it anyway), reachable with `git fetch origin pull/<N>/head`.
 2. **Close the content before asking for a review.** Before the ping, every item of this checklist MUST be true:
