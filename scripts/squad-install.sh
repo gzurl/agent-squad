@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Install, upgrade or check the squad in a project (agent-squad #23): the tag's playbook in
 # <project>/.agent-squad/playbook/, the compaction hooks in .claude/settings.local.json, a pre-push
-# shim that runs the playbook's gate, the GitHub templates the project lacks, and the DEV and QA
-# worktrees. It never overwrites or deletes a file the project owns, prints one line per action
-# taken or skipped, and ends with what is left to do by hand.
+# shim that runs the playbook's pre-push gate, the GitHub templates the project lacks, and the DEV
+# and QA worktrees. It never overwrites or deletes a file the project owns, prints one line per
+# action taken or skipped, and ends with what is left to do by hand.
 #
 # Usage: squad-install.sh [--source <dir>] <project main checkout> <tag>
 #        squad-install.sh --check <project main checkout>
 #   --source <dir>  install the tree in <dir> (an extracted tarball, for tests) instead of
 #                   downloading the tag from GitHub
 #   --check         change nothing: print one status line per item of the installation, including
-#                   whether the gate really refuses a failing check
+#                   whether the pre-push gate really refuses a failing check
 # Exit: 0 installed; 1 installed except the steps marked NOT, which need a decision; 2 bad usage, a
 #       missing prerequisite, or a download or extraction that failed: nothing outside
 #       .agent-squad/ was touched and the installed playbook is unchanged.
@@ -55,7 +55,8 @@ if [ "$mode" = install ] && [ -z "$source_dir" ]; then
   command -v gh >/dev/null 2>&1 || die "gh is required to download the tag"
 fi
 
-# The project is named by its main checkout, the one directory every worktree shares (D7).
+# The project is named by its main checkout (D7 of agent-squad #23), the one directory every
+# worktree shares.
 project="$(CDPATH='' cd -- "$1" 2>/dev/null && pwd -P)" || die "$1 is not a directory"
 common_dir="$(git -C "$project" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
   || die "$project is not a git checkout (or git is older than 2.31)"
@@ -98,8 +99,8 @@ ignored_by_project() {
 # worktree that exists (a worktree can set it in its own config.worktree): git never runs the
 # common hooks directory, and so the shim, from there.
 # `known_default_branch` prints the remote's default branch as git records it for origin
-# (refs/remotes/origin/HEAD): the one the gate protects and the worktrees start from. It fails when
-# git does not know it; it never asks the remote.
+# (refs/remotes/origin/HEAD): the one the pre-push gate protects and the worktrees start from. It
+# fails when git does not know it; it never asks the remote.
 known_default_branch() {
   local ref
   ref="$(git -C "$project" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)" || return 1
@@ -118,8 +119,8 @@ hooks_path_settings() {
   done
 }
 # `lists_a_command <file>` passes when the file has a line that squad-checks.sh runs, by the same
-# rule: neither blank nor a comment, indentation and a CRLF line ending aside. Without one, the gate
-# refuses every push.
+# rule: neither blank nor a comment, indentation and a CRLF line ending aside. Without one, the
+# pre-push gate refuses every push.
 lists_a_command() {
   awk '{ sub(/\r$/, ""); sub(/^[[:space:]]+/, "") } $0 != "" && !/^#/ { found = 1 } END { exit !found }' "$1" 2>/dev/null
 }
@@ -136,9 +137,9 @@ imports_charter() {
     END { exit !found }' "$1" 2>/dev/null
 }
 
-# The four compaction hooks as the installer writes them (D5, D10). Each command checks that the
-# playbook's script exists, so that a missing playbook is reported to the session instead of
-# failing it.
+# The four compaction hooks as the installer writes them (D5 and D10 of agent-squad #23). Each
+# command checks that the playbook's script exists, so that a missing playbook is reported to the
+# session instead of failing it.
 # shellcheck disable=SC2016 # expanded by the shell that runs the hook, not here
 handoff='"$CLAUDE_PROJECT_DIR"/.agent-squad/playbook/scripts/squad-handoff.sh'
 # shellcheck disable=SC2016 # same
@@ -147,7 +148,10 @@ save_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" save; fi"
 restore_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" restore; else $missing; fi"
 startup_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" startup; else $missing; fi"
 
-# The pre-push shim (D8), written into the common git directory so that every worktree runs it.
+# The pre-push shim (D8 of agent-squad #23), written into the common git directory so that every
+# worktree runs it. --check requires it byte for byte, comments included, and an upgrade runs the
+# installed installer, which writes its own shim: a release that changes this text leaves --check
+# failing until a second install, and says so.
 hooks_dir="$common_dir/hooks"
 shim="$(cat <<'SHIM'
 #!/usr/bin/env bash
@@ -174,7 +178,8 @@ exec "$gate" "$@" <<<"$refs"
 SHIM
 )"
 
-# --check: one status line per item of the installation (#36); it changes nothing in the project.
+# --check: one status line per item of the installation (agent-squad #36); it changes nothing in the
+# project.
 # `verdict <item> <why>` prints the item as ok when <why> is empty, as FAILED with <why> otherwise.
 failed_items=0
 verdict() {
@@ -190,9 +195,9 @@ join() { awk 'NR > 1 { printf ", " } { printf "%s", $0 }'; }
 # `real_path <dir>` resolves symlinks, so that two spellings of one directory compare equal.
 real_path() { (CDPATH='' cd -- "$1" 2>/dev/null && pwd -P); }
 
-# `gate_refusal` proves that the playbook's gate runs, not only that it exists: in a throw-away
-# repository whose hooks are the playbook's, a failing check must refuse the push and a passing one
-# must let it through. It prints why when that is not so, and nothing otherwise.
+# `gate_refusal` proves that the playbook's pre-push gate runs, not only that it exists: in a
+# throw-away repository whose hooks are the playbook's, a failing check must refuse the push and a
+# passing one must let it through. It prints why when that is not so, and nothing otherwise.
 gate_refusal() {
   local lab="" code
   if [ ! -x "$playbook/.githooks/pre-push" ]; then
@@ -202,14 +207,14 @@ gate_refusal() {
   # The sandbox's hooks are the project's playbook: it goes away even when the run is interrupted.
   # Its name is fixed before the directory exists, under TMPDIR, so that an interrupt at any moment
   # finds in the trap exactly the sandbox or nothing: not TMPDIR itself, and never a directory made
-  # but not yet named, as mktemp's is until it prints its path (#71). mkdir either makes the
-  # directory or fails, so the name is this run's alone.
+  # but not yet named, as mktemp's is until it prints its path (agent-squad #71). mkdir either makes
+  # the directory or fails, so the name is this run's alone.
   lab="${TMPDIR:-/tmp}"
   lab="${lab%/}/squad-check.$$.$RANDOM$RANDOM"
   # The sandbox runs as a job with a process group of its own, which everything it starts inherits,
-  # a process forked just as the interrupt arrives included: such a straggler escapes the signal
-  # and would write into the sandbox after it was removed (#71). `clear_sandbox <job>` stops the
-  # whole group, waits until none of it is left, and only then removes the directory. The trap
+  # a process forked just as the interrupt arrives included: such a straggler escapes the signal and
+  # would write into the sandbox after it was removed (agent-squad #71). `clear_sandbox <job>` stops
+  # the whole group, waits until none of it is left, and only then removes the directory. The trap
   # reads the job from $!, which is set from the moment the job exists.
   # shellcheck disable=SC2317,SC2329 # invoked by the trap below
   clear_sandbox() {
@@ -323,7 +328,7 @@ check_installation() {
   fi
   verdict "the pre-push shim is installed and core.hooksPath is unset" "$why"
 
-  # 5. The gate runs.
+  # 5. The pre-push gate runs.
   verdict "the gate refuses a failing check and lets a passing one through" "$(gate_refusal)"
 
   # 6. The project's list of checks is part of the project.
@@ -361,8 +366,8 @@ check_installation() {
   } | join)"
   verdict "CLAUDE.md links to AGENTS.md, which imports the charter" "$why"
 
-  # 10. The gate protects the remote's default branch, which it reads from origin/HEAD; without it,
-  #     the gate falls back to main, whatever the remote's default is (#72).
+  # 10. The pre-push gate protects the remote's default branch, which it reads from origin/HEAD;
+  #     without it, the gate falls back to main, whatever the remote's default is (agent-squad #72).
   why=""
   branch="$(known_default_branch)" \
     || why="origin/HEAD is not set, so the gate protects main; run the installer again, which records it (in an empty repository, once the default branch has a commit)"
@@ -376,8 +381,9 @@ if [ "$mode" = check ]; then
   exit
 fi
 
-# 1. Playbook (D2, D9): the new tree is built beside the current one and swapped in only once it
-#    is complete, so a failed download or extraction leaves the installed playbook as it was.
+# 1. Playbook (D2 and D9 of agent-squad #23): the new tree is built beside the current one and
+#    swapped in only once it is complete, so a failed download or extraction leaves the installed
+#    playbook as it was.
 mkdir -p "$squad" || die "cannot create $squad"
 staging="$(mktemp -d "$squad/playbook.new.XXXXXX")" || die "cannot create a directory in $squad"
 tarball=""
@@ -399,8 +405,8 @@ else
   tar -xzf "$tarball" -C "$staging" --strip-components=1 \
     || die "cannot extract the tarball of $tag; the installed playbook is unchanged"
 fi
-# What the hooks, the gate and the By hand list rely on. A tree from before the installer (v14 and
-# older) has no scripts/squad-install.sh, and would install without working.
+# What the hooks, the pre-push gate and the By hand list rely on. A tree from before the installer
+# (v14 and older) has no scripts/squad-install.sh, and would install without working.
 for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh \
   scripts/squad-install.sh templates/AGENTS.md; do
   [ -f "$staging/$required" ] \
@@ -468,8 +474,8 @@ for path in .agent-squad .claude/settings.local.json; do
   fi
 done
 
-# 3. Compaction hooks (D5, D10), merged into .claude/settings.local.json: every other key and hook
-#    is kept, and only entries that run squad-handoff.sh are replaced.
+# 3. Compaction hooks (D5 and D10 of agent-squad #23), merged into .claude/settings.local.json:
+#    every other key and hook is kept, and only entries that run squad-handoff.sh are replaced.
 # `one_object` passes when its input is exactly one JSON object: jq alone accepts an empty input,
 # and several values, without a word.
 one_object() { jq -e -s 'length == 1 and (.[0] | type == "object")' >/dev/null 2>&1; }
@@ -502,8 +508,9 @@ else
   needs_decision=1
 fi
 
-# 4. Pre-push shim (D8) in the common git directory, so that every worktree runs it. A project's
-#    own pre-push is kept as pre-push.local and run first; other hooks are left alone.
+# 4. Pre-push shim (D8 of agent-squad #23) in the common git directory, so that every worktree runs
+#    it. A project's own pre-push is kept as pre-push.local and run first; other hooks are left
+#    alone.
 hooks_paths="$(hooks_path_settings | join)"
 if [ -n "$hooks_paths" ]; then
   say pre-push "NOT INSTALLED: core.hooksPath is set ($hooks_paths), so git never runs $hooks_dir there; decide with the CEO whether to unset it"
@@ -543,9 +550,10 @@ for template in .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md;
   fi
 done
 
-# 6. The remote's default branch, which the gate protects and the worktrees start from (#72). When
-#    git does not know it, the remote is asked once, which records it for the gate too; when the
-#    remote cannot tell, nothing is assumed: the gate would protect main, whatever the remote says.
+# 6. The remote's default branch, which the pre-push gate protects and the worktrees start from
+#    (agent-squad #72). When git does not know it, the remote is asked once, which records it for
+#    the gate too; when the remote cannot tell, nothing is assumed: the gate would protect main,
+#    whatever the remote says.
 if base="$(known_default_branch)"; then
   say branch "the remote's default branch is $base (origin/HEAD), the one the gate protects"
 elif git -C "$project" remote set-head origin --auto >/dev/null 2>&1 && base="$(known_default_branch)"; then
@@ -561,7 +569,8 @@ else
   needs_decision=1
 fi
 
-# 7. The DEV and QA worktrees (D3), detached at the default branch as it is locally: no fetch.
+# 7. The DEV and QA worktrees (D3 of agent-squad #23), detached at the default branch as it is
+#    locally: no fetch.
 for agent in dev qa; do
   worktree="$squad/worktrees/$agent"
   if [ -e "$worktree" ]; then

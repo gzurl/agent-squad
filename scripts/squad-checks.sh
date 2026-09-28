@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Local gate of SQUAD.md §4: run every check listed in .agent-squad-checks, at the root of the
-# checkout, as a command of its own, print one status line per check, and exit non-zero when any of
-# them failed.
-# Usage: scripts/squad-checks.sh   (from anywhere inside the repository; the pre-push hook runs it)
+# The checks of SQUAD.md §4.2, which the pre-push gate runs: run every check listed in
+# .agent-squad-checks, at the root of the checkout, as a command of its own, print one status line
+# per check, and exit non-zero when any of them failed.
+# Usage: <playbook>/scripts/squad-checks.sh, from anywhere inside the repository. <playbook> is the
+#        main checkout's .agent-squad/playbook (SQUAD.md §2.4); in the agent-squad repository
+#        itself, the script is scripts/squad-checks.sh.
 # Exit: 0 all passed, 1 at least one failed, 2 the list is missing or empty.
 set -u
 

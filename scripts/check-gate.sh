@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Check that the push gate of SQUAD.md §4.2 behaves as the charter says (agent-squad #21): a
+# Check that the pre-push gate of SQUAD.md §4.2 behaves as the charter says (agent-squad #21): a
 # failing check refuses the push, a passing one lets it through from a linked worktree and from the
 # main checkout, a check that uses git leaves the pushing repository's commits and configuration
-# alone, and a push that only deletes runs no check at all. The hook finds squad-checks.sh through
+# alone, and a push that only deletes runs no check at all. The gate finds squad-checks.sh through
 # its own location (#34): the gate is tested as an installed playbook (git-ignored, nested in the
-# main checkout), then at the root of a repository as this one has it, and a hook that cannot find
+# main checkout), then at the root of a repository as this one has it, and a gate that cannot find
 # its runner must refuse the push. Only a PR changes main (#59): a push to the remote's default
 # branch is refused unless SQUAD_MAIN_EXCEPTION names an approved exception's issue, and branches
 # and tags are not affected. Everything happens in a temporary directory: this script never
