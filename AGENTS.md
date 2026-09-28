@@ -77,6 +77,10 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   installed release too; what its agents run from `main` is only its own checks list, CI and
   tests, which each intermediate PR keeps working, recording in this file anything that changes
   for the agents.
+- The text of the pre-push shim does not change without saying so: an upgrade writes the shim with
+  the installer already installed, the old one, and `--check` compares it byte for byte, so a new
+  shim text makes `--check` fail until a second install. A release that changes it says, in the
+  README's *Upgrade* and the CHANGELOG, to run the installer twice.
 - A tag's tarball, which is what projects install, leaves out what [.gitattributes](.gitattributes)
   marks `export-ignore`: this repository's own conventions, CI, checks list and tests. A new file
   that only this repository uses goes there too.

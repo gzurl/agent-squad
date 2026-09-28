@@ -10,7 +10,9 @@
   sections (§N.N); `{owner}/{repo}` in every `gh api` of the table; the issue and PR templates
   start with `<signature>`; the *Squad* section of this repository's `AGENTS.md` is the
   template's, word for word; the README's tooling traps for script authors move to `AGENTS.md`;
-  the CHANGELOG names no project. The scripts' own text follows (#85).
+  the CHANGELOG names no project. The scripts' own text follows (#85): the pre-push gate's
+  header, usage paths from the playbook, `agent-squad #N` for this repository's issues, and the
+  compaction snapshot logs the remote's default branch instead of `main`.
 
 ## v18 — 2026-09-28
 - §4.9: **the merge gate stops the chained merge** (exit 3) when the PR is behind its base and the
