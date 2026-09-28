@@ -26,8 +26,8 @@ projects, without touching what the project owns.
 
 ```bash
 tmp=$(mktemp -d)
-gh api repos/gzurl/agent-squad/tarball/v16 | tar -xz -C "$tmp" --strip-components=1
-"$tmp/scripts/squad-install.sh" /path/to/project v16
+gh api repos/gzurl/agent-squad/tarball/v17 | tar -xz -C "$tmp" --strip-components=1
+"$tmp/scripts/squad-install.sh" /path/to/project v17
 rm -rf "$tmp"
 ```
 
@@ -95,8 +95,8 @@ From anywhere, with the tag to install and the path of the project's main checko
 
 ```bash
 tmp=$(mktemp -d)
-gh api repos/gzurl/agent-squad/tarball/v16 | tar -xz -C "$tmp" --strip-components=1
-"$tmp/scripts/squad-install.sh" /path/to/project v16
+gh api repos/gzurl/agent-squad/tarball/v17 | tar -xz -C "$tmp" --strip-components=1
+"$tmp/scripts/squad-install.sh" /path/to/project v17
 rm -rf "$tmp"
 ```
 
@@ -175,7 +175,7 @@ Outside it, the installer only touches the files listed after it.
 Run the installed installer with the new tag:
 
 ```bash
-"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" /path/to/project v16
+"/path/to/project/.agent-squad/playbook/scripts/squad-install.sh" /path/to/project v17
 ```
 
 It replaces `playbook/` only once the new one is complete, rewrites `playbook.manifest`, appends
@@ -200,32 +200,40 @@ Besides running the installer, a project on v15 does three things by hand, in on
 ### From v14
 
 Up to v14 a project carried the method as tracked copies. Moving to v15 or later takes one PR
-and an announced stop:
+and an announced stop. Going to v16 or later, the same PR also carries
+[From v15](#from-v15)'s three items.
 
-1. **Stop.** Announce it. DEV and QA leave their worktrees clean, with their shells in the main
-   checkout; the CTO's ephemeral worktrees are merged and removed first. Download the new tag as
-   in [Install](#️-install), into `$tmp`: step 2 takes the *Squad* section from
-   `$tmp/templates/AGENTS.md`, and step 3 runs `$tmp/scripts/squad-install.sh`.
+1. **Prepare.** Announce the stop. The CTO's ephemeral worktrees are merged and removed first.
+   Download the new tag as in [Install](#️-install), into `$tmp`: step 2 takes the *Squad*
+   section from `$tmp/templates/AGENTS.md`, and step 3 runs `$tmp/scripts/squad-install.sh`.
 2. **One PR, from a CTO worktree** in the v14 layout (`../<repo>.worktrees/cto-squad/`, removed
    after the merge):
    - `git rm SQUAD.md BOOTSTRAP.md scripts/squad-handoff.sh scripts/squad-merge-gate.sh scripts/squad-checks.sh .githooks/pre-push`;
    - `git mv .squad/checks .agent-squad-checks`;
    - remove the squad's hooks from `.claude/settings.json` (the whole file, if they are all it holds);
-   - in `.gitignore`, replace `.claude/handoff/` and `evidence/`, with their comments, by
-     `.agent-squad/` and `.claude/settings.local.json`;
+   - in `.gitignore`, replace `.claude/handoff/` by `.agent-squad/` and
+     `.claude/settings.local.json`, and **keep `evidence/`** until step 3 has moved QA's evidence
+     (without it, the linters of QA's worktree read QA's scripts in `evidence/`; drop the line in
+     a later PR);
    - in `AGENTS.md`, add the *Squad* section of `templates/AGENTS.md`, update the directories,
      point every reference to the removed files (the introduction, *Compact instructions*, the
      README) at `.agent-squad/playbook/`, and every reference to `.squad/checks` at
      `.agent-squad-checks`.
 
    Its push runs no gate, because `core.hooksPath` points at the `.githooks/` it removes: run the
-   checks by hand and say so in the PR.
+   checks by hand and say so in the PR. **QA reviews it from its own v14 worktree;** once the PR
+   is merged, QA returns that worktree to a clean detached `origin/main`, and DEV and QA bring
+   their shells to the main checkout. Nothing moves before that.
 3. **After the merge, in the main checkout:** `git pull --ff-only`; delete `.claude/handoff/`;
    `git config --unset core.hooksPath`; `mkdir -p .agent-squad/worktrees`;
    `git worktree move ../<repo>.worktrees/dev .agent-squad/worktrees/dev`, and the same for `qa`.
-   In each moved worktree, delete any environment that stores absolute paths (a Python virtualenv:
-   `rm -rf .venv`, then recreate it, e.g. `uv sync`). From the main checkout, move any evidence
-   QA left in its worktree: `mv .agent-squad/worktrees/qa/evidence/* .agent-squad/evidence/`
+   **Move them before running the installer**, which otherwise creates empty `dev` and `qa` of
+   its own; a move keeps everything in the worktree, ignored and untracked files included, so
+   large downloaded data is not lost. In each moved worktree, delete what stores the old path: a
+   Python virtualenv (`rm -rf .venv`, then recreate it, e.g. `uv sync`) and the caches
+   (`find <worktree> -name __pycache__ -type d -prune -exec rm -rf {} +`, `.mypy_cache`,
+   `.ruff_cache`), whose files keep pointing at the old directory. From the main checkout, move
+   any evidence QA left in its worktree: `mv .agent-squad/worktrees/qa/evidence/* .agent-squad/evidence/`
    (create the target first). Then run the installer and `--check`.
 4. **Open branches:** a branch started on v14 has no `.agent-squad-checks`, so the gate refuses
    it. DEV merges `main` into every open branch before its next push; QA rests on
@@ -242,6 +250,9 @@ and an announced stop:
   bundlers. Test runners and type checkers skip dot-directories by default (pytest and mypy do),
   and are affected only when configured to enter them, for instance pytest with `norecursedirs`
   overridden. Restrict such tools to the project's paths; `rg` and ruff honour `.gitignore`.
+- **`git worktree remove` refuses a worktree with untracked files,** such as the `.venv` that
+  `uv run` creates in an ephemeral worktree. Check with `git -C <worktree> status --ignored` that
+  nothing else is there, then use `--force`.
 - **Never run `git clean -d` with `-x` or `-X` in the main checkout:** it deletes the playbook, the
   snapshots, the evidence and `.claude/settings.local.json` (with `-ff`, the worktrees too).
 - **`gh issue list --label` returns nothing, silently,** for a label whose emoji is a sequence of
