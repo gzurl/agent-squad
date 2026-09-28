@@ -15,7 +15,8 @@ tell the CTO that the squad is not installed.
 @.agent-squad/playbook/SQUAD.md
 
 ## Language
-The CEO's language is Spanish: messages between agents, and with the CEO, are written in it.
+The CEO's language is Spanish: everything addressed to the CEO is written in it, whoever writes it.
+Messages between agents are written in English, like everything in the repository and on GitHub.
 
 ## This is the upstream
 This repository is where the method is maintained: its files are **edited here, through PRs**

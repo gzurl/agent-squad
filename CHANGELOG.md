@@ -1,5 +1,17 @@
 # Changelog
 
+## v21 — 2026-09-28
+- *Language*: **the reader decides** (#92). Messages between agents are written in English, like
+  everything in the repository and on GitHub; everything addressed to the CEO, whoever writes it,
+  end-of-turn summaries included, is written in the CEO's language. The CTO asks the CEO for it
+  before walking `BOOTSTRAP.md`'s table and until then answers in the language the CEO writes in;
+  `templates/AGENTS.md` words *Language* that way.
+- §6: **a reference says what it is** (#92). In a message or an end-of-turn summary, the first
+  mention of an issue or PR carries a summary of two to five words, in the reader's language, inside
+  the link (`[#62 — publish the repository](https://github.com/<owner>/<repo>/issues/62)`); later
+  mentions are the linked number. On GitHub, `#62` is still enough.
+- README: the agents write to the CEO in the CEO's language, and the CTO asks for it first.
+
 ## v20 — 2026-09-28
 - **Install in one line** (#89): `install.sh`, fetched from `main` (while the repository is private,
   `gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh |

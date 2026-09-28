@@ -5,6 +5,8 @@
 > **Targets GitHub**, one machine, and three Claude Code sessions.
 
 ## How to run it
+First ask the CEO which language to use with them (SQUAD.md, *Language*); until they answer, use the language they write in. Row 10 records it in `AGENTS.md`, *Language*.
+
 Walk the table top to bottom. For each artifact, run the check; if it fails, do what the matching column says. Never guess a decision the CEO must make: ask, as options with a recommendation. When everything passes, record in `AGENTS.md` anything this run decided (protected `main` or not, shared account or not, mapped labels), then start *Our Project* (SQUAD.md §9).
 
 Two situations are different throughout:
