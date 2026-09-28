@@ -24,8 +24,8 @@ agent-squad needs both.
   the project, so nobody touches another's files. They message each other and follow the work on
   GitHub, without you in the middle.
 - **Rules that scripts enforce.** Before every push, your project's checks must pass, and nothing
-  goes straight to `main`. Before every merge, QA must have approved the latest commit and every
-  comment must be settled.
+  goes straight to `main`. Before every merge, QA must have approved the latest commit, every
+  comment must be settled, and CI must be green; `SQUAD.md` §4.9 has the details.
 - **A clean install.** Everything lives in a `.agent-squad/` folder that git ignores. The installer
   never overwrites your files, and `--check` tells you whether the installation works.
 - **Sessions that keep the thread.** Each session loads the rules when it starts, and a session
@@ -118,7 +118,7 @@ sequenceDiagram
   participant QA
   CEO->>CTO: What to build, and why
   CTO->>DEV: An issue with acceptance criteria
-  Note over DEV: Branch, code and tests.<br/>Pre-push gate: the checks pass,<br/>nothing goes straight to main.
+  Note over DEV: Branch, code and tests,<br/>through the pre-push gate.
   DEV->>QA: A pull request that closes the issue
   loop Until QA approves the latest commit
     QA->>DEV: One review: the code read, the claims tested, a verdict
@@ -126,7 +126,7 @@ sequenceDiagram
       DEV->>QA: Fixes in one push, or evidence against a finding
     end
   end
-  Note over DEV: Merge gate: approved on the latest commit,<br/>every comment settled, CI green.
+  Note over DEV: Through the merge gate.
   DEV->>CTO: Merged into main
   CTO->>CEO: Done, ready for you to try
 ```
@@ -194,8 +194,8 @@ To check the installation at any time, from the same folder:
 It changes nothing. It prints one line per item, `check: ok` or `check: FAILED` with the reason,
 exits with 1 if any item failed, and proves that the pre-push gate really refuses a failing check.
 Right after installing, the items on the *By hand* list fail until the CTO completes them. In a
-brand-new repository with no commits, so do the worktrees: the installer creates them when it runs
-again after the first commit.
+brand-new repository with no commits, so do the worktrees and the default branch: the installer
+sets both when it runs again after the first commit.
 
 
 ## 🗂️ What goes where
