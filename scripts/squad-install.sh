@@ -24,6 +24,12 @@ shim_marker="agent-squad pre-push shim"
 say() { printf 'install: %-10s %s\n' "$1" "$2"; }
 die() { echo "squad-install: $1" >&2; exit 2; }
 
+# Output whose reader has gone, as when it is piped into head, must not stop the installer halfway:
+# killed by SIGPIPE after the playbook and before install.log, an upgrade was once left half done
+# with its exit status hidden by the pipe (agent-squad #96). Ignored, the signal becomes a failed
+# write: a line is lost, not the steps after it. What the installer runs inherits the same.
+trap '' PIPE
+
 # Run from a hook, git's own variables would point every git command below at another repository.
 # shellcheck disable=SC2046 # the names are split on purpose, one variable each
 unset $(git rev-parse --local-env-vars 2>/dev/null)
@@ -270,14 +276,21 @@ gate_refusal() {
 }
 
 check_installation() {
-  local why version agent worktree changed expected actual path branch
+  local why version last agent worktree changed expected actual path branch
 
-  # 9 first, as the heading of the report: which version is installed, and since when.
+  # 9 first, as the heading of the report: which version is installed, and since when. The last
+  #   line of install.log must record that version's tag: an install cut short after the playbook
+  #   and before the log leaves one that does not (agent-squad #96).
   version="$(grep -o '^> \*\*Version:\*\* [0-9]*' "$playbook/SQUAD.md" 2>/dev/null | grep -o '[0-9]*$')"
-  if [ -n "$version" ]; then
-    verdict "installed version $version (install.log: $(tail -1 "$log" 2>/dev/null || echo none))" ""
-  else
+  last="$(tail -1 "$log" 2>/dev/null)"
+  if [ -z "$version" ]; then
     verdict "installed version" "no Version line in .agent-squad/playbook/SQUAD.md"
+  elif [ -z "$last" ]; then
+    verdict "installed version $version" "install.log records no install; install v$version again, which records it"
+  elif [ "${last##* }" != "v$version" ]; then
+    verdict "installed version $version" "install.log's last line records ${last##* }, not v$version: an install or upgrade may have been cut short; install v$version again, which records it"
+  else
+    verdict "installed version $version (install.log: $last)" ""
   fi
 
   # 1. The playbook is the tree that was installed, byte for byte.

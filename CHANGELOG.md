@@ -1,5 +1,16 @@
 # Changelog
 
+## v23 — 2026-09-29
+- **An install cut short is caught** (#96). `--check`'s version item now fails when the last line
+  of `install.log` does not record the installed version's tag, or when the log records no install,
+  and says to install that version again, which records it. An upgrade killed after the playbook
+  and before the log used to pass `--check` with a log one version behind.
+- **An installer whose output loses its reader finishes** (#96). The installer, and `install.sh`
+  (from `main`), ignore SIGPIPE: piped into `head`, a run used to die at its next write, after the
+  playbook and before `install.log`, `.gitignore`, the hooks, the shim and the worktrees, with its
+  exit status hidden by the pipe. A write that fails now loses a line, not the steps after it.
+  `install.sh`'s setting is inherited by the tag's installer, so it covers older tags too.
+
 ## v22 — 2026-09-29
 - **MIT License** (#94): `LICENSE` at the root is GitHub's own MIT template, so GitHub detects it,
   and the tag's tarball carries it into every installed playbook. The README says so in a

@@ -183,10 +183,18 @@ TEMPLATE
 git -C "$upstream" init -q -b main && git -C "$upstream" add -A \
   && git -C "$upstream" commit -qm upstream || exit 2
 git -C "$upstream" archive --prefix=gzurl-agent-squad-0123456/ HEAD | gzip > "$lab/va.tgz" || exit 2
-export GH_TAG=va GH_TARBALL="$lab/va.tgz"
 mkdir -p "$lab/va" && tar -xzf "$lab/va.tgz" -C "$lab/va" --strip-components=1 || exit 2
-# Tree B, the next version: one file changed, one removed, one added.
+# The tags are named after the version their tree's charter carries, vN for Version N, as real tags
+# are: --check compares that version with the last line of install.log.
+version_a="$(grep -o '^> \*\*Version:\*\* [0-9]*' "$lab/va/SQUAD.md" | grep -o '[0-9]*$')"
+[ -n "$version_a" ] || exit 2
+tag_a="v$version_a" tag_b="v$((version_a + 1))"
+export GH_TAG="$tag_a" GH_TARBALL="$lab/va.tgz"
+# Tree B, the next version: one file changed (its charter, whose version goes up), one removed, one
+# added.
 mkdir -p "$lab/vb" && cp -pR "$lab/va/." "$lab/vb/" || exit 2
+sed -i.orig "s/^> \*\*Version:\*\* $version_a /> **Version:** ${tag_b#v} /" "$lab/vb/SQUAD.md" \
+  && rm "$lab/vb/SQUAD.md.orig" && grep -q "^> \*\*Version:\*\* ${tag_b#v} " "$lab/vb/SQUAD.md" || exit 2
 echo "Changed in vb." >> "$lab/vb/SQUAD.md"
 rm "$lab/vb/BOOTSTRAP.md"
 echo "Added in vb." > "$lab/vb/ADDED-IN-VB.md"
@@ -232,7 +240,7 @@ dev="$squad/worktrees/dev"
 settings="$project/.claude/settings.local.json"
 
 # 1. A fresh install from the tag's tarball.
-out="$("$install" "$project" va 2>&1)"
+out="$("$install" "$project" "$tag_a" 2>&1)"
 code=$?
 check "a fresh install exits 0" [ "$code" -eq 0 ]
 check "the playbook is the tag's tree, file for file" same_tree "$squad/playbook" "$lab/va"
@@ -240,7 +248,7 @@ check "the playbook leaves out agent-squad's own AGENTS.md, CLAUDE.md, checks, C
   absent "$squad/playbook" AGENTS.md CLAUDE.md .agent-squad-checks .github/workflows \
   scripts/check-install.sh
 check "install.log has one line" [ "$(log_lines "$project")" -eq 1 ]
-check "which says none -> va" log_ends_with "$project" "none -> va"
+check "which says none -> $tag_a" log_ends_with "$project" "none -> $tag_a"
 check ".gitignore has .agent-squad/ and .claude/settings.local.json" \
   has_lines "$project/.gitignore" ".agent-squad/" ".claude/settings.local.json"
 check "the missing issue template was created from the playbook" \
@@ -270,12 +278,12 @@ check "and has the four squad hooks once each, the older entry replaced" \
 # 3. A second run changes nothing but the log, which gains one line.
 before="$(project_state "$project")"
 lines_before="$(log_lines "$project")"
-out="$("$install" "$project" va 2>&1)"
+out="$("$install" "$project" "$tag_a" 2>&1)"
 code=$?
 check "a second run exits 0" [ "$code" -eq 0 ]
 check "a second run changes no file, the git hooks included" [ "$before" = "$(project_state "$project")" ]
 check "a second run adds one line to install.log" [ "$(log_lines "$project")" -eq $((lines_before + 1)) ]
-check "which says va -> va" log_ends_with "$project" "va -> va"
+check "which says $tag_a -> $tag_a" log_ends_with "$project" "$tag_a -> $tag_a"
 check "a second run reports every step as already done" \
   matches_none "$out" "^install: [^ ]+ +(installed|added|wrote|rewrote|created|recorded|kept the project)"
 
@@ -323,13 +331,55 @@ echo evidence > "$squad/evidence/7/screen.txt"
 echo work > "$dev/work-in-progress.txt"
 runtime_state() { tree_state "$squad/worktrees"; tree_state "$squad/handoff"; tree_state "$squad/evidence"; }
 runtime_before="$(runtime_state)"
-out="$("$squad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$project" vb 2>&1)"
+out="$("$squad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$project" "$tag_b" 2>&1)"
 code=$?
 check "an upgrade exits 0" [ "$code" -eq 0 ]
 check "the playbook is now vb, file for file (one changed, one removed, one added)" \
   same_tree "$squad/playbook" "$lab/vb"
 check "worktrees/, handoff/ and evidence/ are untouched" [ "$runtime_before" = "$(runtime_state)" ]
-check "install.log ends with va -> vb" log_ends_with "$project" "va -> vb"
+check "install.log ends with $tag_a -> $tag_b" log_ends_with "$project" "$tag_a -> $tag_b"
+
+# 7b. --check's version item compares the playbook's version with the last line of install.log, the
+#     line an upgrade cut short never writes (#96).
+# `version_ok` passes when --check reports the version item as ok, whatever the other items say.
+version_ok() {
+  local out
+  out="$("$install" --check "$project" 2>&1)"
+  grep -qF "check: ok      installed version ${tag_b#v} (install.log: " <<<"$out"
+}
+check "with install.log's last line naming the installed version, the version item passes" version_ok
+item_version="installed version ${tag_b#v}"
+cp "$squad/install.log" "$lab/install.log.kept"
+sed -i.orig '$d' "$squad/install.log" && rm "$squad/install.log.orig"
+check "a log whose last line names an older tag fails the version item, saying which" \
+  check_reason "$item_version" "install.log's last line records $tag_a, not $tag_b"
+: > "$squad/install.log"
+check "an empty log fails it, saying so" check_reason "$item_version" "install.log records no install"
+rm "$squad/install.log"
+check "and so does a missing one" check_reason "$item_version" "install.log records no install"
+cp "$lab/install.log.kept" "$squad/install.log"
+check "with the log back, the version item passes again" version_ok
+
+# 7c. An upgrade whose output loses its reader, as when it is piped into head, still completes:
+#     every step runs, install.log records it, and the exit status is what it would be (#96). The
+#     output goes to a FIFO whose only reader is closed before the installer starts, so its first
+#     write fails, every time. The shim and a worktree are removed first, so that the upgrade's
+#     last steps have something to do.
+target="$(new_project no-reader)" || exit 2
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+rm "$target/.git/hooks/pre-push"
+git -C "$target" worktree remove --force "$target/.agent-squad/worktrees/qa" || exit 2
+mkfifo "$lab/no-reader.fifo" || exit 2
+exec 5<>"$lab/no-reader.fifo"
+exec 6>"$lab/no-reader.fifo"
+exec 5<&-
+"$install" --source "$lab/vb" "$target" "$tag_b" >&6 2>&6
+code=$?
+exec 6>&-
+check "an upgrade whose output has no reader exits 0, as it would with one" [ "$code" -eq 0 ]
+check "and records itself in install.log" log_ends_with "$target" "$tag_a -> $tag_b"
+check "and runs its steps after the log: the shim and the QA worktree are back" \
+  present "$target" .git/hooks/pre-push .agent-squad/worktrees/qa/.git
 
 # 8. A failed download or an incomplete tree leaves the installed playbook as it was.
 echo "not a tarball" > "$lab/broken.tgz"
@@ -354,7 +404,7 @@ check "and no failure wrote to install.log" matches_none "$(cat "$squad/install.
 # 9. With core.hooksPath set, the shim is not installed, the reason is printed and the exit is 1.
 other="$(new_project other)" || exit 2
 git -C "$other" config core.hooksPath .githooks
-out="$("$install" "$other" va 2>&1)"
+out="$("$install" "$other" "$tag_a" 2>&1)"
 code=$?
 check "with core.hooksPath set the installer exits 1" [ "$code" -eq 1 ]
 check "and says why" contains "$out" "pre-push   NOT INSTALLED: core.hooksPath is set"
@@ -362,7 +412,7 @@ check "and writes no shim" absent "$other" .git/hooks/pre-push
 check "while the other steps are done" present "$other" .agent-squad/playbook/SQUAD.md
 
 # 10. Only the main checkout is accepted.
-out="$("$install" "$dev" va 2>&1)"
+out="$("$install" "$dev" "$tag_a" 2>&1)"
 code=$?
 check "a linked worktree is refused with exit 2" [ "$code" -eq 2 ]
 check "and nothing is created in it" absent "$dev" .agent-squad
@@ -376,7 +426,7 @@ for kind in empty blank; do
     empty) : > "$target/.claude/settings.local.json" ;;
     blank) printf ' \n\t\n' > "$target/.claude/settings.local.json" ;;
   esac
-  out="$("$install" "$target" va 2>&1)"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
   code=$?
   check "an $kind settings.local.json exits 0" [ "$code" -eq 0 ]
   check "and gets the four hooks" jq_holds "$four_hooks" "$target/.claude/settings.local.json"
@@ -389,7 +439,7 @@ for kind in not-json two-objects; do
     two-objects) echo '{} {}' > "$target/.claude/settings.local.json" ;;
   esac
   cp -p "$target/.claude/settings.local.json" "$lab/settings-before"
-  out="$("$install" "$target" va 2>&1)"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
   code=$?
   check "a settings.local.json that is $kind exits 1" [ "$code" -eq 1 ]
   check "and says why" contains "$out" "hooks      NOT INSTALLED: .claude/settings.local.json is not one JSON object"
@@ -399,7 +449,7 @@ done
 # 12. A negation in the project's .gitignore is not taken for an ignore rule.
 target="$(new_project negations)" || exit 2
 printf '.agent-squad/\n!.agent-squad/\n*.json\n!.claude/settings.local.json\n' > "$target/.gitignore"
-out="$("$install" "$target" va 2>&1)"
+out="$("$install" "$target" "$tag_a" 2>&1)"
 check "a negated .agent-squad/ gets its ignore line, and is ignored in fact" \
   git -C "$target" check-ignore -q --no-index .agent-squad
 check "a negated .claude/settings.local.json too" \
@@ -407,12 +457,12 @@ check "a negated .claude/settings.local.json too" \
 # A negation in a nested .gitignore outranks the root one: appending cannot help.
 target="$(new_project nested-negation)" || exit 2
 mkdir -p "$target/.claude" && echo '!settings.local.json' > "$target/.claude/.gitignore"
-out="$("$install" "$target" va 2>&1)"
+out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
 check "a nested negation of settings.local.json exits 1" [ "$code" -eq 1 ]
 check "and says which rule wins" contains "$out" ".gitignore NOT IGNORED: .claude/settings.local.json would lose to .claude/.gitignore:1:!settings.local.json"
 check "and appends nothing" refused grep -qxF .claude/settings.local.json "$target/.gitignore"
-out="$("$install" "$target" va 2>&1)"
+out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
 check "nor on a second run, which says the same" \
   bash -c '[ "$1" -eq 1 ] && ! grep -qxF .claude/settings.local.json "$2" && grep -qF "NOT IGNORED" <<<"$3"' \
@@ -424,22 +474,22 @@ printf '#!/bin/sh\necho the project pre-push\n' > "$target/.git/hooks/pre-push"
 printf '#!/bin/sh\necho the project pre-push.local\n' > "$target/.git/hooks/pre-push.local"
 chmod +x "$target/.git/hooks/pre-push" "$target/.git/hooks/pre-push.local"
 hooks_before="$(tree_state "$target/.git/hooks")"
-out="$("$install" "$target" va 2>&1)"
+out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
 check "with pre-push and pre-push.local both the project's, the installer exits 1" [ "$code" -eq 1 ]
 check "and says why" contains "$out" "pre-push   NOT INSTALLED: pre-push and pre-push.local both exist"
 check "and leaves the git hooks as they were" [ "$hooks_before" = "$(tree_state "$target/.git/hooks")" ]
 target="$(new_project worktree-hooks-path)" || exit 2
-"$install" "$target" va >/dev/null 2>&1
+"$install" "$target" "$tag_a" >/dev/null 2>&1
 git -C "$target" config extensions.worktreeConfig true
 git -C "$target/.agent-squad/worktrees/dev" config --worktree core.hooksPath .githooks
-out="$("$install" "$target" va 2>&1)"
+out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
 check "core.hooksPath in a worktree's own configuration makes the installer exit 1" [ "$code" -eq 1 ]
 check "and says where" contains "$out" "pre-push   NOT INSTALLED: core.hooksPath is set ('.githooks' in .agent-squad/worktrees/dev)"
 target="$lab/no-origin"
 git init -q -b main "$target" || exit 2
-out="$("$install" "$target" va 2>&1)"
+out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
 check "without origin/main the installer exits 1" [ "$code" -eq 1 ]
 check "and says the worktrees were not created" contains "$out" "worktrees  NOT CREATED: .agent-squad/worktrees/dev"
@@ -598,14 +648,14 @@ check "with every breakage undone, --check passes again" check_reports
 # 15. By hand lists the squad's tracked files that are not committed yet, whatever run wrote them,
 #     and none once they are committed (#49).
 target="$(new_project uncommitted)" || exit 2
-"$install" "$target" va >/dev/null 2>&1
-out="$("$install" "$target" va 2>&1)"
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+out="$("$install" "$target" "$tag_a" 2>&1)"
 commit_item="$(grep 'Commit these files' <<<"$out")"
 check "a second run still lists the files the first one wrote and nobody committed" \
   bash -c 'grep -qF ".gitignore" <<<"$1" && grep -qF ".github/ISSUE_TEMPLATE/task.md" <<<"$1"' _ "$commit_item"
 check "and not the project's own template, which it did not change" lacks "$commit_item" "PULL_REQUEST_TEMPLATE"
 git -C "$target" add .gitignore .github && git -C "$target" commit -qm "the squad's tracked files"
-out="$("$install" "$target" va 2>&1)"
+out="$("$install" "$target" "$tag_a" 2>&1)"
 check "once they are committed, it lists none" lacks "$out" "Commit these files"
 
 # 16. A remote whose default branch is not main (#72). A project on trunk, complete: the worktrees
@@ -619,7 +669,7 @@ ln -s AGENTS.md "$lab/trunk-seed/CLAUDE.md"
 git -C "$lab/trunk-seed" add -A && git -C "$lab/trunk-seed" commit -qm seed \
   && git -C "$lab/trunk-seed" push -q "$lab/trunk.git" trunk || exit 2
 git clone -q "$lab/trunk.git" "$lab/on-trunk" || exit 2
-out="$("$install" "$lab/on-trunk" va 2>&1)"
+out="$("$install" "$lab/on-trunk" "$tag_a" 2>&1)"
 code=$?
 check "on a project whose default branch is trunk, the installer exits 0" [ "$code" -eq 0 ]
 for agent in dev qa; do
@@ -644,7 +694,7 @@ git init -q -b main "$lab/no-head" && git -C "$lab/no-head" remote add origin "$
 git -C "$lab/no-head" symbolic-ref --delete refs/remotes/origin/HEAD 2>/dev/null
 check "a checkout fetched without origin/HEAD has none before the install" \
   refused git -C "$lab/no-head" symbolic-ref -q refs/remotes/origin/HEAD
-out="$("$install" "$lab/no-head" va 2>&1)"
+out="$("$install" "$lab/no-head" "$tag_a" 2>&1)"
 check "the installer asks the remote, records origin/HEAD and says so" \
   contains "$out" "recorded origin/HEAD -> origin/trunk"
 check "so that the gate protects trunk there too" \
@@ -653,7 +703,7 @@ check "and the worktrees are at origin/trunk" \
   detached_at "$lab/no-head" "$lab/no-head/.agent-squad/worktrees/dev" trunk
 
 git init -q -b main "$lab/unknown" && git -C "$lab/unknown" remote add origin "$lab/no-such-remote.git" || exit 2
-out="$("$install" "$lab/unknown" va 2>&1)"
+out="$("$install" "$lab/unknown" "$tag_a" 2>&1)"
 code=$?
 check "when the remote cannot tell its default branch, the installer exits 1" [ "$code" -eq 1 ]
 check "and says it does not know it, instead of assuming main" contains "$out" "branch     NOT KNOWN"
@@ -664,7 +714,7 @@ check "and makes no worktree" absent "$lab/unknown" .agent-squad/worktrees/dev .
 # a set-head that would fail; after the bootstrap commit, pushed as the approved exception, the
 # second run records origin/HEAD and makes the worktrees.
 git init -q --bare -b main "$lab/empty.git" && git clone -q "$lab/empty.git" "$lab/new-project" 2>/dev/null || exit 2
-out="$("$install" "$lab/new-project" va 2>&1)"
+out="$("$install" "$lab/new-project" "$tag_a" 2>&1)"
 code=$?
 check "with an empty remote, the installer exits 1" [ "$code" -eq 1 ]
 check "and says the remote has no branch yet, to run it again after the first commit" \
@@ -675,7 +725,7 @@ printf '# the sandbox checks\ntrue\n' > "$lab/new-project/.agent-squad-checks"
 git -C "$lab/new-project" add .agent-squad-checks && git -C "$lab/new-project" commit -qm "the bootstrap commit"
 check "the bootstrap commit reaches main as the approved exception" \
   env SQUAD_MAIN_EXCEPTION='#1' git -C "$lab/new-project" push -q origin HEAD:refs/heads/main
-out="$("$install" "$lab/new-project" va 2>&1)"
+out="$("$install" "$lab/new-project" "$tag_a" 2>&1)"
 code=$?
 check "then a second run exits 0 and records origin/HEAD" \
   bash -c '[ "$1" -eq 0 ] && grep -qF "recorded origin/HEAD -> origin/main" <<<"$2"' _ "$code" "$out"

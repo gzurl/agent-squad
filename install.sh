@@ -35,6 +35,10 @@ vN (default: the latest), v$oldest or later, by running that tag's own scripts/s
   fail() { echo "install.sh: $1" >&2; exit 2; }
 
   exec </dev/null
+  # Output whose reader has gone, as when this is piped into head, must not stop an install
+  # halfway (agent-squad #96): ignored here, SIGPIPE stays ignored in the installer it runs, the
+  # older tags' included, and a write that fails loses a line, not the steps after it.
+  trap '' PIPE
   # The last argument is the word the last line passes; without it, the script was cut short.
   if [ "$#" -eq 0 ] || [ "${!#}" != end-of-install.sh ]; then
     fail "this copy of install.sh is incomplete, so it did nothing; download it again"
