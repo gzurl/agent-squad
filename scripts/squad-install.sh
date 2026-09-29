@@ -2,8 +2,9 @@
 # Install, upgrade or check the squad in a project (agent-squad #23): the tag's playbook in
 # <project>/.agent-squad/playbook/, the compaction hooks in .claude/settings.local.json, the
 # /squad-save-state command in .claude/commands/, a pre-push shim that runs the playbook's pre-push
-# gate, the GitHub templates the project lacks, and the DEV and QA worktrees. It never overwrites or deletes a file the project owns, prints one line per
-# action taken or skipped, and ends with what is left to do by hand.
+# gate, the GitHub templates the project lacks, and the DEV and QA worktrees. It never overwrites or
+# deletes a file the project owns, prints one line per action taken or skipped, and ends with what
+# is left to do by hand.
 #
 # Usage: squad-install.sh [--source <dir>] <project main checkout> <tag>
 #        squad-install.sh --check <project main checkout>
@@ -81,10 +82,11 @@ settings="$project/.claude/settings.local.json"
 # The /squad-save-state command (agent-squad #100): the playbook's file, and where Claude Code
 # finds it in the project.
 command_source="commands/squad-save-state.md"
-command_file="$project/.claude/commands/squad-save-state.md"
+command_path=".claude/commands/squad-save-state.md"
+command_file="$project/$command_path"
 # What stays out of the project's git: the squad's directory, Claude Code's local settings and the
 # command, all three written by the installer.
-ignored_paths=(.agent-squad .claude/settings.local.json .claude/commands/squad-save-state.md)
+ignored_paths=(.agent-squad .claude/settings.local.json "$command_path")
 needs_decision=0
 
 # `manifest <dir>` lists every file of a tree with its kind and content hash, so that two trees
@@ -108,6 +110,9 @@ ignored_by_project() {
   git -C "$project" check-ignore -q --no-index "$1" 2>/dev/null \
     && [ "$(git -C "$project" check-ignore -v --no-index "$1" 2>/dev/null | cut -d: -f1)" = .gitignore ]
 }
+# `tracked_by_project <path>` passes when git tracks the path in the project: the file is the
+# project's, whoever wrote it first.
+tracked_by_project() { git -C "$project" ls-files --error-unmatch -- "$1" >/dev/null 2>&1; }
 # `hooks_path_settings` prints where core.hooksPath is set, for the main checkout and each squad
 # worktree that exists (a worktree can set it in its own config.worktree): git never runs the
 # common hooks directory, and so the shim, from there.
@@ -328,9 +333,11 @@ check_installation() {
   fi
   verdict "the four hooks are in .claude/settings.local.json and point at the playbook" "$why"
 
-  # 11. The /squad-save-state command is the playbook's, byte for byte.
+  # 11. The /squad-save-state command is the playbook's, byte for byte, and not the project's.
   why=""
-  if [ ! -f "$command_file" ]; then
+  if tracked_by_project "$command_path"; then
+    why=".claude/commands/squad-save-state.md is tracked by git, so the project owns it: if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached; then install again"
+  elif [ ! -f "$command_file" ]; then
     why=".claude/commands/squad-save-state.md is missing; install again"
   elif ! cmp -s "$playbook/$command_source" "$command_file"; then
     why=".claude/commands/squad-save-state.md is not the playbook's; install again"
@@ -538,8 +545,13 @@ else
 fi
 
 # 3b. The /squad-save-state command (agent-squad #100), which the installer owns as it owns the
-#     hooks: written into .claude/commands/ from the playbook on every install, and git-ignored.
-if cmp -s "$playbook/$command_source" "$command_file"; then
+#     hooks: written into .claude/commands/ from the playbook on every install, and git-ignored. A
+#     file the project tracks at that path is the project's, and is left as it is (agent-squad
+#     #104), as a project's own pre-push is.
+if tracked_by_project "$command_path"; then
+  say command "NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git; it is left as it is: if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached; then run again"
+  needs_decision=1
+elif cmp -s "$playbook/$command_source" "$command_file"; then
   say command "/squad-save-state is already in .claude/commands/"
 else
   written="wrote"
