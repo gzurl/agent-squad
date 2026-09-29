@@ -1,5 +1,10 @@
 # Changelog
 
+## v22 — 2026-09-29
+- **MIT License** (#94): `LICENSE` at the root is GitHub's own MIT template, so GitHub detects it,
+  and the tag's tarball carries it into every installed playbook. The README says so in a
+  *License* section, which asks for a link back rather than requiring one.
+
 ## v21 — 2026-09-28
 - *Language*: **the reader decides** (#92). Messages between agents are written in English, like
   everything in the repository and on GitHub; everything addressed to the CEO, whoever writes it,

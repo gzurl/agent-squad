@@ -73,6 +73,7 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
 - [🗂️ What goes where](#️-what-goes-where)
 - [⚠️ Things to know](#️-things-to-know)
 - [📦 This repository](#-this-repository)
+- [📄 License](#-license)
 
 
 ## 💡 Why agent-squad
@@ -255,5 +256,13 @@ what, and when.
 | `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the compaction hooks, the merge gate, the checks runner and the pre-push gate | Yes |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |
+| `LICENSE` | The MIT License | Yes, so every installed playbook carries it |
 | `.gitattributes` | What a release leaves out | Yes, unused there |
 | `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
+
+
+## 📄 License
+
+agent-squad is released under the [MIT License](LICENSE): use it, change it and share it freely,
+keeping the copyright notice and the license text with it. If it shapes how your team works, a link
+back is appreciated.
