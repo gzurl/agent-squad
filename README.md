@@ -30,7 +30,8 @@ agent-squad needs both.
 - **A clean install.** Everything lives in a `.agent-squad/` folder that git ignores. The installer
   never overwrites your files, and `--check` tells you whether the installation works.
 - **Sessions that keep the thread.** Each session loads the rules when it starts, and a session
-  whose context gets compacted is handed back the state of the project.
+  whose context gets compacted is handed back the state of the project
+  ([how](#when-a-sessions-context-fills-up)).
 - **Versioned.** A project installs a release and upgrades when it chooses.
 
 
@@ -68,6 +69,7 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
 - [🔭 Overview](#-overview)
   - [Built on Claude Code and GitHub](#built-on-claude-code-and-github)
   - [How the team works](#how-the-team-works)
+  - [When a session's context fills up](#when-a-sessions-context-fills-up)
 - [📋 Requirements](#-requirements)
 - [🛠️ Install](#️-install)
 - [🗂️ What goes where](#️-what-goes-where)
@@ -139,6 +141,33 @@ disagreement between an author and QA. Every rule, with the incident that led to
 [SQUAD.md](SQUAD.md); the merge gate's exact conditions are in its §4.9.
 [BOOTSTRAP.md](BOOTSTRAP.md) is the CTO's one-time setup of a project.
 
+### When a session's context fills up
+
+A Claude Code session has a limited context. When it fills up, Claude Code compacts it: it replaces
+the conversation with a summary, and whatever the summary leaves out is gone. Left to itself, an
+agent can come back from a compaction without knowing which pull request it was reviewing, or what
+it had promised another agent. agent-squad guards against that in three ways:
+
+1. **It steers the summary.** `AGENTS.md` has a *Compact instructions* section that tells Claude
+   Code what every summary must keep: the agent's role, the issue and pull request it is working
+   on, the latest commit and verdict, the exact step it had reached, and anything it promised
+   another agent.
+2. **It saves the facts and hands them back.** Just before any compaction, manual or automatic, a
+   hook saves a snapshot of the project's state in `.agent-squad/handoff/`: the worktrees, the open
+   pull requests with their labels and verdicts, the issues in progress, in review or blocked, and
+   the latest commits on the main branch. When the session resumes, another hook hands the
+   snapshot back, with instructions to re-read the rules and the issue before doing anything else.
+3. **It keeps the real memory on GitHub.** Each agent leaves a short comment on its issue at every
+   step, and long runs write a `progress.log`. What is written there survives any compaction; what
+   was only in the agent's head may not.
+
+**What you can do:** `/context` shows how full a session's context is. When a session passes about
+80%, type `/squad-save-state` in it: its agent writes its state on its issue and tells you when it
+is ready. Then type `/compact`. If you type `/compact` without `/squad-save-state` right before it,
+a hook stops the compaction and reminds you; a second `/compact` within ten minutes goes ahead
+anyway. A compaction you choose, at a quiet moment, loses less than one that Claude Code triggers
+in the middle of a task, which no hook can stop.
+
 
 ## 📋 Requirements
 
@@ -175,10 +204,11 @@ version changes.
 
 The installer can run as often as you like, and it never overwrites or deletes a file your project
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
-`.claude/settings.local.json` and two lines to `.gitignore`, installs a small pre-push hook,
-creates the DEV and QA worktrees, and adds GitHub issue and pull request templates if the project
-has none. It prints every step, and ends with a *By hand* list of what it leaves to the CTO, who
-takes care of it while following `BOOTSTRAP.md`:
+`.claude/settings.local.json`, writes the `/squad-save-state` command into `.claude/commands/`, adds
+three lines to `.gitignore`, installs a small pre-push hook, creates the DEV and QA worktrees, and
+adds GitHub issue and pull request templates if the project has none. It prints every step, and ends
+with a *By hand* list of what it leaves to the CTO, who takes care of it while following
+`BOOTSTRAP.md`:
 
 - the *Squad* section of `AGENTS.md`, which loads the charter into every session (the installer
   prints it);
@@ -208,13 +238,14 @@ the installer touches only the files listed before it:
 
 ```
 <project>/
-├── AGENTS.md, CLAUDE.md → AGENTS.md   in git    your conventions, and the charter's import
-├── .agent-squad-checks                in git    the checks the pre-push gate runs
-├── .gitignore                         in git    ignores .agent-squad/ and the local settings
-├── .github/                           in git    issue and PR templates, only if you had none
-├── .claude/settings.local.json        ignored   the squad's four hooks, next to your settings
-├── .git/hooks/pre-push                in .git   runs the pre-push gate, after any hook you had
-└── .agent-squad/                      ignored
+├── AGENTS.md, CLAUDE.md → AGENTS.md      in git    your conventions, and the charter's import
+├── .agent-squad-checks                   in git    the checks the pre-push gate runs
+├── .gitignore                            in git    ignores .agent-squad/, the local settings, the command
+├── .github/                              in git    issue and PR templates, only if you had none
+├── .claude/settings.local.json           ignored   the squad's four hooks, next to your settings
+├── .claude/commands/squad-save-state.md  ignored   the /squad-save-state command
+├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
+└── .agent-squad/                         ignored
     ├── playbook/          the installed release: charter, scripts, templates
     ├── worktrees/         dev/ and qa/, plus one cto-<topic>/ per pull request of the CTO
     ├── handoff/           the snapshot saved before each compaction
@@ -254,6 +285,7 @@ what, and when.
 |---|---|---|
 | `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
 | `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and this guide | Yes |
+| `commands/squad-save-state.md` | The `/squad-save-state` command | Yes; the installer copies it into `.claude/commands/` |
 | `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the compaction hooks, the merge gate, the checks runner and the pre-push gate | Yes |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |
