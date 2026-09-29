@@ -249,6 +249,10 @@ GATE_INLINE="$(jq -n --arg b "$bold" '[$b]')"
 export GATE_INLINE
 findings "a bold finding posted inline, where it is a review thread" 0 '[]'
 unset GATE_INLINE
+#     Only a line that starts with Settled: settles a finding: one that mentions it inside a
+#     sentence, as a finding about the convention itself would, does not (#114).
+findings "a finding that only mentions Settled: inside a line, not settled" 1 \
+  "$(jq -n --arg b "$bold"$'\n\nEnd it with a `Settled: <URL>` line once the README is fixed.' '[$b]')"
 
 # 2. Behind, with no file in common: main gains a commit that touches README.md and other.txt and
 #    adds two files: `a`, which the description only seems to name ("a note"), and `notes`, which
