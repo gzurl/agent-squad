@@ -43,9 +43,19 @@ unsettled="$(gh api --paginate --slurp "repos/$repo/issues/$pr/comments" \
   | jq -r '[add[] | select((.body | split("\n") | first | test("^👩🏼‍🔬\\[QA\\]: \\S+ \\[P[123]\\]")) and (.body | test("\nSettled: ") | not))] | length')"
 [ "$unsettled" = "0" ] || fail "$unsettled body-only finding(s) without a Settled: line"
 
-# 4. The PR carries the approved status label.
-labelled="$(gh api "repos/$repo/pulls/$pr" --jq '[.labels[].name] | any(startswith("✅ status:approved"))')"
-[ "$labelled" = "true" ] || fail "PR does not carry ✅ status:approved"
+# 4. The PR carries the approved status label, and no other of the three state labels: with two, a
+#    reader cannot tell which is current (agent-squad #99).
+states="$(gh api "repos/$repo/pulls/$pr" \
+  --jq '[.labels[].name | select(test("status:(in-review|in-progress|approved)$"))] | "\(length)\t\(join(", "))"')" \
+  || fail "cannot read the labels of PR #$pr"
+case "${states%%$'\t'*}" in
+  0|1) ;;
+  *) fail "PR carries ${states%%$'\t'*} state labels, where one is the rule: ${states#*$'\t'}. Keep only the current one (✅ status:approved, if QA approved the head) and remove the others" ;;
+esac
+case ", ${states#*$'\t'}, " in
+  *", ✅ status:approved, "*) ;;
+  *) fail "PR does not carry ✅ status:approved" ;;
+esac
 
 # 5. CI ran on the head and every check run succeeded; no runs at all is not green.
 runs="$(gh api "repos/$repo/commits/$head/check-runs" --jq '"\(.check_runs | length) \([.check_runs[] | select(.conclusion != "success")] | length)"')"
