@@ -396,6 +396,24 @@ check "a changed /squad-save-state is rewritten on the next install, saying so" 
 check "and is the playbook's again" cmp -s "$target/.agent-squad/playbook/commands/squad-save-state.md" \
   "$target/.claude/commands/squad-save-state.md"
 
+# 7e. A project that tracks a file of its own at that path keeps it: the install leaves it, says so
+#     as a step marked NOT and exits 1, and --check fails the command item (#104).
+target="$(new_project tracked-command)" || exit 2
+mkdir -p "$target/.claude/commands" \
+  && echo "The project's own command." > "$target/.claude/commands/squad-save-state.md" \
+  && git -C "$target" add .claude/commands/squad-save-state.md \
+  && git -C "$target" commit -qm "a command of the project's own" || exit 2
+out="$("$install" "$target" "$tag_a" 2>&1)"
+code=$?
+check "a tracked command of the project's own makes the install exit 1" [ "$code" -eq 1 ]
+check "and the install says the file is the project's" \
+  contains "$out" "install: command    NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git"
+check "and leaves it byte for byte" \
+  [ "$(cat "$target/.claude/commands/squad-save-state.md")" = "The project's own command." ]
+out="$("$install" --check "$target" 2>&1)"
+check "and --check fails the command item, saying that the project owns the file" \
+  contains "$out" "check: FAILED  $item_command: .claude/commands/squad-save-state.md is tracked by git, so the project owns it"
+
 # 8. A failed download or an incomplete tree leaves the installed playbook as it was.
 echo "not a tarball" > "$lab/broken.tgz"
 out="$(GH_TAG=vc GH_TARBALL="$lab/broken.tgz" "$install" "$project" vc 2>&1)"
