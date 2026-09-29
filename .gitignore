@@ -2,4 +2,6 @@
 .agent-squad/
 # Claude Code's local settings: the squad's hooks and approved permissions
 .claude/settings.local.json
+# The /squad-save-state command, which the installer writes from the playbook
+.claude/commands/squad-save-state.md
 .DS_Store
