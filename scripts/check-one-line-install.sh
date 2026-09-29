@@ -29,8 +29,9 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # STUB_AUTH=fail and STUB_REPO=fail make the login and the repository unreadable, STUB_CONTENTS=fail
 # makes the installer's download fail, STUB_CONTENTS=empty makes it succeed with nothing, and
 # STUB_CONTENTS=slow makes it wait. The installer it serves
-# records its arguments and what it reads on stdin, prints a line, may wait (STUB_INSTALLER_SLEEP)
-# and exits with STUB_INSTALLER_EXIT.
+# records its arguments and what it reads on stdin, prints a line, records that it got past it,
+# may wait (STUB_INSTALLER_SLEEP) and exits with STUB_INSTALLER_EXIT. Like every tag's installer
+# before v23, it does not ignore SIGPIPE itself.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -50,6 +51,7 @@ case "$1 ${2:-}" in
 printf '%s\n' "$@" > "$STUB_LAB/installer-args"
 if IFS= read -r line; then echo "read: $line"; else echo "nothing"; fi > "$STUB_LAB/installer-stdin"
 echo "fake installer of $2"
+echo finished > "$STUB_LAB/installer-finished"
 [ -z "${STUB_INSTALLER_SLEEP:-}" ] || sleep "$STUB_INSTALLER_SLEEP"
 exit "${STUB_INSTALLER_EXIT:-0}"
 INSTALLER
@@ -234,6 +236,23 @@ if [ "$count" -gt 50 ] && [ -z "$acted" ]; then
   pass "cut short at any of $count points, the script asks GitHub nothing and installs nothing"
 else
   fail "cut short, the script acted at byte(s):$acted (of $count cuts)"
+fi
+
+#    Output whose reader has gone, as when the one-line install is piped into head, stops neither
+#    install.sh nor the installer it runs, which inherits the ignored SIGPIPE (#96). The output
+#    goes to a FIFO whose only reader is closed before install.sh starts, so every write fails.
+rm -f "$lab/calls" "$lab/installer-args" "$lab/installer-finished"
+mkfifo "$lab/no-reader.fifo" || exit 2
+exec 5<>"$lab/no-reader.fifo"
+exec 6>"$lab/no-reader.fifo"
+exec 5<&-
+(cd "$project" && PATH="$lab/bin:$PATH" TMPDIR="$lab/tmp" "$script" --tag v16 "$project" >&6 2>&6 </dev/null)
+code=$?
+exec 6>&-
+if [ "$code" -eq 0 ] && installed v16 && [ -e "$lab/installer-finished" ]; then
+  pass "with no reader for its output, install.sh runs the installer through to its end, exit 0"
+else
+  fail "with no reader for its output: exit $code, the installer finished: $([ -e "$lab/installer-finished" ] && echo yes || echo no)"
 fi
 
 # 6. TMPDIR is left as it was: after the runs above, which succeeded and failed, and after runs
