@@ -9,11 +9,15 @@
 - **The installer leaves a project-tracked `.claude/commands/squad-save-state.md` alone** (#104).
   A file the project tracks at that path is the project's: the install marks the step NOT and
   exits 1, as it does for a project's own `pre-push`, and `--check`'s command item fails on it.
-- **The PR that commits the installer's files needs no issue of its own** (#107). Its content was
-  decided and reviewed upstream, in the release it installs; its description names that release
-  and each *By hand* item it records, and QA checks that it commits exactly what the installer
-  wrote. `BOOTSTRAP.md`, *The installer's files*, says so, and the README says that an upgrade that
-  changes a file that belongs in git lists it under *By hand*.
+  Both say which way out fits: rename a command of the project's own, since untracking it would
+  have the next install overwrite it; untrack the squad's command committed by mistake.
+- §3: **the PR that commits the installer's files needs no issue of its own** (#107), at the first
+  install and at every upgrade that changes a tracked file, such as a new `.gitignore` line. It is
+  §3's second exception to "every PR closes an issue": its content was decided and reviewed
+  upstream, in the release it installs; its description names that release and each *By hand*
+  item it records, and QA checks that it commits exactly what the installer wrote. `BOOTSTRAP.md`,
+  *The installer's files*, says the same, and the README says that such an upgrade lists the file
+  under *By hand* and the CTO commits it through a pull request.
 
 ## v24 — 2026-09-29
 - **`/squad-save-state` before a compaction** (#100): a command, which the installer writes into
