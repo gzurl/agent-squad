@@ -39,6 +39,8 @@ Two situations are different throughout:
 ## The installer's files
 What the installer lists under *By hand* (rows 9b and 10) and the tracked files it changed (`.gitignore`, and the GitHub templates when it created them) reach `main` through one PR, like any change; in an empty repository the bootstrap commit of row 5 comes first. The main checkout stays on `main`, so write the PR in a worktree, `git worktree add .agent-squad/worktrees/cto-squad -b chore/squad origin/main`, copy there the tracked files the installer changed, and open the PR from it; remove the worktree after the merge. Before pulling in the main checkout, clear the installer's changes there, or `git pull --ff-only` refuses to overwrite them: `git checkout -- <file>` for each tracked file it modified, and delete each file it created.
 
+The same holds at every upgrade that changes a tracked file, such as a new `.gitignore` line. At the first install and at every such upgrade, this PR needs no issue of its own (SQUAD.md §3): its content was decided and reviewed upstream, in the release it installs, and its description names that release and each *By hand* item it records.
+
 ## Compact instructions template for `AGENTS.md`
 ```
 ## Compact instructions

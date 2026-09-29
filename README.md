@@ -200,7 +200,8 @@ gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/
 
 **To upgrade, run the same line again.** Then let the agents know: a running session keeps the
 rules it loaded until it restarts or is compacted. [CHANGELOG.md](CHANGELOG.md) says what each
-version changes.
+version changes. When an upgrade changes a file that belongs in git, such as a new `.gitignore`
+line, its *By hand* list says so, and the CTO commits it through a pull request.
 
 The installer can run as often as you like, and it never overwrites or deletes a file your project
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
