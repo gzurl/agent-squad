@@ -1,14 +1,15 @@
 # Changelog
 
 ## v25 — 2026-09-29
-- §3: **a PR or an issue carries one state label** (#99). Whoever sets a state label removes the
+- §3: **a PR or an issue carries no more than one state label** (#99). Whoever sets a state label removes the
   other two in the same command, never listing the label it adds among those it removes: when one
   `gh pr edit` adds and removes the same label, the removal wins and the PR is left with none. The
   merge gate refuses a PR that carries more than one of the three state labels, naming them (§4.9).
   Twice in one day a PR carried two states, each side having removed only the label it had added.
 - **The installer leaves a project-tracked `.claude/commands/squad-save-state.md` alone** (#104).
   A file the project tracks at that path is the project's: the install marks the step NOT and
-  exits 1, as it does for a project's own `pre-push`, and `--check`'s command item fails on it.
+  exits 1, as it does for any step that needs a decision (a `core.hooksPath`, for instance), and
+  `--check`'s command item fails on it.
   Both say which way out fits: rename a command of the project's own, since untracking it would
   have the next install overwrite it; untrack the squad's command committed by mistake.
 - §3: **the PR that commits the installer's files needs no issue of its own** (#107), at the first

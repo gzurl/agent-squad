@@ -546,8 +546,8 @@ fi
 
 # 3b. The /squad-save-state command (agent-squad #100), which the installer owns as it owns the
 #     hooks: written into .claude/commands/ from the playbook on every install, and git-ignored. A
-#     file the project tracks at that path is the project's, and is left as it is (agent-squad
-#     #104), as a project's own pre-push is.
+#     file the project tracks at that path is the project's: it is left as it is, and the step
+#     needs a decision (agent-squad #104).
 if tracked_by_project "$command_path"; then
   say command "NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git; it is left as it is: if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached; then run again"
   needs_decision=1

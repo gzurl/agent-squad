@@ -100,6 +100,8 @@ case "$endpoint" in
       json="$(jq '.files = [range(300) | {filename: "bulk/\(.)"}]' <<<"$json")"
     fi ;;
   repos/o/r/pulls/7)
+    # GATE_LABELS=unreadable makes the call that reads the labels fail, and only that one.
+    if [ "${GATE_LABELS:-}" = unreadable ]; then case "$filter" in *labels*) echo "gh: HTTP 502" >&2; exit 1 ;; esac; GATE_LABELS="[]"; fi
     json="$(jq -n --arg head "$head" --arg body "${PR_BODY:-}" --argjson labels "${GATE_LABELS:-[\"✅ status:approved\"]}" \
       '{head: {sha: $head}, base: {ref: "main"}, labels: [$labels[] | {name: .}], body: $body}')" ;;
   *) exit 1 ;;
@@ -185,6 +187,14 @@ export GATE_LABELS='["📝 docs","✅ status:approved","🟡 P2"]'
 run_gate
 unset GATE_LABELS
 result_unchanged "approved, with labels that are not states"
+#     A label list that cannot be read stops the gate, and a state is a name that ends in one of the
+#     three: a bare one counts, a name that only contains one does not.
+labels_refused "unreadable label list" unreadable "cannot read the labels of PR #7"
+labels_refused "approved and a bare in-review" '["✅ status:approved","status:in-review"]' "PR carries 2 state labels"
+export GATE_LABELS='["✅ status:approved","⛔ status:blocked","🔁 status:in-review-2"]'
+run_gate
+unset GATE_LABELS
+result_unchanged "approved, with blocked and a name that only contains a state"
 
 # 2. Behind, with no file in common: main gains a commit that touches README.md and other.txt and
 #    adds two files: `a`, which the description only seems to name ("a note"), and `notes`, which

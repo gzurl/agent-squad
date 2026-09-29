@@ -4,11 +4,11 @@
 # SQUAD.md §4.9's command, which reaches this script through the playbook from any worktree,
 #   p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" &&
 #   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
-# cannot merge over an open thread, a stale verdict, a missing label, an unsettled body-only
-# finding, a red or absent CI, or a head that moved between the check and the merge. When the PR is
-# behind its base, it says what the base changed since (agent-squad #64), and stops when the base
-# changed a file the PR changes too, until the author acknowledges that base with
-# SQUAD_BEHIND_CHECKED (agent-squad #80).
+# cannot merge over an open thread, a stale verdict, a missing label or a second state label, an
+# unsettled body-only finding, a red or absent CI, or a head that moved between the check and the
+# merge. When the PR is behind its base, it says what the base changed since (agent-squad #64),
+# and stops when the base changed a file the PR changes too, until the author acknowledges that
+# base with SQUAD_BEHIND_CHECKED (agent-squad #80).
 #
 # Usage: [SQUAD_BEHIND_CHECKED=<base sha>] squad-merge-gate.sh <pr-number> [owner/repo]
 # Exit: 0 may be merged; 1 a condition failed; 2 bad usage; 3 behind a base that changed a file the
