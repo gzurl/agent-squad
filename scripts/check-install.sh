@@ -396,6 +396,27 @@ check "a changed /squad-save-state is rewritten on the next install, saying so" 
 check "and is the playbook's again" cmp -s "$target/.agent-squad/playbook/commands/squad-save-state.md" \
   "$target/.claude/commands/squad-save-state.md"
 
+# 7e. A project that tracks a file of its own at that path keeps it: the install leaves it, says so
+#     as a step marked NOT and exits 1, and --check fails the command item (#104).
+target="$(new_project tracked-command)" || exit 2
+mkdir -p "$target/.claude/commands" \
+  && echo "The project's own command." > "$target/.claude/commands/squad-save-state.md" \
+  && git -C "$target" add .claude/commands/squad-save-state.md \
+  && git -C "$target" commit -qm "a command of the project's own" || exit 2
+out="$("$install" "$target" "$tag_a" 2>&1)"
+code=$?
+check "a tracked command of the project's own makes the install exit 1" [ "$code" -eq 1 ]
+# Both messages say which way out fits which case: untracking a command of the project's own would
+# have the next install overwrite it.
+advice="if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached"
+check "and the install says the file is the project's, and which way out fits which case" \
+  contains "$out" "install: command    NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git; it is left as it is: $advice; then run again"
+check "and leaves it byte for byte" \
+  [ "$(cat "$target/.claude/commands/squad-save-state.md")" = "The project's own command." ]
+out="$("$install" --check "$target" 2>&1)"
+check "and --check fails the command item, saying that the project owns the file and which way out fits" \
+  contains "$out" "check: FAILED  $item_command: .claude/commands/squad-save-state.md is tracked by git, so the project owns it: $advice; then install again"
+
 # 8. A failed download or an incomplete tree leaves the installed playbook as it was.
 echo "not a tarball" > "$lab/broken.tgz"
 out="$(GH_TAG=vc GH_TARBALL="$lab/broken.tgz" "$install" "$project" vc 2>&1)"
