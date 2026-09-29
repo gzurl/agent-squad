@@ -1,5 +1,19 @@
 # Changelog
 
+## v24 — 2026-09-29
+- **`/squad-save-state` before a compaction** (#100): a command, which the installer writes into
+  `.claude/commands/` and git-ignores and which `--check` verifies (11 items now), has the agent
+  record on GitHub the decisions not there yet, write its exact state on its issue, and tell the
+  CEO it is ready. The pre-compact hook stops a manual `/compact` that does not come right after
+  it and lets a second one through within ten minutes; it never stops an automatic compaction, and
+  lets a compaction through when it cannot read the transcript. §7's third defence and
+  `BOOTSTRAP.md` row 10b say so, and the README explains compaction in *When a session's context
+  fills up*.
+- **Tools that walk the worktrees** (#98): Jest, Metro and Watchman walk into
+  `.agent-squad/worktrees/` by default. §2.4 and the README say so, `BOOTSTRAP.md` row 9b checks
+  that the project's test runner collects nothing there, and `templates/AGENTS.md` has the
+  settings that exclude it.
+
 ## v23 — 2026-09-29
 - **An install cut short is caught** (#96). `--check`'s version item now fails when the last line
   of `install.log` does not record the installed version's tag, or when the log records no install,
