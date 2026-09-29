@@ -82,7 +82,8 @@ jq_holds() { jq -e "$1" "$2" >/dev/null; }
 # The items of --check, as it names them.
 item_playbook="playbook/ is complete and unmodified"
 item_hooks="the four hooks are in .claude/settings.local.json and point at the playbook"
-item_ignore=".gitignore ignores .agent-squad/ and .claude/settings.local.json"
+item_ignore=".gitignore ignores .agent-squad/, .claude/settings.local.json and .claude/commands/squad-save-state.md"
+item_command="the /squad-save-state command in .claude/commands/ is the playbook's"
 item_shim="the pre-push shim is installed and core.hooksPath is unset"
 item_gate="the gate refuses a failing check and lets a passing one through"
 item_list=".agent-squad-checks exists and is tracked"
@@ -97,7 +98,7 @@ check_reports() {
   code=$?
   failed="$(sed -n 's/^check: FAILED  \([^:]*\):.*/\1/p' <<<"$out" | LC_ALL=C sort)"
   if [ $# -eq 0 ]; then
-    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 10 ]
+    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 11 ]
   else
     [ "$code" -eq 1 ] && [ "$failed" = "$(printf '%s\n' "$@" | LC_ALL=C sort)" ]
   fi
@@ -249,8 +250,11 @@ check "the playbook leaves out agent-squad's own AGENTS.md, CLAUDE.md, checks, C
   scripts/check-install.sh
 check "install.log has one line" [ "$(log_lines "$project")" -eq 1 ]
 check "which says none -> $tag_a" log_ends_with "$project" "none -> $tag_a"
-check ".gitignore has .agent-squad/ and .claude/settings.local.json" \
-  has_lines "$project/.gitignore" ".agent-squad/" ".claude/settings.local.json"
+check ".gitignore has .agent-squad/, .claude/settings.local.json and the command" \
+  has_lines "$project/.gitignore" ".agent-squad/" ".claude/settings.local.json" \
+  ".claude/commands/squad-save-state.md"
+check "the /squad-save-state command is in .claude/commands/, as the playbook has it" \
+  cmp -s "$squad/playbook/commands/squad-save-state.md" "$project/.claude/commands/squad-save-state.md"
 check "the missing issue template was created from the playbook" \
   cmp -s "$squad/playbook/.github/ISSUE_TEMPLATE/task.md" "$project/.github/ISSUE_TEMPLATE/task.md"
 check "the project's own PR template was kept" \
@@ -381,6 +385,17 @@ check "and records itself in install.log" log_ends_with "$target" "$tag_a -> $ta
 check "and runs its steps after the log: the shim and the QA worktree are back" \
   present "$target" .git/hooks/pre-push .agent-squad/worktrees/qa/.git
 
+# 7d. The installer owns the /squad-save-state command as it owns the hooks: a changed one is
+#     rewritten from the playbook on the next install (#100).
+target="$(new_project command-rewrite)" || exit 2
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+echo "An edit." >> "$target/.claude/commands/squad-save-state.md"
+out="$("$install" "$target" "$tag_a" 2>&1)"
+check "a changed /squad-save-state is rewritten on the next install, saying so" \
+  contains "$out" "install: command    rewrote /squad-save-state into .claude/commands/"
+check "and is the playbook's again" cmp -s "$target/.agent-squad/playbook/commands/squad-save-state.md" \
+  "$target/.claude/commands/squad-save-state.md"
+
 # 8. A failed download or an incomplete tree leaves the installed playbook as it was.
 echo "not a tarball" > "$lab/broken.tgz"
 out="$(GH_TAG=vc GH_TARBALL="$lab/broken.tgz" "$install" "$project" vc 2>&1)"
@@ -500,7 +515,7 @@ check "and creates none" absent "$target" .agent-squad/worktrees/dev .agent-squa
 printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$project/AGENTS.md"
 ln -s AGENTS.md "$project/CLAUDE.md"
 before="$(project_state "$project")$(cat "$squad/install.log")"
-check "--check passes on a complete installation, ten items ok" check_reports
+check "--check passes on a complete installation, eleven items ok" check_reports
 check "and changes nothing, the install log included" \
   [ "$before" = "$(project_state "$project")$(cat "$squad/install.log")" ]
 # `broken <file>` keeps a copy of a file about to be broken; `mended <file>` puts it back.
@@ -521,6 +536,19 @@ broken "$project/.gitignore"
 grep -vx ".claude/settings.local.json" "$lab/mend.me" > "$project/.gitignore"
 check "a missing ignore line fails the .gitignore item" check_reports "$item_ignore"
 mended "$project/.gitignore"
+
+broken "$project/.gitignore"
+grep -vx ".claude/commands/squad-save-state.md" "$lab/mend.me" > "$project/.gitignore"
+check "a missing ignore line for the command fails the .gitignore item" check_reports "$item_ignore"
+mended "$project/.gitignore"
+
+command_file="$project/.claude/commands/squad-save-state.md"
+broken "$command_file"
+echo "An edit." >> "$command_file"
+check "a modified /squad-save-state fails the command item" check_reports "$item_command"
+rm "$command_file"
+check "a missing one fails it too" check_reports "$item_command"
+mended "$command_file"
 
 broken "$project/.gitignore"
 echo '!.agent-squad/' >> "$project/.gitignore"
@@ -682,7 +710,7 @@ reports_on() {
   shift
   check_reports "$@"
 }
-check "and --check passes its ten items" reports_on "$lab/on-trunk"
+check "and --check passes its eleven items" reports_on "$lab/on-trunk"
 echo "a change" >> "$lab/on-trunk/.agent-squad/worktrees/dev/.agent-squad-checks"
 git -C "$lab/on-trunk/.agent-squad/worktrees/dev" commit -qam "a change"
 errors="$(git -C "$lab/on-trunk/.agent-squad/worktrees/dev" push -q origin HEAD:refs/heads/trunk 2>&1)"
