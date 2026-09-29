@@ -159,7 +159,7 @@ QA's review checklist, every item answered in the review body:
 - [ ] the body states the reviewed SHA, and its last line is the verdict.
 
 ## 6. Communication
-Every member has a signature: the member's emoji, the text tag and a colon, in bold, then a space, with no space between emoji and tag. It is written in bold everywhere: on GitHub, in messages between agents, in messages to the CEO and in end-of-turn summaries. *The bold sets the author apart from the text around it, the emoji identifies the author at a glance, the text stays searchable, and the colon separates the author from the message. The CEO asked for the bold: in a long thread, a plain signature blends into the text.* A line MUST NOT start with `[ROLE]:`. *Markdown reads `[label]: word` as a link definition: it hides the line and turns later `[ROLE]` mentions into links. The emoji-first order prevents it by construction.*
+Every member has a signature: the member's emoji, the text tag and a colon, in bold, then a space, with no space between emoji and tag. It is written in bold everywhere: on GitHub, in messages between agents, in messages to the CEO and in end-of-turn summaries. *The bold sets the author apart from the text around it, the emoji identifies the author at a glance, the text stays searchable, and the colon separates the author from the message. The CEO asked for the bold, to tell the signature from the rest of the text.* A line MUST NOT start with `[ROLE]:`. *Markdown reads `[label]: word` as a link definition: it hides the line and turns later `[ROLE]` mentions into links. The emoji-first order prevents it by construction.*
 
 | Member | Signature |
 |---|---|
