@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Squad handoff for context compaction (SQUAD.md §7).
 #
-#   save     PreCompact hook: snapshot the objective state of the project into a per-session file.
+#   save     PreCompact hook: snapshot the objective state of the project into a per-session file,
+#            then gate a manual /compact on /squad-save-state (agent-squad #100).
 #   restore  SessionStart(compact) hook: print that snapshot plus re-orientation instructions, so
 #            that it is re-injected into the compacted session's context.
 #   startup  SessionStart(startup) hook: print a one-line warning when the charter is not installed,
@@ -10,7 +11,8 @@
 # save and restore read the hook's JSON payload on stdin and key the file by session_id, so the
 # script works for any role without knowing which session it runs in. Snapshots live in the main
 # checkout's .agent-squad/handoff/, the same directory from every linked worktree. It never fails
-# the hook: on any error it prints what it has and exits 0.
+# the hook: on any error it prints what it has and exits 0. The one exception is the gate, which
+# stops a manual /compact on purpose with exit 2.
 set -u
 
 action="${1:-}"
@@ -110,11 +112,74 @@ snapshot() {
   fi
 }
 
+# The pre-compact gate. A manual /compact goes through when the last thing the user or another
+# agent did in this session was /squad-save-state, which has the agent write its state on GitHub
+# first; otherwise it is stopped with exit 2 and a line on stderr, which Claude Code shows the
+# user. An automatic compaction is never stopped. A second manual /compact within ten minutes of a
+# stopped one goes through, so that the gate can always be passed. What it cannot read or
+# understand lets the compaction through, saying so: a gate that locks the user out is worse than
+# none. Claude Code gives the trigger in the hook's input, and the transcript's format is not
+# documented as stable: the entries relied on are recorded on agent-squad #100.
+hatch_seconds=600
+# The last entry in which the user or another agent did something: a user entry that is not a tool
+# result, not meta unless it is a message from another agent (command expansions, reminders and
+# caveats are meta), not a local command's echo (a stopped /compact leaves one) and not a
+# compaction summary. It prints that entry's text as a JSON string, one per line.
+# shellcheck disable=SC2016 # a jq program: its $names are jq's
+turn_filter='select(.type == "user" and (.isCompactSummary | not))
+  | .message.content as $content
+  | select(($content | type) == "string" or (($content | type) == "array" and ($content | any(.type != "tool_result"))))
+  | select(.isMeta != true or .origin.kind == "peer")
+  | (if ($content | type) == "string" then $content else [$content[] | select(.type == "text") | .text] | join("\n") end)
+  | select((startswith("<local-command-") or test("<command-name>/compact</command-name>")) | not)'
+# `unchecked <why>` lets the compaction through, saying why it was not checked.
+unchecked() {
+  echo "squad: could not check for /squad-save-state before this /compact ($1), so it goes ahead" >&2
+  exit 0
+}
+compact_gate() {
+  local trigger transcript turns last blocked_file blocked_at now
+  command -v jq >/dev/null 2>&1 || unchecked "jq is missing"
+  trigger="$(printf '%s' "$payload" | jq -r '.trigger // empty' 2>/dev/null)"
+  case "$trigger" in
+    auto) return 0 ;;
+    manual) ;;
+    *) unchecked "the hook's input says neither manual nor auto" ;;
+  esac
+  [ -n "$session_id" ] || unchecked "the hook's input names no session"
+  transcript="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)"
+  if [ -z "$transcript" ] || [ ! -r "$transcript" ]; then
+    unchecked "the transcript cannot be read"
+  fi
+  turns="$(jq -c "$turn_filter" "$transcript" 2>/dev/null)" || unchecked "the transcript cannot be understood"
+  [ -n "$turns" ] || unchecked "the transcript shows nothing the user did"
+  last="$(tail -n 1 <<<"$turns" | jq -r . 2>/dev/null)"
+  blocked_file="$handoff_dir/$session_id.blocked"
+  # The command's own entry starts with its markup; a message that only quotes it does not count.
+  case "$last" in
+    "<command-message>squad-save-state</command-message>"*|"<command-name>/squad-save-state</command-name>"*)
+      rm -f "$blocked_file"
+      return 0 ;;
+  esac
+  now="$(date +%s)"
+  blocked_at="$(cat "$blocked_file" 2>/dev/null)"
+  case "$blocked_at" in ''|*[!0-9]*) blocked_at="" ;; esac
+  if [ -n "$blocked_at" ] && [ "$((now - blocked_at))" -le "$hatch_seconds" ]; then
+    rm -f "$blocked_file"
+    echo "squad: a second /compact within 10 minutes of a stopped one goes ahead without /squad-save-state" >&2
+    return 0
+  fi
+  mkdir -p "$handoff_dir" 2>/dev/null && echo "$now" > "$blocked_file"
+  echo "squad: run /squad-save-state first, so that this session writes its state on GitHub; then type /compact again. A second /compact within 10 minutes goes ahead without it." >&2
+  exit 2
+}
+
 case "$action" in
   save)
-    [ -n "$session_id" ] || exit 0
-    mkdir -p "$handoff_dir" 2>/dev/null || exit 0
-    snapshot > "$handoff_file" 2>/dev/null || true
+    if [ -n "$session_id" ] && mkdir -p "$handoff_dir" 2>/dev/null; then
+      snapshot > "$handoff_file" 2>/dev/null || true
+    fi
+    compact_gate
     ;;
   restore)
     echo "Context was compacted. Re-orient before doing anything else:"

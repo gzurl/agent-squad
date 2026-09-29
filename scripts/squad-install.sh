@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install, upgrade or check the squad in a project (agent-squad #23): the tag's playbook in
-# <project>/.agent-squad/playbook/, the compaction hooks in .claude/settings.local.json, a pre-push
-# shim that runs the playbook's pre-push gate, the GitHub templates the project lacks, and the DEV
-# and QA worktrees. It never overwrites or deletes a file the project owns, prints one line per
+# <project>/.agent-squad/playbook/, the compaction hooks in .claude/settings.local.json, the
+# /squad-save-state command in .claude/commands/, a pre-push shim that runs the playbook's pre-push
+# gate, the GitHub templates the project lacks, and the DEV and QA worktrees. It never overwrites or deletes a file the project owns, prints one line per
 # action taken or skipped, and ends with what is left to do by hand.
 #
 # Usage: squad-install.sh [--source <dir>] <project main checkout> <tag>
@@ -78,6 +78,13 @@ playbook="$squad/playbook"
 manifest_file="$squad/playbook.manifest"
 log="$squad/install.log"
 settings="$project/.claude/settings.local.json"
+# The /squad-save-state command (agent-squad #100): the playbook's file, and where Claude Code
+# finds it in the project.
+command_source="commands/squad-save-state.md"
+command_file="$project/.claude/commands/squad-save-state.md"
+# What stays out of the project's git: the squad's directory, Claude Code's local settings and the
+# command, all three written by the installer.
+ignored_paths=(.agent-squad .claude/settings.local.json .claude/commands/squad-save-state.md)
 needs_decision=0
 
 # `manifest <dir>` lists every file of a tree with its kind and content hash, so that two trees
@@ -321,11 +328,20 @@ check_installation() {
   fi
   verdict "the four hooks are in .claude/settings.local.json and point at the playbook" "$why"
 
-  # 3. Both paths are ignored, by a rule of the project's own .gitignore.
-  why="$(for path in .agent-squad .claude/settings.local.json; do
+  # 11. The /squad-save-state command is the playbook's, byte for byte.
+  why=""
+  if [ ! -f "$command_file" ]; then
+    why=".claude/commands/squad-save-state.md is missing; install again"
+  elif ! cmp -s "$playbook/$command_source" "$command_file"; then
+    why=".claude/commands/squad-save-state.md is not the playbook's; install again"
+  fi
+  verdict "the /squad-save-state command in .claude/commands/ is the playbook's" "$why"
+
+  # 3. The three paths are ignored, by a rule of the project's own .gitignore.
+  why="$(for path in "${ignored_paths[@]}"; do
     ignored_by_project "$path" || echo "$path is not ignored by .gitignore"
   done | join)"
-  verdict ".gitignore ignores .agent-squad/ and .claude/settings.local.json" "$why"
+  verdict ".gitignore ignores .agent-squad/, .claude/settings.local.json and .claude/commands/squad-save-state.md" "$why"
 
   # 4. The shim is the installer's, where git runs it.
   why=""
@@ -421,7 +437,7 @@ fi
 # What the hooks, the pre-push gate and the By hand list rely on. A tree from before the installer
 # (v14 and older) has no scripts/squad-install.sh, and would install without working.
 for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh \
-  scripts/squad-install.sh templates/AGENTS.md; do
+  scripts/squad-install.sh templates/AGENTS.md "$command_source"; do
   [ -f "$staging/$required" ] \
     || die "the tree of $tag has no $required, so this installer cannot install it (a tag older than v15?); the installed playbook is unchanged"
 done
@@ -453,12 +469,12 @@ fi
 printf '%s %s -> %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$previous" "$tag" >> "$log"
 say log "appended '$previous -> $tag' to .agent-squad/install.log"
 
-# 2. .gitignore: the squad's directory and Claude Code's local settings stay out of git. A line is
-#    added unless the project's own .gitignore already ignores the path. A rule in a nested
-#    .gitignore outranks the root one, so when such a rule (a negation) decides, appending cannot
-#    help: the step appends nothing, says so, and needs a decision.
+# 2. .gitignore: the squad's directory, Claude Code's local settings and the command stay out of
+#    git. A line is added unless the project's own .gitignore already ignores the path. A rule in a
+#    nested .gitignore outranks the root one, so when such a rule (a negation) decides, appending
+#    cannot help: the step appends nothing, says so, and needs a decision.
 gitignore="$project/.gitignore"
-for path in .agent-squad .claude/settings.local.json; do
+for path in "${ignored_paths[@]}"; do
   line="$path"
   [ "$path" = .agent-squad ] && line=".agent-squad/"
   if ignored_by_project "$path"; then
@@ -519,6 +535,21 @@ if printf '%s' "$current" | one_object \
 else
   say hooks "NOT INSTALLED: .claude/settings.local.json is not one JSON object with a valid \"hooks\"; it is left as it is: fix it and run again"
   needs_decision=1
+fi
+
+# 3b. The /squad-save-state command (agent-squad #100), which the installer owns as it owns the
+#     hooks: written into .claude/commands/ from the playbook on every install, and git-ignored.
+if cmp -s "$playbook/$command_source" "$command_file"; then
+  say command "/squad-save-state is already in .claude/commands/"
+else
+  written="wrote"
+  [ ! -e "$command_file" ] || written="rewrote"
+  if mkdir -p "$(dirname "$command_file")" && cp "$playbook/$command_source" "$command_file"; then
+    say command "$written /squad-save-state into .claude/commands/"
+  else
+    say command "NOT INSTALLED: cannot write .claude/commands/squad-save-state.md; fix it and run again"
+    needs_decision=1
+  fi
 fi
 
 # 4. Pre-push shim (D8 of agent-squad #23) in the common git directory, so that every worktree runs
