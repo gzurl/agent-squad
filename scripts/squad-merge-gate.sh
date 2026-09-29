@@ -39,8 +39,13 @@ open_threads="$(gh api graphql -f query="{repository(owner:\"$owner\",name:\"$na
 [ "$open_threads" = "0" ] || fail "$open_threads unresolved review thread(s)"
 
 # 3. Every body-only finding (a QA PR comment whose first line carries a priority tag) is settled.
+#    Both lines are read without their Markdown bold markers, so that a signature written in bold
+#    or plain, and a Settled: line in either form, count alike (agent-squad #111): a finding the
+#    gate cannot see would let the merge through.
 unsettled="$(gh api --paginate --slurp "repos/$repo/issues/$pr/comments" \
-  | jq -r '[add[] | select((.body | split("\n") | first | test("^👩🏼‍🔬\\[QA\\]: \\S+ \\[P[123]\\]")) and (.body | test("\nSettled: ") | not))] | length')"
+  | jq -r '[add[] | .body | split("\n") | map(gsub("\\*\\*"; ""))
+      | select((first | test("^👩🏼‍🔬\\[QA\\]: \\S+ \\[P[123]\\]")) and (.[1:] | any(startswith("Settled: ")) | not))]
+    | length')"
 [ "$unsettled" = "0" ] || fail "$unsettled body-only finding(s) without a Settled: line"
 
 # 4. The PR carries the approved status label, and no other of the three state labels: with two, a

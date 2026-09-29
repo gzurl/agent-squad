@@ -121,12 +121,12 @@ Every change goes through a PR reviewed by QA; the only exceptions are in §2.3.
    - **The author takes a finding as right until shown otherwise,** and says so in the thread when it was wrong, not only by fixing it.
    - **The tie-break happens in the thread.** If the reviewer does not accept a *declined* after one exchange, either side brings it there to the CTO, or to the CEO when the CTO is the author, who decides with a comment in the thread and resolves it.
 
-   *QA is demanding by role; the author accepts what is right and confronts what is not with evidence; and a PR that is already correct is not lengthened by findings that do not touch what it claims: one once took a fourth round for a single sentence.* A finding with no line to anchor to (the title, the description, a missing file, behaviour spread across files) is posted by QA as a PR comment whose first line carries the priority tag right after the signature and status emoji (`👩🏼‍🔬[QA]: ⚠️ [P2] …`), answered by the author in a reply as a thread would be, and acknowledged by QA by editing its comment to end with `Settled: <URL of the reply>`; it counts like a thread for the merge gate.
+   *QA is demanding by role; the author accepts what is right and confronts what is not with evidence; and a PR that is already correct is not lengthened by findings that do not touch what it claims: one once took a fourth round for a single sentence.* A finding with no line to anchor to (the title, the description, a missing file, behaviour spread across files) is posted by QA as a PR comment whose first line carries the priority tag right after the signature and status emoji (`**👩🏼‍🔬[QA]:** ⚠️ [P2] …`), answered by the author in a reply as a thread would be, and acknowledged by QA by editing its comment to end with `Settled: <URL of the reply>`; it counts like a thread for the merge gate.
 9. **Merge**: by the author, with the strategy `AGENTS.md` sets (squash by default). Before merging, every item MUST be true, verified by API and not by eye, and the check MUST stop the merge when it fails and pin the head it verified: `p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" && head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"`. *A gate whose result is printed and not used is no gate: a PR was once merged over an open thread that way.*
    - [ ] the latest review that contains a `QA-VERDICT` line ends in `QA-VERDICT: APPROVED` and its `commit_id` equals the PR's `headRefOid` (inline replies create empty reviews; ignore them);
    - [ ] zero unresolved review threads;
    - [ ] the PR carries `✅ status:approved`, and no other state label, and CI is green;
-   - [ ] every body-only finding (a PR comment by QA whose first line matches `^👩🏼‍🔬\[QA\]: \S+ \[P[123]\]`) ends with a `Settled: <URL of the author's reply>` line, which QA adds when acknowledging; the gate checks that by API.
+   - [ ] every body-only finding (a PR comment by QA whose first line is its signature, bold or plain, then a status emoji and a priority tag: `**👩🏼‍🔬[QA]:** ⚠️ [P2] …`, or `👩🏼‍🔬[QA]: ⚠️ [P2] …` in comments written before signatures were bold) ends with a `Settled: <URL of the author's reply>` line, which QA adds when acknowledging; the gate checks that by API.
 
    When the PR is behind its base and the base changed a file the PR also changes, or when the gate cannot tell whether it did, the gate stops the merge (exit status 3) and prints what it knows; a renamed file counts under both its names. The author checks the PR's claims against that base: if one no longer holds, the author merges the base in and fixes it, which takes a new verdict; if they all hold, the author runs the command again with `SQUAD_BEHIND_CHECKED=<base sha>` (the full SHA, or a prefix of seven characters or more), which lets the gate pass for that base only. A PR behind its base with no file in common only gets a warning. *A verdict binds to a commit, but a statement in documentation binds to the world: a README once merged exactly as approved and was false on arrival, because four other PRs had changed what it described; and a warning printed inside the chained command was read only after the merge it chained to.*
 
@@ -159,14 +159,14 @@ QA's review checklist, every item answered in the review body:
 - [ ] the body states the reviewed SHA, and its last line is the verdict.
 
 ## 6. Communication
-Every member has a signature: the member's emoji, the text tag, a colon and a space, with no space between emoji and tag. *The emoji identifies the author at a glance, the text stays searchable, and the colon separates the author from the message.* A line MUST NOT start with `[ROLE]:`. *Markdown reads `[label]: word` as a link definition: it hides the line and turns later `[ROLE]` mentions into links. The emoji-first order prevents it by construction.*
+Every member has a signature: the member's emoji, the text tag and a colon, in bold, then a space, with no space between emoji and tag. It is written in bold everywhere: on GitHub, in messages between agents, in messages to the CEO and in end-of-turn summaries. *The bold sets the author apart from the text around it, the emoji identifies the author at a glance, the text stays searchable, and the colon separates the author from the message. The CEO asked for the bold, to tell the signature from the rest of the text.* A line MUST NOT start with `[ROLE]:`. *Markdown reads `[label]: word` as a link definition: it hides the line and turns later `[ROLE]` mentions into links. The emoji-first order prevents it by construction.*
 
 | Member | Signature |
 |---|---|
-| CEO | `👨🏻‍💼[CEO]: ` |
-| CTO | `👷🏼‍♂️[CTO]: ` |
-| DEV | `👨🏼‍💻[DEV]: ` |
-| QA | `👩🏼‍🔬[QA]: ` |
+| CEO | `**👨🏻‍💼[CEO]:** ` |
+| CTO | `**👷🏼‍♂️[CTO]:** ` |
+| DEV | `**👨🏼‍💻[DEV]:** ` |
+| QA | `**👩🏼‍🔬[QA]:** ` |
 
 Everywhere — messages to the CEO, messages between agents, each agent's end-of-turn summary, and GitHub content:
 - **Nothing is published outside the project's repositories:** no Claude.ai artifacts, no external pages or services, and nothing on a third-party repository (an upstream issue, for instance) without the CEO's authorisation. A file for the CEO goes to a git-ignored directory of the checkout, with a `file://` link to open it locally. *The CEO does not want to depend on external services, and a post from the shared account speaks for the CEO.*
@@ -194,7 +194,7 @@ With the CEO:
 Issue and pull request templates live in `.github/` so that GitHub pre-fills them; the installer creates them when the project has none, and from then on they belong to the project. The QA review follows this shape:
 
 ```
-👩🏼‍🔬[QA]: <status> QA review — PR #N. Reviewed commit: PR #N (`<sha>`).
+**👩🏼‍🔬[QA]:** <status> QA review — PR #N. Reviewed commit: PR #N (`<sha>`).
 ### Black-box
 | Claim | How it was tested | Result (passed / failed / not checkable) |
 ### Checklist
