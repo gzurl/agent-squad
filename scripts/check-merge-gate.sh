@@ -38,8 +38,9 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # answer with GitHub's maximum of 300 files, GATE_BASE=unreadable makes the base's tip unreadable,
 # GATE_BASE=moves lands a commit on main right after its SHA is read, GATE_FILES=fail makes the
 # listing of the PR's files fail after printing part of it (a gate that read the output of a failed
-# call would take it for the whole), and GATE_FILES=none makes it empty. Files are reported as
-# GitHub does: a rename under its new name, with the old one as previous_filename.
+# call would take it for the whole), GATE_FILES=none makes it empty, and GATE_LABELS, a JSON array
+# of names, replaces the PR's labels. Files are reported as GitHub does: a rename under its new
+# name, with the old one as previous_filename.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -99,8 +100,10 @@ case "$endpoint" in
       json="$(jq '.files = [range(300) | {filename: "bulk/\(.)"}]' <<<"$json")"
     fi ;;
   repos/o/r/pulls/7)
-    json="$(jq -n --arg head "$head" --arg body "${PR_BODY:-}" \
-      '{head: {sha: $head}, base: {ref: "main"}, labels: [{name: "✅ status:approved"}], body: $body}')" ;;
+    # GATE_LABELS=unreadable makes the call that reads the labels fail, and only that one.
+    if [ "${GATE_LABELS:-}" = unreadable ]; then case "$filter" in *labels*) echo "gh: HTTP 502" >&2; exit 1 ;; esac; GATE_LABELS="[]"; fi
+    json="$(jq -n --arg head "$head" --arg body "${PR_BODY:-}" --argjson labels "${GATE_LABELS:-[\"✅ status:approved\"]}" \
+      '{head: {sha: $head}, base: {ref: "main"}, labels: [$labels[] | {name: .}], body: $body}')" ;;
   *) exit 1 ;;
 esac
 [ "$slurp" -eq 0 ] || json="[$json]"
@@ -156,6 +159,42 @@ if grep -q 'WARNING' <<<"$err"; then
 else
   pass "up to date: no warning"
 fi
+
+# 1b. The state labels (#99): to be merged, a PR carries exactly one of the three, ✅ status:approved.
+#     Two or three at once stop the gate with exit 1, naming them, and so do the wrong one and
+#     none, which is what a PR is left with when one command adds and removes the same label. A
+#     label that is not a state does not count. GATE_LABELS replaces the PR's labels.
+# `labels_refused <case> <labels as JSON> <reason>` expects exit 1, nothing on stdout and the reason.
+labels_refused() {
+  export GATE_LABELS="$2"
+  run_gate
+  unset GATE_LABELS
+  if [ "$code" -eq 1 ] && [ -z "$out" ] && grep -qF -- "$3" <<<"$err"; then
+    pass "$1: the gate fails, exit 1, saying so"
+  else
+    fail "$1: the gate exited $code, printed '$out', and said: $err"
+  fi
+}
+labels_refused "approved and in review" '["✅ status:approved","👀 status:in-review"]' \
+  "PR carries 2 state labels, where one is the rule: ✅ status:approved, 👀 status:in-review"
+labels_refused "in progress and approved" '["🚧 status:in-progress","✅ status:approved"]' \
+  "PR carries 2 state labels, where one is the rule: 🚧 status:in-progress, ✅ status:approved"
+labels_refused "all three" '["👀 status:in-review","🚧 status:in-progress","✅ status:approved"]' \
+  "PR carries 3 state labels, where one is the rule"
+labels_refused "in review only" '["👀 status:in-review"]' "PR does not carry ✅ status:approved"
+labels_refused "no label at all" '[]' "PR does not carry ✅ status:approved"
+export GATE_LABELS='["📝 docs","✅ status:approved","🟡 P2"]'
+run_gate
+unset GATE_LABELS
+result_unchanged "approved, with labels that are not states"
+#     A label list that cannot be read stops the gate, and a state is a name that ends in one of the
+#     three: a bare one counts, a name that only contains one does not.
+labels_refused "unreadable label list" unreadable "cannot read the labels of PR #7"
+labels_refused "approved and a bare in-review" '["✅ status:approved","status:in-review"]' "PR carries 2 state labels"
+export GATE_LABELS='["✅ status:approved","⛔ status:blocked","🔁 status:in-review-2"]'
+run_gate
+unset GATE_LABELS
+result_unchanged "approved, with blocked and a name that only contains a state"
 
 # 2. Behind, with no file in common: main gains a commit that touches README.md and other.txt and
 #    adds two files: `a`, which the description only seems to name ("a note"), and `notes`, which
