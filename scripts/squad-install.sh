@@ -336,7 +336,7 @@ check_installation() {
   # 11. The /squad-save-state command is the playbook's, byte for byte, and not the project's.
   why=""
   if tracked_by_project "$command_path"; then
-    why=".claude/commands/squad-save-state.md is tracked by git, so the project owns it; untrack it with git rm --cached and install again"
+    why=".claude/commands/squad-save-state.md is tracked by git, so the project owns it: if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached; then install again"
   elif [ ! -f "$command_file" ]; then
     why=".claude/commands/squad-save-state.md is missing; install again"
   elif ! cmp -s "$playbook/$command_source" "$command_file"; then
@@ -549,7 +549,7 @@ fi
 #     file the project tracks at that path is the project's, and is left as it is (agent-squad
 #     #104), as a project's own pre-push is.
 if tracked_by_project "$command_path"; then
-  say command "NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git; it is left as it is: rename it, or untrack it with git rm --cached, and run again"
+  say command "NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git; it is left as it is: if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached; then run again"
   needs_decision=1
 elif cmp -s "$playbook/$command_source" "$command_file"; then
   say command "/squad-save-state is already in .claude/commands/"

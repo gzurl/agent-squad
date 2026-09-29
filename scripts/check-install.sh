@@ -406,13 +406,16 @@ mkdir -p "$target/.claude/commands" \
 out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
 check "a tracked command of the project's own makes the install exit 1" [ "$code" -eq 1 ]
-check "and the install says the file is the project's" \
-  contains "$out" "install: command    NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git"
+# Both messages say which way out fits which case: untracking a command of the project's own would
+# have the next install overwrite it.
+advice="if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached"
+check "and the install says the file is the project's, and which way out fits which case" \
+  contains "$out" "install: command    NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git; it is left as it is: $advice; then run again"
 check "and leaves it byte for byte" \
   [ "$(cat "$target/.claude/commands/squad-save-state.md")" = "The project's own command." ]
 out="$("$install" --check "$target" 2>&1)"
-check "and --check fails the command item, saying that the project owns the file" \
-  contains "$out" "check: FAILED  $item_command: .claude/commands/squad-save-state.md is tracked by git, so the project owns it"
+check "and --check fails the command item, saying that the project owns the file and which way out fits" \
+  contains "$out" "check: FAILED  $item_command: .claude/commands/squad-save-state.md is tracked by git, so the project owns it: $advice; then install again"
 
 # 8. A failed download or an incomplete tree leaves the installed playbook as it was.
 echo "not a tarball" > "$lab/broken.tgz"
