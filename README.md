@@ -232,11 +232,12 @@ what, and when.
 
 - **Nothing goes straight to `main`.** The pre-push gate refuses it. When you approve an exception
   on an issue, the agent pushes it with `SQUAD_MAIN_EXCEPTION=#<issue> git push …`.
-- **Some tools ignore `.gitignore`**, and from the main checkout they walk into
-  `.agent-squad/worktrees/`, where the other agents' copies of the project live: `grep -r`, some IDE
-  indexers and bundlers. Test runners and type checkers skip hidden folders unless configured
-  otherwise (pytest and mypy do). Point such tools at the project's own paths; `rg` and ruff
-  respect `.gitignore`.
+- **Some tools walk into `.agent-squad/worktrees/`** from the main checkout, where the other
+  agents' copies of the project live, and pick up their files: Jest, Metro and Watchman do by
+  default, and so do `grep -r` and some IDE indexers and bundlers. Exclude `.agent-squad/` in each
+  tool's configuration: `templates/AGENTS.md` has the settings for common tools, and the CTO checks
+  them while setting up. TypeScript, pytest and mypy skip hidden folders by default, and `rg` and
+  ruff respect `.gitignore`.
 - **`git worktree remove` refuses a worktree with modified or untracked files**, though ignored
   files do not stop it. `git -C <worktree> status` shows what is in the way: commit it, or discard
   it once you are sure it is not needed, and only then use `--force`.

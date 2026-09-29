@@ -54,5 +54,18 @@ Product decisions agreed between the CEO and the CTO are recorded under `openspe
 <stack, pinned versions, and the exact lint / format / type-check / test commands; the same commands
 are the lines of `.agent-squad-checks`, which the pre-push gate runs>
 
+## Tools that walk the tree
+From the main checkout, `.agent-squad/worktrees/` holds the other agents' copies of the project,
+and some tools walk into it by default. Each one this project uses excludes `.agent-squad/` in its
+own configuration (`BOOTSTRAP.md` row 9b checks it). Keep the lines for this project's tools and
+delete the others:
+- Jest: `testPathIgnorePatterns` and `modulePathIgnorePatterns` both list `<rootDir>/.agent-squad/`.
+- Metro: `resolver.blockList` matches `/\.agent-squad\/.*/`.
+- Watchman: `.watchmanconfig` holds `{"ignore_dirs": [".agent-squad"]}`.
+- pytest: skips dot-directories by default; an overridden `norecursedirs` keeps `.*`.
+- Node: a worktree without its own `node_modules` silently uses the main checkout's, through
+  Node's upward lookup, so DEV and QA install the dependencies in their worktree before running
+  anything there.
+
 ## Local services and ports
 <none yet, or the per-agent ports and container project names>
