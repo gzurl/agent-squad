@@ -30,7 +30,8 @@ agent-squad needs both.
 - **A clean install.** Everything lives in a `.agent-squad/` folder that git ignores. The installer
   never overwrites your files, and `--check` tells you whether the installation works.
 - **Sessions that keep the thread.** Each session loads the rules when it starts, and a session
-  whose context gets compacted is handed back the state of the project.
+  whose context gets compacted is handed back the state of the project
+  ([how](#when-a-sessions-context-fills-up)).
 - **Versioned.** A project installs a release and upgrades when it chooses.
 
 
@@ -68,6 +69,7 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
 - [🔭 Overview](#-overview)
   - [Built on Claude Code and GitHub](#built-on-claude-code-and-github)
   - [How the team works](#how-the-team-works)
+  - [When a session's context fills up](#when-a-sessions-context-fills-up)
 - [📋 Requirements](#-requirements)
 - [🛠️ Install](#️-install)
 - [🗂️ What goes where](#️-what-goes-where)
@@ -138,6 +140,31 @@ The CTO also writes pull requests of its own, reviewed by QA the same way, and s
 disagreement between an author and QA. Every rule, with the incident that led to it, is in
 [SQUAD.md](SQUAD.md); the merge gate's exact conditions are in its §4.9.
 [BOOTSTRAP.md](BOOTSTRAP.md) is the CTO's one-time setup of a project.
+
+### When a session's context fills up
+
+A Claude Code session has a limited context. When it fills up, Claude Code compacts it: it replaces
+the conversation with a summary, and whatever the summary leaves out is gone. Left to itself, an
+agent can come back from a compaction without knowing which pull request it was reviewing, or what
+it had promised another agent. agent-squad guards against that in three ways:
+
+1. **It steers the summary.** `AGENTS.md` has a *Compact instructions* section that tells Claude
+   Code what every summary must keep: the agent's role, the issue and pull request it is working
+   on, the latest commit and verdict, the exact step it had reached, and anything it promised
+   another agent.
+2. **It saves the facts and hands them back.** Just before any compaction, manual or automatic, a
+   hook saves a snapshot of the project's state in `.agent-squad/handoff/`: the worktrees, the open
+   pull requests with their labels and verdicts, the issues in progress, in review or blocked, and
+   the latest commits on the main branch. When the session resumes, another hook hands the
+   snapshot back, with instructions to re-read the rules and the issue before doing anything else.
+3. **It keeps the real memory on GitHub.** Each agent leaves a short comment on its issue at every
+   step, and long runs write a `progress.log`. What is written there survives any compaction; what
+   was only in the agent's head may not.
+
+**What you can do:** `/context` shows how full a session's context is. When a session passes about
+80%, ask its agent to write on its issue where it stands, and once it has, type `/compact` in that
+session. A compaction you choose, at a quiet moment, loses less than one that Claude Code triggers
+in the middle of a task.
 
 
 ## 📋 Requirements
