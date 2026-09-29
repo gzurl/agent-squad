@@ -264,4 +264,5 @@ what, and when.
 ## 📄 License
 
 agent-squad is released under the [MIT License](LICENSE): use it, change it and share it freely,
-keeping the copyright notice. If it shapes how your team works, a link back is appreciated.
+keeping the copyright notice and the license text with it. If it shapes how your team works, a link
+back is appreciated.
