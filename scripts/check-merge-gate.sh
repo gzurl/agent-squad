@@ -38,8 +38,9 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # answer with GitHub's maximum of 300 files, GATE_BASE=unreadable makes the base's tip unreadable,
 # GATE_BASE=moves lands a commit on main right after its SHA is read, GATE_FILES=fail makes the
 # listing of the PR's files fail after printing part of it (a gate that read the output of a failed
-# call would take it for the whole), GATE_FILES=none makes it empty, and GATE_LABELS, a JSON array
-# of names, replaces the PR's labels. Files are reported as GitHub does: a rename under its new
+# call would take it for the whole), GATE_FILES=none makes it empty, GATE_LABELS, a JSON array
+# of names, replaces the PR's labels, and GATE_COMMENTS and GATE_INLINE, JSON arrays of bodies, are
+# the PR's comments and its inline review comments. Files are reported as GitHub does: a rename under its new
 # name, with the old one as previous_filename.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
@@ -74,7 +75,9 @@ case "$endpoint" in
     if [ "${GATE_FILES:-}" = fail ]; then printf '[[{"filename":"page/one.txt"}]]\n'; exit 1; fi
     if [ "${GATE_FILES:-}" = none ]; then json='[]'; else json="$(changed "$(g merge-base pr main)" pr)"; fi ;;
   repos/o/r/issues/7/comments)
-    json='[]' ;;
+    json="$(jq '[.[] | {body: .}]' <<<"${GATE_COMMENTS:-[]}")" ;;
+  repos/o/r/pulls/7/comments)
+    json="$(jq '[.[] | {body: ., path: "tool.sh", line: 1}]' <<<"${GATE_INLINE:-[]}")" ;;
   repos/o/r/commits/*/check-runs)
     json='{"check_runs":[{"conclusion":"success"}]}' ;;
   repos/o/r/commits/*)
@@ -195,6 +198,57 @@ export GATE_LABELS='["✅ status:approved","⛔ status:blocked","🔁 status:in-
 run_gate
 unset GATE_LABELS
 result_unchanged "approved, with blocked and a name that only contains a state"
+
+# 1c. Body-only findings (#111): a PR comment whose first line, read without its bold markers, starts
+#     with QA's signature, a status and a priority tag, and that has no Settled: line, stops the
+#     gate. The signature may be plain or bold, and so may the Settled: line. Look-alikes do not
+#     count: another role's signature, a note without a priority, a quote, a finding on a later line,
+#     a signature without its colon, and an inline comment, which is a review thread.
+# `findings <case> <unsettled> <comments as JSON>` expects exit 1 and that count when it is not 0,
+# and the gate's usual pass when it is.
+findings() {
+  export GATE_COMMENTS="$3"
+  run_gate
+  unset GATE_COMMENTS
+  if [ "$2" -eq 0 ]; then
+    result_unchanged "$1"
+  elif [ "$code" -eq 1 ] && [ -z "$out" ] && grep -qF -- "$2 body-only finding(s) without a Settled: line" <<<"$err"; then
+    pass "$1: the gate fails, exit 1, counting $2 unsettled finding(s)"
+  else
+    fail "$1: the gate exited $code, printed '$out', and said: $err"
+  fi
+}
+plain='👩🏼‍🔬[QA]: ⚠️ [P2] claims: no. The README says v24.'
+bold='**👩🏼‍🔬[QA]:** ⚠️ [P3] A typo on line 4.'
+settled_by='\n\nSettled: https://github.com/o/r/pull/7#issuecomment-1'
+findings "a plain finding, not settled" 1 "$(jq -n --arg b "$plain" '[$b]')"
+findings "a plain finding, settled" 0 "$(jq -n --arg b "$plain$(printf '%b' "$settled_by")" '[$b]')"
+findings "a bold finding, not settled" 1 "$(jq -n --arg b "$bold" '[$b]')"
+findings "a bold finding, settled" 0 "$(jq -n --arg b "$bold$(printf '%b' "$settled_by")" '[$b]')"
+findings "a bold finding, settled by a bold Settled: line" 0 \
+  "$(jq -n --arg b "$bold"$'\n\n**Settled:** https://github.com/o/r/pull/7#issuecomment-2' '[$b]')"
+findings "a finding with bold around its status and priority, not settled" 1 \
+  "$(jq -n '["👩🏼‍🔬[QA]: **⚠️ [P2]** claims: yes. The table is wrong."]')"
+findings "a finding bold from its signature to its priority, not settled" 1 \
+  "$(jq -n '["**👩🏼‍🔬[QA]: ⚠️ [P1]** The gate lets a stale verdict through."]')"
+findings "one of each form, both settled" 0 \
+  "$(jq -n --arg p "$plain$(printf '%b' "$settled_by")" --arg b "$bold$(printf '%b' "$settled_by")" '[$p, $b]')"
+findings "one of each form, the bold one not settled" 1 \
+  "$(jq -n --arg p "$plain$(printf '%b' "$settled_by")" --arg b "$bold" '[$p, $b]')"
+findings "one of each form, neither settled" 2 "$(jq -n --arg p "$plain" --arg b "$bold" '[$p, $b]')"
+findings "look-alikes that are not findings" 0 "$(jq -n '[
+  "**👨🏼‍💻[DEV]:** ⚠️ [P2] A finding of my own, in bold.",
+  "👨🏼‍💻[DEV]: ⚠️ [P2] And one in plain.",
+  "**👩🏼‍🔬[QA]:** ⏳ Starting the review of PR #7 [P2 items first].",
+  "👩🏼‍🔬[QA]: ✅ QA review — PR #7. Reviewed commit: PR #7 (`abc1234`).",
+  "> **👩🏼‍🔬[QA]:** ⚠️ [P2] quoted in a reply",
+  "**👨🏼‍💻[DEV]:** ✅ Answering the finding:\n**👩🏼‍🔬[QA]:** ⚠️ [P2] on its second line",
+  "**👩🏼‍🔬[QA]** ⚠️ [P2] without the colon"
+]')"
+GATE_INLINE="$(jq -n --arg b "$bold" '[$b]')"
+export GATE_INLINE
+findings "a bold finding posted inline, where it is a review thread" 0 '[]'
+unset GATE_INLINE
 
 # 2. Behind, with no file in common: main gains a commit that touches README.md and other.txt and
 #    adds two files: `a`, which the description only seems to name ("a note"), and `notes`, which
