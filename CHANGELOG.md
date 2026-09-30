@@ -5,8 +5,10 @@
   `.git/hooks/pre-push`, so `git lfs install` cannot add LFS's hook there, and a push would send
   pointers without their files. A project that uses LFS puts `git lfs pre-push "$@"` in an
   executable `.git/hooks/pre-push.local`, which the shim runs first; one that had LFS's hook before
-  the install already has it there. `--check` shows an item for it only when a `.gitattributes` of
-  the project, at the root or tracked below it, has `filter=lfs`, and names the fix when it fails.
+  the install already has it there. Files pushed before the hook was in place reached the remote
+  as pointers, and `git lfs push --all origin` uploads what it lacks. `--check` shows an item for it only when a `.gitattributes` of
+  the project, at the root or tracked below it, has `filter=lfs` outside a comment, and names the
+  fix when it fails.
   The README's *Things to know* and `BOOTSTRAP.md` row 9b say so.
 
 ## v26 — 2026-09-30

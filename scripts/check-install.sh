@@ -457,6 +457,8 @@ lfs_line() { "$install" --check "$1" 2>&1 | grep -F "$item_lfs" || true; }
 target="$(new_project lfs)" || exit 2
 "$install" "$target" "$tag_a" >/dev/null 2>&1
 check "without LFS, --check shows no LFS item" [ -z "$(lfs_line "$target")" ]
+printf '# *.psd filter=lfs diff=lfs merge=lfs -text\n*.txt text\n' > "$target/.gitattributes"
+check "nor with filter=lfs only in a comment of .gitattributes" [ -z "$(lfs_line "$target")" ]
 printf '*.bin filter=lfs diff=lfs merge=lfs -text\n' > "$target/.gitattributes"
 git -C "$target" add .gitattributes && git -C "$target" commit -qm "LFS for binaries" || exit 2
 local_hook="$target/.git/hooks/pre-push.local"

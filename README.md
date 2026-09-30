@@ -298,8 +298,9 @@ what, and when.
   squad's shim owns `.git/hooks/pre-push`, so `git lfs install` cannot add LFS's hook there, and a
   push would send pointers without their files. Put `git lfs pre-push "$@"` in an executable
   `.git/hooks/pre-push.local`, which the shim runs first. A project that had LFS's hook before the
-  install already has it there. `--check` shows an item for it when a `.gitattributes` of the
-  project has `filter=lfs`.
+  install already has it there. Files pushed before the hook was in place reached the remote as
+  pointers: `git lfs push --all origin` uploads what the remote lacks. `--check` shows an item for
+  it when a `.gitattributes` of the project has `filter=lfs`.
 - **`gh issue list --label` silently returns nothing** for a label whose emoji is made of several
   characters, as the owner labels and `needs-ceo` are. Filter on GitHub's web page, or with
   `gh issue list --state open --limit 1000 --json number,title,labels` and `jq`; without

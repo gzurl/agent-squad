@@ -110,14 +110,14 @@ ignored_by_project() {
     && [ "$(git -C "$project" check-ignore -v --no-index "$1" 2>/dev/null | cut -d: -f1)" = .gitignore ]
 }
 # `uses_lfs` passes when the project routes files through Git LFS: a .gitattributes of its own, at
-# the root or tracked anywhere below it, has filter=lfs.
+# the root or tracked anywhere below it, has filter=lfs outside a comment.
 uses_lfs() {
   local files
   files="$({ [ -f "$project/.gitattributes" ] && echo .gitattributes
     git -C "$project" ls-files -- ':(glob)**/.gitattributes'; } | sort -u)"
   [ -n "$files" ] || return 1
   (cd "$project" && printf '%s\n' "$files" | while IFS= read -r file; do cat -- "$file" 2>/dev/null; done) \
-    | grep -qE '(^|[[:space:]])filter=lfs([[:space:]]|$)'
+    | grep -v '^[[:space:]]*#' | grep -qE '(^|[[:space:]])filter=lfs([[:space:]]|$)'
 }
 # `squad_commands` lists the playbook's commands by file name, in order. It reads the playbook when
 # called, since an install replaces it first.
