@@ -184,6 +184,15 @@ session, a command applies to that agent alone.
 Nothing notifies you while you are away: `/squad-resume` tells you what happened, and the issues
 labelled `needs-ceo` are your inbox.
 
+These three act on one squad. When several squads are open on the machine, `/squad-pause-all`,
+`/squad-away-all` and `/squad-resume-all` act on all of them. Type one in any squad's CTO session:
+that CTO does the same for its own squad and passes the command on to every other squad's CTO,
+or, for a squad with no CTO session open, to its DEV and QA. It then answers you once, grouped
+by squad: how long each still needs and "all N squads are safe to close", or one summary for all
+of them. `/squad-away-all` keeps the machine awake with one `caffeinate` for every squad. The
+other squads need only the single-squad commands, from v26 on, and a squad without them is named
+in the answer.
+
 
 ## 📋 Requirements
 
