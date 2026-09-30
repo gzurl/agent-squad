@@ -26,9 +26,10 @@ Follow the part for every agent in `squad-away.md`, for yourself alone, as `/squ
    Every message you send for this command ends with "Sent at <time>; if you read this more than
    10 minutes later, ask me whether it still holds before acting.", where `<time>` is
    `date '+%Y-%m-%d %H:%M'` when you send it.
-   A squad whose CTO session `ListAgents` shows as **waiting** counts as a squad with no CTO
-   session: that CTO is held by a question or a permission prompt in its own terminal, and would
-   read your message only after the CEO answers it there.
+   A squad whose CTO session `ListAgents` shows as **waiting** gets both messages: its CTO the
+   one above, and its DEV and QA the one for a squad with no CTO session. That CTO is held by a
+   question or a permission prompt in its own terminal, and reads your message only once the CEO
+   answers it there; its sent time then tells it to check with you first.
 3. **Keep the `caffeinate` running** while any squad still has work, and stop it (`kill <PID>`)
    when every squad has said it has nothing left, and at `/squad-resume-all`. Name to the CEO, on
    return, any squad whose CTO or agents answered that their main checkout has no `squad-away.md`

@@ -24,9 +24,10 @@ would.
    Every message you send for this command ends with "Sent at <time>; if you read this more than
    10 minutes later, ask me whether it still holds before acting.", where `<time>` is
    `date '+%Y-%m-%d %H:%M'` when you send it.
-   A squad whose CTO session `ListAgents` shows as **waiting** counts as a squad with no CTO
-   session: that CTO is held by a question or a permission prompt in its own terminal, and would
-   read your message only after the CEO answers it there.
+   A squad whose CTO session `ListAgents` shows as **waiting** gets both messages: its CTO the
+   one above, and its DEV and QA the one for a squad with no CTO session. That CTO is held by a
+   question or a permission prompt in its own terminal, and reads your message only once the CEO
+   answers it there; its sent time then tells it to check with you first.
 3. **Give the CEO one summary, grouped by squad**, in the CEO's language (`AGENTS.md`,
    *Language*): for each squad, what its agents did while the CEO was away, what was merged or
    released, and what waits for the CEO (its open `needs-ceo` issues, each linked), then its plan

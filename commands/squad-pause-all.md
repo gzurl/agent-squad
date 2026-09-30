@@ -25,9 +25,10 @@ Follow the part for every agent in `squad-pause.md`, for yourself alone, as `/sq
    Every message you send for this command ends with "Sent at <time>; if you read this more than
    10 minutes later, ask me whether it still holds before acting.", where `<time>` is
    `date '+%Y-%m-%d %H:%M'` when you send it.
-   A squad whose CTO session `ListAgents` shows as **waiting** counts as a squad with no CTO
-   session: that CTO is held by a question or a permission prompt in its own terminal, and would
-   read your message only after the CEO answers it there.
+   A squad whose CTO session `ListAgents` shows as **waiting** gets both messages: its CTO the
+   one above, and its DEV and QA the one for a squad with no CTO session. That CTO is held by a
+   question or a permission prompt in its own terminal, and reads your message only once the CEO
+   answers it there; its sent time then tells it to check with you first.
 3. **Answer the CEO once, grouped by squad**, in the CEO's language (`AGENTS.md`, *Language*): how
    long each squad still needs, from its CTO's report or its agents'. Say "all N squads are at a
    safe point" only when each squad has reported safe and `ListAgents` shows its sessions idle.
