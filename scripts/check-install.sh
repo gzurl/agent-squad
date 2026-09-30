@@ -495,8 +495,12 @@ check "a download that is not a tarball exits 2" [ "$code" -eq 2 ]
 check "and leaves the playbook as it was" same_tree "$squad/playbook" "$lab/vb"
 check "with nothing left behind" no_leftovers "$squad"
 # A tree without one of the files the installation relies on; without scripts/squad-install.sh,
-# it is a tag older than the installer, such as v14, which would install without working.
-for missing in SQUAD.md scripts/squad-install.sh templates/AGENTS.md; do
+# it is a tag older than the installer, such as v14, which would install without working. Every
+# command the tree has counts too, walked from the tree: a command the installer does not require
+# fails here.
+commands_in_tree="$(cd "$lab/vb" && ls commands/squad-*.md)"
+[ "$(wc -l <<<"$commands_in_tree")" -ge 5 ] || exit 2
+for missing in SQUAD.md scripts/squad-install.sh templates/AGENTS.md $commands_in_tree; do
   rm -rf "$lab/incomplete" && mkdir -p "$lab/incomplete" && cp -pR "$lab/vb/." "$lab/incomplete/"
   rm "$lab/incomplete/$missing"
   out="$("$install" --source "$lab/incomplete" "$project" vd 2>&1)"
