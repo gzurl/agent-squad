@@ -251,6 +251,15 @@ transcript prompt-after "$command" "$expansion" "$answer" "$typed" "$answer"
 transcript peer-after "$command" "$expansion" "$answer" "$peer" "$answer"
 transcript stopped-then-saved "$typed" "$answer" "$caveat" "$compact_echo" "$stopped_echo" "$command" "$expansion" "$answer"
 transcript saved-then-echo "$command" "$expansion" "$answer" "$caveat" "$compact_echo" "$stopped_echo"
+# The interactive CLI (Claude Code 2.1.285) writes the typed command itself as a plain user entry,
+# just before its markup, by the time the hook runs (#134).
+plain_compact='{"type":"user","userType":"external","entrypoint":"cli","message":{"role":"user","content":"/compact"}}'
+plain_compact_args='{"type":"user","userType":"external","entrypoint":"cli","message":{"role":"user","content":"/compact keep the PR state"}}'
+not_compact='{"type":"user","origin":{"kind":"human"},"promptSource":"typed","message":{"role":"user","content":"/compactify the notes"}}'
+transcript saved-then-plain "$command" "$expansion" "$tool_use" "$tool_result" "$answer" "$plain_compact" "$compact_echo"
+transcript saved-then-plain-args "$command" "$expansion" "$answer" "$plain_compact_args" "$compact_echo"
+transcript not-saved-then-plain "$typed" "$answer" "$plain_compact" "$compact_echo"
+transcript saved-then-look-alike "$command" "$expansion" "$answer" "$not_compact"
 quoting='{"type":"user","isMeta":true,"origin":{"kind":"peer","name":"QA:x"},"promptSource":"system","message":{"role":"user","content":"Another Claude session sent a message:\n<cross-session-message from=\"uds:/tmp/y.sock\">The gate looks for <command-name>/squad-save-state</command-name>.</cross-session-message>"}}'
 transcript quoting-after "$typed" "$answer" "$quoting"
 printf '%s\n' "$command" '{"type":"user", "message": {' > "$tr/broken.jsonl"
@@ -289,6 +298,10 @@ stopped "manual, with a message from another agent after /squad-save-state" peer
 stopped "manual, after a message that only quotes the command's markup" quoting-1 manual "$tr/quoting-after.jsonl"
 passes "manual, /squad-save-state after a stopped /compact" stopped-1 manual "$tr/stopped-then-saved.jsonl"
 passes "manual, a stopped /compact's echo after /squad-save-state" echo-1 manual "$tr/saved-then-echo.jsonl"
+passes "manual, the CLI's plain /compact entry after /squad-save-state" plain-1 manual "$tr/saved-then-plain.jsonl"
+passes "manual, the plain entry with arguments after /squad-save-state" plain-2 manual "$tr/saved-then-plain-args.jsonl"
+stopped "manual, the plain /compact entry without /squad-save-state" plain-3 manual "$tr/not-saved-then-plain.jsonl"
+stopped "manual, a prompt that only starts like /compact" plain-4 manual "$tr/saved-then-look-alike.jsonl"
 #    The escape hatch: stopped once, the same session's next /compact within ten minutes goes
 #    through, and only once; another session's does not; one ten minutes and a second later does not.
 stopped "the first /compact" hatch-1 manual "$tr/not-saved.jsonl"
