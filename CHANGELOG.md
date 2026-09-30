@@ -1,5 +1,19 @@
 # Changelog
 
+## v32 — 2026-09-30
+- **The pre-push gate lets through a tag of a past release** (#143, found by trivial-tape's CTO): a
+  pushed ref whose commit one of the remote's branches already contains carries no new code, so it
+  need not be the checked-out commit, and a push made only of such refs and deletions runs no
+  checks. The remote's branches are listed at the push (`git ls-remote --heads`), so a stale
+  remote-tracking ref cannot vouch for a commit the remote dropped. As soon as one ref carries a
+  new commit, everything runs as before, and only a PR changes the protected branch, whatever the
+  commit. §4.2 and `AGENTS.md` say so. The new gate reaches a project when it installs v32.
+- §4.9: **the cleanup after a merge is chained to it with `&&`** (#144, found and fixed by
+  trivial-tape's DEV): a cleanup chained with `;` ran after the gate had stopped a merge, deleted
+  the head branch, and GitHub closed the PR.
+- The README drops its notes for releases older than v31 (#145): every project upgrades with
+  `/squad-upgrade`.
+
 ## v31 — 2026-09-30
 - **Step-away commands reach a session that is waiting for the CEO** (#139). A session that the
   list of sessions shows as waiting is held by a question or a permission prompt in its own
