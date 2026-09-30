@@ -5,3 +5,4 @@
 # The /squad-save-state command, which the installer writes from the playbook
 .claude/commands/squad-save-state.md
 .DS_Store
+.claude/commands/squad-*.md
