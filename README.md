@@ -262,9 +262,9 @@ sets both when it runs again after the first commit.
 
 When a new release is out, type `/squad-upgrade` in the CTO's session. The CTO tells you which
 release the project runs, what the new one changes and whether you need to do anything, and
-installs it only when you say yes. Afterwards it tells the agents what changed, and tells you
-whether the sessions need a `/squad-save-state` and `/compact` to pick up the new rules. The
-release notes are in [CHANGELOG.md](CHANGELOG.md).
+installs it only when you say yes. The agents then re-read the rules that changed, so there is
+nothing else for you to do; the CTO asks you to compact the sessions only after a release that
+rewrites much of the charter. The release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 A project on a release older than v28 has no `/squad-upgrade` yet: that one time, run the install
 line again ([Install](#️-install)).
