@@ -1,5 +1,19 @@
 # Changelog
 
+## v28 — 2026-09-30
+- **`/squad-upgrade`** (#118): typed by the CEO in the CTO's session, it has the CTO say which
+  version the project runs and which is the latest, summarise what the releases in between change
+  (rules, what the project must commit, whether the sessions should be compacted to load new
+  rules), and **ask the CEO before installing**. On a yes, it installs with `install.sh`, reading
+  the whole output and exit status, runs `--check`, commits the *By hand* items through the
+  installer's PR, tells DEV and QA, and reports. Installed like the other commands; a project on a
+  release older than v28 upgrades by hand that once. §7 and the README (*Install*) describe it.
+- §6: **DEV and QA ask the CEO only through GitHub and the CTO** (#128). They never ask the CEO in
+  their own session, nor wait there: a question for the CEO is written on its issue or PR as
+  options with a recommendation, labelled `needs-ceo`, and the CTO brings it to the CEO; the CTO
+  flags an agent that stays busy with no sign of life. §7 records a memory note that kept a
+  superseded rule alive.
+
 ## v27 — 2026-09-30
 - **Git LFS runs its pre-push hook from `pre-push.local`** (#121). The squad's shim owns
   `.git/hooks/pre-push`, so `git lfs install` cannot add LFS's hook there, and a push would send
