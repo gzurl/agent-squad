@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Pre-push gate of SQUAD.md §4.2: no commit reaches the remote before the project's checks pass on
 # it, and none reaches main except through a PR (§2.3) or as an exception the CEO approved on an
-# issue. Run by the pre-push shim that squad-install.sh writes into the common git directory
-# (hooks/pre-push); `--no-verify` skips it, and whoever uses it says so in the PR body. It finds
-# squad-checks.sh through its own location, so the same file works at the root of a repository
-# (.githooks/ next to scripts/) and inside an installed playbook.
+# issue. A ref whose commit the remote's branches already contain, such as a tag of a past
+# release, carries no new code and goes through without checks. Run by the pre-push shim that
+# squad-install.sh writes into the common git directory (hooks/pre-push); `--no-verify` skips it,
+# and whoever uses it says so in the PR body. It finds squad-checks.sh through its own location, so
+# the same file works at the root of a repository (.githooks/ next to scripts/) and inside an
+# installed playbook.
 set -u
 
 # The runner of the checks sits in ../scripts/ from this script, as an executable file. A gate that
@@ -27,20 +29,40 @@ protected="$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null
 protected="${protected#"$remote"/}"
 [ -n "$protected" ] || protected=main
 
-# The checks test the working tree, so every commit being pushed must be the one checked out.
+# `on_remote <commit>` passes when one of the remote's branches already contains the commit, as
+# the remote lists them now: a ref pointing there carries no new code, such as a tag of a past
+# release (agent-squad #143). The list is asked for once; a branch head whose commit is not here, or
+# a remote that cannot be listed, counts for nothing, so the gate can only refuse more. Local
+# remote-tracking refs are not trusted: one can outlive the branch it names.
+remote_heads=""
+remote_listed=0
+on_remote() {
+  local sha
+  if [ "$remote_listed" -eq 0 ]; then
+    remote_heads="$(git ls-remote --heads "$remote" 2>/dev/null | cut -f1)"
+    remote_listed=1
+  fi
+  for sha in $remote_heads; do
+    git merge-base --is-ancestor "$1" "$sha" 2>/dev/null && return 0
+  done
+  return 1
+}
+
+# The checks test the working tree, so every new commit being pushed must be the one checked out.
+# A ref whose commit is already on the remote, like a deletion, pushes no code.
 pushes_code=0
 to_protected=0
 while read -r local_ref local_sha remote_ref _; do
   [ "$local_sha" = "$zero" ] && continue # a deletion pushes no code
   commit="$(git rev-parse -q --verify "$local_sha^{commit}")" || continue
+  [ "$remote_ref" = "refs/heads/$protected" ] && to_protected=1
+  on_remote "$commit" && continue
   if [ "$commit" != "$head" ]; then
     echo "pre-push: $local_ref is not the checked-out commit; push it from a checkout of it, where the checks can run on it" >&2
     exit 1
   fi
   pushes_code=1
-  [ "$remote_ref" = "refs/heads/$protected" ] && to_protected=1
 done
-[ "$pushes_code" -eq 1 ] || exit 0 # only deletions: nothing to check
 
 # Only a PR reviewed by QA changes the protected branch. An exception is approved by the CEO on an
 # issue first, and named here; --no-verify is not the way, since it would skip the checks too.
@@ -56,8 +78,9 @@ if [ "$to_protected" -eq 1 ]; then
       exit 1
       ;;
   esac
-  echo "pre-push: pushing to $protected as the exception the CEO approved on #$issue; the checks still run" >&2
+  echo "pre-push: pushing to $protected as the exception the CEO approved on #$issue; the checks still run on new code" >&2
 fi
+[ "$pushes_code" -eq 1 ] || exit 0 # only deletions and commits the remote has: nothing to check
 
 # Uncommitted changes would be checked in place of what is pushed.
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then

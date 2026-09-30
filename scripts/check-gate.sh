@@ -7,8 +7,11 @@
 # main checkout), then at the root of a repository as this one has it, and a gate that cannot find
 # its runner must refuse the push. Only a PR changes main (#59): a push to the remote's default
 # branch is refused unless SQUAD_MAIN_EXCEPTION names an approved exception's issue, and branches
-# and tags are not affected. Everything happens in a temporary directory: this script never
-# touches the repository it is run from.
+# and tags are not affected. A ref whose commit the remote's branches already contain carries no
+# new code (#143): it goes through with no check and no checkout of it, but not to main without an
+# exception, and a stale remote-tracking ref cannot vouch for a commit the remote dropped.
+# Everything happens in a temporary directory: this script never touches the repository it is run
+# from.
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2
@@ -294,10 +297,12 @@ else
   fail "a branch push was refused: $errors"
 fi
 
+echo "a release" >> "$wt/pushed.txt"
+commit "$wt" "a commit that only the tag carries to the remote" >/dev/null
 git -C "$wt" tag -a v99 -m "a release" HEAD
 runs_before="$(runs)"
 if errors="$(git -C "$wt" push -q origin refs/tags/v99 2>&1)" && [ "$(runs)" -gt "$runs_before" ]; then
-  pass "a tag push is not a push to main: it goes through, after the checks"
+  pass "a tag on a new commit is not a push to main: it goes through, after the checks"
 else
   fail "a tag push was refused, or ran no check: $errors"
 fi
@@ -325,5 +330,71 @@ else
   fail "a push to main was refused although the remote's default branch is trunk: $errors"
 fi
 git -C "$work" symbolic-ref --delete refs/remotes/origin/HEAD
+
+# 9. A ref whose commit is already on the remote carries no new code (#143): the gate lets it
+#    through as it does a deletion, with no check run and no look at uncommitted changes. What
+#    counts is the remote's branches as the remote lists them at the push, so that a stale
+#    remote-tracking ref can only make the gate refuse. A ref with a new commit still has to be
+#    the checked-out one, and the protected branch still takes a PR, whatever the commit.
+old="$(git -C "$wt" rev-parse refs/remotes/origin/a-branch)"
+git -C "$wt" tag -a v1 -m "a past release" "$old"
+echo "more work" >> "$wt/pushed.txt"
+commit "$wt" "new work that the remote does not have" >/dev/null
+echo "not committed" >> "$wt/pushed.txt"
+runs_before="$(runs)"
+if errors="$(git -C "$wt" push -q origin refs/tags/v1 2>&1)" && [ "$(runs)" = "$runs_before" ]; then
+  pass "an annotated tag on a commit already on the remote goes through from another checkout, with no check run and a dirty tree"
+else
+  fail "a tag on a commit already on the remote was refused, or ran the checks: $errors"
+fi
+git -C "$wt" checkout -q -- pushed.txt
+
+git -C "$wt" tag -a v2 -m "an unreleased commit" HEAD
+echo "later work" >> "$wt/pushed.txt"
+commit "$wt" "the checkout moves on" >/dev/null
+if errors="$(git -C "$wt" push -q origin refs/tags/v2 2>&1)"; then
+  fail "a tag on a new commit that is not checked out went through"
+elif grep -q 'is not the checked-out commit' <<<"$errors"; then
+  pass "a tag on a new commit that is not checked out is still refused"
+else
+  fail "a tag on a new commit was refused for another reason: $errors"
+fi
+
+git -C "$wt" tag -a v3 -m "another past release" "$old"
+runs_before="$(runs)"
+if errors="$(git -C "$wt" push -q origin refs/tags/v3 HEAD:refs/heads/a-branch 2>&1)" \
+  && [ "$(runs)" -gt "$runs_before" ]; then
+  pass "an old tag pushed with the checked-out new commit runs the checks"
+else
+  fail "an old tag pushed with a new commit did not run the checks, or was refused: $errors"
+fi
+
+runs_before="$(runs)"
+# Forced, so that git's own fast-forward rule does not refuse it before the gate has its say.
+if errors="$(git -C "$wt" push -q origin "+$old:refs/heads/main" 2>&1)"; then
+  fail "pointing main at a commit already on the remote went through without an exception"
+elif grep -q 'only a PR' <<<"$errors" && [ "$(runs)" = "$runs_before" ]; then
+  pass "pointing main at a commit already on the remote is still refused without an exception"
+else
+  fail "pointing main at an existing commit was refused for another reason: $errors"
+fi
+
+# A branch the remote no longer has, though the local remote-tracking ref still names it: its
+# commit is new to the remote again, so its tag is treated as new code.
+echo "gone" >> "$wt/pushed.txt"
+commit "$wt" "a commit only a doomed branch carries" >/dev/null
+git -C "$wt" push -q origin HEAD:refs/heads/doomed-branch 2>/dev/null || exit 2
+doomed="$(git -C "$wt" rev-parse HEAD)"
+git -C "$lab/remote.git" update-ref -d refs/heads/doomed-branch
+git -C "$wt" tag -a v4 -m "a tag on a commit the remote dropped" "$doomed"
+echo "moving on" >> "$wt/pushed.txt"
+commit "$wt" "the checkout moves on again" >/dev/null
+if git -C "$wt" rev-parse -q --verify refs/remotes/origin/doomed-branch >/dev/null \
+  && ! errors="$(git -C "$wt" push -q origin refs/tags/v4 2>&1)" \
+  && grep -q 'is not the checked-out commit' <<<"$errors"; then
+  pass "a stale remote-tracking ref does not let a commit the remote dropped through unchecked"
+else
+  fail "a commit only a stale remote-tracking ref knows went through, or was refused otherwise: $errors"
+fi
 
 exit "$status"
