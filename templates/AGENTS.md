@@ -62,7 +62,8 @@ the worktrees themselves live under `.agent-squad/`, so an unanchored pattern al
 worktree's own files when the tool runs inside it. Keep the lines for this project's tools and
 delete the others:
 - Jest: `testPathIgnorePatterns` and `modulePathIgnorePatterns` both list `<rootDir>/.agent-squad/`.
-- Metro: `resolver.blockList` holds a pattern anchored at the project root, such as
+- Metro: `resolver.blockList` holds a pattern anchored at the project root. For instance, with
+  `const path = require('path')` at the top of `metro.config.js`:
   `new RegExp('^' + (path.join(__dirname, '.agent-squad') + path.sep).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))`.
   An unanchored `/\.agent-squad\//` also matches every file of a worktree.
 - Watchman: no `ignore_dirs` for `.agent-squad`. A worktree's watch reuses the main checkout's, so
