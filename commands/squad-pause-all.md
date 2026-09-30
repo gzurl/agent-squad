@@ -18,11 +18,14 @@ Follow the part for every agent in `squad-pause.md`, for yourself alone, as `/sq
    instead of the CEO, how long your squad needs and when it is safe to close." For a squad with no
    CTO session open, send its DEV and QA one message each: "The CEO is closing the laptop
    (`/squad-pause-all`): follow the part for every agent in `squad-pause.md`, in your main
-   checkout's `.claude/commands/`, and tell me when you are safe to close."
+   checkout's `.claude/commands/`, and tell me when you are safe to close. If there is no such
+   file, your project runs no squad: get to a safe point your own way (nothing half-done, nothing
+   running in the background, your work saved) and tell me what you did."
 3. **Answer the CEO once, grouped by squad**, in the CEO's language (`AGENTS.md`, *Language*): how
    long each squad still needs, from its CTO's report or its agents'. Say "all N squads are safe
    to close" only when each squad has reported safe and `ListAgents` shows its sessions idle.
    Name any squad that did not answer after a few minutes, or whose CTO or agents answered that
-   their main checkout has no `squad-pause.md` (a release older than v26): you cannot see other
+   their main checkout has no `squad-pause.md` (a release older than v26, or a project that runs
+   no squad, whose agents say what they did instead): you cannot see other
    squads' checkouts, since `ListAgents` gives no paths. Say what its sessions were doing (busy
    or idle) and what the CEO can do: wait, look at those sessions, or close anyway.

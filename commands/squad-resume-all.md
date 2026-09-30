@@ -18,7 +18,9 @@ would.
    your main checkout's `.claude/commands/`, and send me, instead of the CEO, the summary it
    gives." For a squad with no CTO session open, send its DEV and QA one message each: "The CEO
    is back (`/squad-resume-all`): follow the part for every agent in `squad-resume.md`, in your
-   main checkout's `.claude/commands/`, and send me your summary."
+   main checkout's `.claude/commands/`, and send me your summary. If there is no such file, your
+   project runs no squad: send me what you did while the CEO was away and what you do now, in
+   three lines at most."
 3. **Give the CEO one summary, grouped by squad**, in the CEO's language (`AGENTS.md`,
    *Language*): for each squad, what its agents did while the CEO was away, what was merged or
    released, and what waits for the CEO (its open `needs-ceo` issues, each linked), then its plan
