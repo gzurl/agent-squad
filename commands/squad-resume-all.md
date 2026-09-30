@@ -21,10 +21,16 @@ would.
    main checkout's `.claude/commands/`, and send me your summary. If there is no such file, your
    project runs no squad: send me what you did while the CEO was away and what you do now, in
    three lines at most."
+   Every message you send for this command ends with "Sent at <time>; if you read this more than
+   10 minutes later, ask me whether it still holds before acting.", where `<time>` is
+   `date '+%Y-%m-%d %H:%M'` when you send it.
+   A squad whose CTO session `ListAgents` shows as **waiting** counts as a squad with no CTO
+   session: that CTO is held by a question or a permission prompt in its own terminal, and would
+   read your message only after the CEO answers it there.
 3. **Give the CEO one summary, grouped by squad**, in the CEO's language (`AGENTS.md`,
    *Language*): for each squad, what its agents did while the CEO was away, what was merged or
    released, and what waits for the CEO (its open `needs-ceo` issues, each linked), then its plan
    ahead, as `/squad-resume`'s step 4 says (now, next, later, what the CEO will be asked next).
    Each other squad's CTO sends its own plan with its summary; a squad with no CTO session has no
    plan to report, so say so for it. Name any squad that did not answer, with what its sessions
-   are doing.
+   are doing, and any session shown as waiting, since only the CEO can answer it.

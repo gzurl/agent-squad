@@ -1,5 +1,19 @@
 # Changelog
 
+## v31 — 2026-09-30
+- **Step-away commands reach a session that is waiting for the CEO** (#139). A session that the
+  list of sessions shows as waiting is held by a question or a permission prompt in its own
+  terminal, and reads no message until the CEO answers it there. The CTO now names it to the CEO,
+  and the `-all` commands treat another squad's waiting CTO as a squad with no CTO session, so the
+  command goes straight to its DEV and QA. Every relayed step-away message gives the time it was
+  sent, and an agent that reads it more than ten minutes later asks the sender whether it still
+  holds before acting. Found by the CEO during a `/squad-pause-all`, whose pause one squad read
+  almost an hour late. §6 and the README (*When you step away*) describe it.
+- **No `/compact` in every session after an upgrade** (#140): `/squad-upgrade` has DEV and QA
+  re-read the sections that changed, taking them as superseding what their session loaded, and
+  tells the CEO that nothing else is needed; it recommends `/squad-save-state` and `/compact` only
+  after a release that rewrites much of the charter. §7 and the README (*Upgrade*) say the same.
+
 ## v30 — 2026-09-30
 - **The README at the user's level** (#137), after the CEO's review of v28 and v29: `/squad-upgrade`
   has a section of its own, *Upgrade*, next to *Install*, and *When you step away* says what the

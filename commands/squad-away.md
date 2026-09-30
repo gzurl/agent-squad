@@ -10,6 +10,11 @@ worktrees.
 1. Send DEV and QA one message each: "The CEO is away and the machine stays on (`/squad-away`):
    follow the part for every agent in `squad-away.md`, in the main checkout's `.claude/commands/`,
    and tell me when you have nothing left that needs no decision." Then do that part yourself.
+   Every message you send for this command ends with "Sent at <time>; if you read this more than
+   10 minutes later, ask me whether it still holds before acting.", where `<time>` is
+   `date '+%Y-%m-%d %H:%M'` when you send it.
+   A session that `ListAgents` shows as **waiting** is held by a question or a permission prompt
+   in its own terminal and reads no message until the CEO answers it there: name it to the CEO.
 2. While any agent still has work, keep macOS awake: start `caffeinate -i -t 43200` in the
    background on purpose (§2.4 allows it; the 12-hour limit ends a forgotten one by itself), and
    note its PID on your issue. Stop it with `kill <PID>` when every agent has said it has nothing
