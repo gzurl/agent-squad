@@ -35,11 +35,18 @@ Work from the main checkout. The upstream repository is the one named on the `up
 4. **Install**, on the CEO's yes, from the main checkout:
    `gh api -H 'Accept: application/vnd.github.raw' repos/<upstream>/contents/install.sh | bash -s -- --tag <tag> . > <file> 2>&1`,
    with `<file>` in a temporary directory, and read the exit status of that line. Read the whole
-   output, never through `head` or `tail`. Exit 2 means nothing was installed: stop and report it
-   to the CEO with the lines that say why. Exit 1 means steps marked NOT need a decision: bring
-   them to the CEO as options with a recommendation. Then run `--check` the same way. If it fails
-   an item that the installer does not list under *By hand*, stop and report it. Delete the file
-   when you are done.
+   output, never through `head` or `tail`. The status alone does not prove an install: a download
+   that fails without a word leaves the output empty and the status 0.
+   - **An empty output,** or a status other than 0 and 1, means nothing was installed: stop and
+     report it to the CEO, with the lines that say why when there are any.
+   - **Exit 1** means steps marked NOT need a decision: bring them to the CEO as options with a
+     recommendation.
+   - **Then verify the upgrade:** run `--check` the same way. Its first line must name `<tag>`'s
+     version, and the last line of `.agent-squad/install.log` must end with `-> <tag>`. If either
+     does not, or if `--check` fails an item that the installer does not list under *By hand*,
+     stop and report it.
+
+   Delete the file when you are done.
 5. **Commit what the installer lists under *By hand*,** such as a `.gitignore` line or a
    template it created, through the installer's PR (§3; `BOOTSTRAP.md`, *The installer's files*).
    That PR needs no issue of its own, and its description names the release and each *By hand*
