@@ -1,5 +1,14 @@
 # Changelog
 
+## v27 — 2026-09-30
+- **Git LFS runs its pre-push hook from `pre-push.local`** (#121). The squad's shim owns
+  `.git/hooks/pre-push`, so `git lfs install` cannot add LFS's hook there, and a push would send
+  pointers without their files. A project that uses LFS puts `git lfs pre-push "$@"` in an
+  executable `.git/hooks/pre-push.local`, which the shim runs first; one that had LFS's hook before
+  the install already has it there. `--check` shows an item for it only when a `.gitattributes` of
+  the project, at the root or tracked below it, has `filter=lfs`, and names the fix when it fails.
+  The README's *Things to know* and `BOOTSTRAP.md` row 9b say so.
+
 ## v26 — 2026-09-30
 - **When the CEO steps away** (#101): `/squad-pause` gets each agent to a safe point before the
   laptop closes, `/squad-away` has the squad go on with what needs no decision while the machine
