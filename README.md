@@ -180,7 +180,7 @@ agent alone.
 | Type&nbsp;in&nbsp;the&nbsp;CTO's&nbsp;session | When | What happens |
 |---|---|---|
 | ⏸️&nbsp;`/squad-pause` | You need everything stopped at a safe point: to close the laptop, to use the machine for something else, or for any other reason | Each agent finishes what it is doing, saves where it is on GitHub, and stops. The CTO tells you when it is safe. |
-| 🚶&nbsp;`/squad-away` | You leave, and the machine stays on | The agents carry on with whatever needs no decision from you, and leave those decisions on GitHub for when you are back. |
+| ⏩&nbsp;`/squad-away` | You leave, and the machine stays on | The agents carry on with whatever needs no decision from you, and leave those decisions on GitHub for when you are back. |
 | ▶️&nbsp;`/squad-resume` | You are back | The CTO sums up what was done, what waits for you, and the plan ahead. Paused agents pick up where they stopped. |
 
 Nothing notifies you while you are away: `/squad-resume` tells you what happened, and the issues

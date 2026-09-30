@@ -4,7 +4,8 @@
 - **The README at the user's level** (#137), after the CEO's review of v28 and v29: `/squad-upgrade`
   has a section of its own, *Upgrade*, next to *Install*, and *When you step away* says what the
   CEO types and gets back, in a table with one emoji per command, with the `-all` commands in one
-  paragraph. The agents' inner steps stay in the charter and the commands.
+  paragraph. The agents' inner steps stay in the charter and the commands. §6 allows that emoji: one
+  per row of a table of commands, in the command's cell.
 - **`/squad-pause` is a safe point for any reason** (#137): to close the laptop, to use the
   machine for something else, or anything else. §6, the README and the `/squad-pause` and
   `/squad-pause-all` commands say so, and the agents report "at a safe point" instead of "safe to
