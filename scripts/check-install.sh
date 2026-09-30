@@ -90,6 +90,7 @@ item_list=".agent-squad-checks exists and is tracked"
 item_worktrees=".agent-squad/worktrees/dev and qa are worktrees of this repository"
 item_import="CLAUDE.md links to AGENTS.md, which imports the charter"
 item_branch="git knows the remote's default branch, the one the gate protects"
+item_lfs="Git LFS's pre-push runs from hooks/pre-push.local"
 # `check_reports [<item>...]` runs --check on the project and passes when the items that fail are
 # exactly those given, with exit 1; with none given, when every item passes, with exit 0.
 check_reports() {
@@ -441,6 +442,50 @@ check "and keeps v24's line, with the rule once" \
 out="$("$install" "$target" "$tag_a" 2>&1)"
 check "and a second run says the rule is already there" \
   contains "$out" "install: .gitignore .claude/commands/squad-*.md is already ignored"
+
+# 7g. Git LFS (#121). Its own pre-push hook cannot go where the shim is, so a project that routes
+#     files through LFS runs it from hooks/pre-push.local, which the shim runs first. --check shows
+#     an item for it only when a .gitattributes of the project has filter=lfs: failing without an
+#     executable pre-push.local that runs git lfs pre-push, passing with one. LFS's own hook, there
+#     before the install, is kept as pre-push.local and passes as it is. No git-lfs is needed: the
+#     item reads files.
+lfs_hook='#!/bin/sh
+command -v git-lfs >/dev/null 2>&1 || { echo "git-lfs was not found on your path" >&2; exit 2; }
+git lfs pre-push "$@"'
+# `lfs_line <project>` prints --check's line for the LFS item, or nothing when there is none.
+lfs_line() { "$install" --check "$1" 2>&1 | grep -F "$item_lfs" || true; }
+target="$(new_project lfs)" || exit 2
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+check "without LFS, --check shows no LFS item" [ -z "$(lfs_line "$target")" ]
+printf '# *.psd filter=lfs diff=lfs merge=lfs -text\n*.txt text\n' > "$target/.gitattributes"
+check "nor with filter=lfs only in a comment of .gitattributes" [ -z "$(lfs_line "$target")" ]
+printf '*.bin filter=lfs diff=lfs merge=lfs -text\n' > "$target/.gitattributes"
+git -C "$target" add .gitattributes && git -C "$target" commit -qm "LFS for binaries" || exit 2
+local_hook="$target/.git/hooks/pre-push.local"
+# The installer names the hook by its resolved path, as it names the shim.
+check "with LFS and no pre-push.local, the LFS item fails and says what to write" \
+  contains "$(lfs_line "$target")" "check: FAILED  $item_lfs: the project uses Git LFS (.gitattributes has filter=lfs), and there is no executable $(cd "$target" && pwd -P)/.git/hooks/pre-push.local; write one that runs git lfs pre-push \"\$@\""
+printf '%s\n' "$lfs_hook" > "$local_hook"
+check "with one that is not executable, it still fails" \
+  contains "$(lfs_line "$target")" "check: FAILED  $item_lfs: the project uses Git LFS"
+printf '#!/bin/sh\necho "a hook of the project'"'"'s own"\n' > "$local_hook" && chmod +x "$local_hook"
+check "with an executable one that does not run git lfs pre-push, it fails, saying so" \
+  contains "$(lfs_line "$target")" "does not run git lfs pre-push; add git lfs pre-push \"\$@\" to it"
+printf '%s\n' "$lfs_hook" > "$local_hook"
+check "with LFS's own hook there, the LFS item passes" [ "$(lfs_line "$target")" = "check: ok      $item_lfs" ]
+target="$(new_project lfs-nested)" || exit 2
+mkdir -p "$target/assets" && printf '*.png filter=lfs diff=lfs merge=lfs -text\n' > "$target/assets/.gitattributes"
+git -C "$target" add assets/.gitattributes && git -C "$target" commit -qm "LFS for images" || exit 2
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+check "a tracked .gitattributes below the root counts too" \
+  contains "$(lfs_line "$target")" "check: FAILED  $item_lfs"
+target="$(new_project lfs-before)" || exit 2
+printf '*.bin filter=lfs diff=lfs merge=lfs -text\n' > "$target/.gitattributes"
+git -C "$target" add .gitattributes && git -C "$target" commit -qm "LFS for binaries" || exit 2
+printf '%s\n' "$lfs_hook" > "$target/.git/hooks/pre-push" && chmod +x "$target/.git/hooks/pre-push"
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+check "LFS's hook, there before the install, is kept as pre-push.local and passes the item" \
+  [ "$(lfs_line "$target")" = "check: ok      $item_lfs" ]
 
 # 8. A failed download or an incomplete tree leaves the installed playbook as it was.
 echo "not a tarball" > "$lab/broken.tgz"
