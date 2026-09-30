@@ -177,7 +177,7 @@ session, a command applies to that agent alone.
 
 | When | Type | What the squad does |
 |---|---|---|
-| You are about to close the laptop | `/squad-pause` | Each agent finishes the short step in hand, starts nothing long, writes its state on its issue and stops. The CTO tells you how long each still needs, then that the three are safe to close. |
+| You are about to close the laptop | `/squad-pause` | Each agent finishes the short step in hand, starts nothing long, writes its state on its issue (or on the PR it is reviewing) and stops. The CTO tells you how long each still needs, then that the three are safe to close. |
 | You leave, and the machine stays on | `/squad-away` | The agents go on with the work that needs no decision from you, and park the rest on its issue, labelled `needs-ceo`. They save their state after every step, since closing the lid still sleeps the machine. The CTO keeps macOS awake while work remains, and lets it sleep when nothing is left. |
 | You are back | `/squad-resume` | The CTO gives you one summary: what each agent did, what was merged or released, and what waits for you. Paused agents pick up where they stopped. |
 
