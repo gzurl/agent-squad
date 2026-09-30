@@ -9,8 +9,9 @@ commands are in the main checkout's `.claude/commands/`, not in the worktrees.
 Follow the part for every agent in `squad-away.md`, for yourself alone, as `/squad-away` would.
 
 ## If you are the CTO
-1. **Your own squad:** do what `/squad-away` has the CTO do (`squad-away.md`, its CTO part). You
-   keep the machine awake for every squad, with the one `caffeinate` it starts.
+1. **Your own squad:** do what `/squad-away` has the CTO do (`squad-away.md`, its CTO part),
+   except when to stop the `caffeinate` it starts: that one keeps the machine awake for every
+   squad, and step 3 says when it stops.
 2. **The other squads:** list the sessions open on this machine (`ListAgents`). Their names read
    `ROLE:<project-name>`: group them by project, leaving yours out. Send each other squad's CTO
    one message: "The CEO is away and the machine stays on (`/squad-away-all`): run
@@ -22,4 +23,5 @@ Follow the part for every agent in `squad-away.md`, for yourself alone, as `/squ
    checkout's `.claude/commands/`, and tell me when you have nothing left that needs no decision."
 3. **Keep the `caffeinate` running** while any squad still has work, and stop it (`kill <PID>`)
    when every squad has said it has nothing left, and at `/squad-resume-all`. Name to the CEO, on
-   return, any squad whose main checkout has no `squad-away.md` (a release older than v26).
+   return, any squad whose CTO or agents answered that their main checkout has no `squad-away.md`
+   (a release older than v26), or that did not answer.
