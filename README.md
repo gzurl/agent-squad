@@ -293,7 +293,8 @@ what, and when.
   snapshots, the evidence and `.claude/settings.local.json`, and with `-ff` the worktrees too.
 - **`gh issue list --label` silently returns nothing** for a label whose emoji is made of several
   characters, as the owner labels and `needs-ceo` are. Filter on GitHub's web page, or with
-  `gh issue list --json labels` and `jq`.
+  `gh issue list --state open --limit 1000 --json number,title,labels` and `jq`; without
+  `--limit`, the list stops at 30 issues.
 
 
 ## 📦 This repository
