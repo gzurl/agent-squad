@@ -22,10 +22,10 @@ Work from the main checkout. The upstream repository is the one named on the `up
    (`gh api -H 'Accept: application/vnd.github.raw' 'repos/<upstream>/contents/CHANGELOG.md?ref=<tag>'`),
    every entry above the version the project runs. Summarise it for the CEO, in the CEO's
    language, under three headings:
-   - **Rules that change how the agents work**, with their § numbers. Say whether any of them is
-     in the charter or in `AGENTS.md`'s imported text, which a running session loaded when it
-     started or last compacted (§7): those reach a session only when it restarts or compacts.
-     Scripts, hooks and commands take effect at once and need neither.
+   - **Rules that change how the agents work**, with their § numbers. Once it is installed, the
+     agents re-read the sections that change (step 6), and the CEO has nothing to do for that.
+     Say whether the release rewrites much of the charter, the one case in which step 7
+     recommends a compaction. Scripts, hooks and commands take effect at once.
    - **What the project must do:** each *By hand* item, a `.gitignore` line to commit, or a
      setting to add to a tool.
    - **Anything else the CEO should know.**
@@ -51,9 +51,12 @@ Work from the main checkout. The upstream repository is the one named on the `up
    template it created, through the installer's PR (§3; `BOOTSTRAP.md`, *The installer's files*).
    That PR needs no issue of its own, and its description names the release and each *By hand*
    item it records.
-6. **Tell DEV and QA**, one message each: the version installed, the rules that changed with their
-   § numbers, and that their session keeps the charter it loaded until it restarts or compacts.
+6. **Have the agents re-read what changed** (§7). Tell DEV and QA, one message each: the version
+   installed, the rules that changed with their § numbers, and to re-read those sections now in
+   the main checkout's `.agent-squad/playbook/`, taking them as superseding the text their session
+   loaded. Re-read them yourself.
 7. **Report to the CEO**, in the CEO's language: the version installed, `--check`'s result, the
-   installer's PR, and what DEV and QA were told. If a rule in the charter or in `AGENTS.md`
-   changed, recommend that the CEO type `/squad-save-state` and then `/compact` in each session,
-   the CTO's included, so that each loads the new text, or restart the sessions.
+   installer's PR, and what DEV and QA were told. Say that nothing else is needed from the CEO: the
+   agents have re-read the rules that changed, and each session loads the full text at its next
+   compaction. Only when the release rewrites much of the charter, recommend that the CEO type
+   `/squad-save-state` and then `/compact` in each session, the CTO's included, and say why.
