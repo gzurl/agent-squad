@@ -123,15 +123,16 @@ snapshot() {
 hatch_seconds=600
 # The last entry in which the user or another agent did something: a user entry that is not a tool
 # result, not meta unless it is a message from another agent (command expansions, reminders and
-# caveats are meta), not a local command's echo (a stopped /compact leaves one) and not a
-# compaction summary. It prints that entry's text as a JSON string, one per line.
+# caveats are meta), not a local command's echo (a stopped /compact leaves one), not the /compact
+# being typed (the interactive CLI writes it as plain text, then as markup, before the hook runs:
+# agent-squad #134) and not a compaction summary. It prints that entry's text as a JSON string, one per line.
 # shellcheck disable=SC2016 # a jq program: its $names are jq's
 turn_filter='select(.type == "user" and (.isCompactSummary | not))
   | .message.content as $content
   | select(($content | type) == "string" or (($content | type) == "array" and ($content | any(.type != "tool_result"))))
   | select(.isMeta != true or .origin.kind == "peer")
   | (if ($content | type) == "string" then $content else [$content[] | select(.type == "text") | .text] | join("\n") end)
-  | select((startswith("<local-command-") or test("<command-name>/compact</command-name>")) | not)'
+  | select((startswith("<local-command-") or test("<command-name>/compact</command-name>") or test("^/compact( |$)")) | not)'
 # `unchecked <why>` lets the compaction through, saying why it was not checked.
 unchecked() {
   echo "squad: could not check for /squad-save-state before this /compact ($1), so it goes ahead" >&2
