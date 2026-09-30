@@ -91,10 +91,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 - A tag's tarball, which is what projects install, leaves out what [.gitattributes](.gitattributes)
   marks `export-ignore`: this repository's own conventions, CI, checks list and tests. A new file
   that only this repository uses goes there too.
-- After the merge, whoever merged tags the squash commit from a checkout of it, because the
-  pre-push gate refuses to push a tag whose commit is not the one checked out: in the main
-  checkout `git pull --ff-only`, in a worktree `git fetch && git switch --detach origin/main`; then
-  `git tag -a vN -m "Charter vN: <summary>" HEAD && git push origin vN`. Then they notify the
+- After the merge, whoever merged tags the squash commit from a checkout of it, so that the tag
+  names the commit that was reviewed: in the main checkout `git pull --ff-only`, in a worktree
+  `git fetch && git switch --detach origin/main`; then
+  `git tag -a vN -m "Charter vN: <summary>" HEAD && git push origin vN`. The pre-push gate lets the
+  tag through without checks, since its commit is already on `main`. Then they notify the
   agents of this repository and the CTOs of the projects (`ListAgents`), who decide when their
   project takes the new version.
 
