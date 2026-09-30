@@ -188,8 +188,7 @@ labelled `needs-ceo` are your inbox.
 
 **Several squads on the machine?** Add `-all`: `/squad-pause-all`, `/squad-away-all` and
 `/squad-resume-all`, typed in any squad's CTO session, do the same for every squad, and you get one
-answer, grouped by squad, that names any squad that did not answer. They need v29 or later in the
-squad you type them in, and v26 or later in the others.
+answer, grouped by squad, that names any squad that did not answer.
 
 A session that is waiting for you in its own terminal, on a question or a permission prompt,
 cannot act on a command until you answer it there: the CTO tells you which one, and passes the
@@ -218,12 +217,12 @@ In your project's main checkout (the folder you cloned, not a worktree), run:
 gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh | bash
 ```
 
-That installs the latest release. To pick a version (v15 or later) or another folder, add them
+That installs the latest release. To pick a version or another folder, add them
 after `bash -s --`:
 
 ```bash
 gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh \
-  | bash -s -- --tag v20 /path/to/project
+  | bash -s -- --tag v31 /path/to/project
 ```
 
 To upgrade later, see [Upgrade](#-upgrade).
@@ -265,9 +264,6 @@ release the project runs, what the new one changes and whether you need to do an
 installs it only when you say yes. The agents then re-read the rules that changed, so there is
 nothing else for you to do; the CTO asks you to compact the sessions only after a release that
 rewrites much of the charter. The release notes are in [CHANGELOG.md](CHANGELOG.md).
-
-A project on a release older than v28 has no `/squad-upgrade` yet: that one time, run the install
-line again ([Install](#️-install)).
 
 
 ## 🗂️ What goes where
