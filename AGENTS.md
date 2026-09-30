@@ -107,7 +107,7 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   the hooks in `.claude/settings.local.json` run `.agent-squad/playbook/scripts/squad-handoff.sh`.
   The scripts at the root are the next version's; `scripts/check-*.sh` test them.
 - From the main checkout, `.agent-squad/playbook/scripts/squad-install.sh --check .` verifies this
-  installation; after a release, upgrade it like a project does (README, *Install*).
+  installation; after a release, upgrade it like a project does (README, *Upgrade*).
 
 ## Tooling traps
 Met while writing this repository's scripts: `gh api --slurp` cannot be combined with `--jq` (pipe

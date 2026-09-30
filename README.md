@@ -32,7 +32,8 @@ agent-squad needs both.
 - **Sessions that keep the thread.** Each session loads the rules when it starts, and a session
   whose context gets compacted is handed back the state of the project
   ([how](#when-a-sessions-context-fills-up)).
-- **Versioned.** A project installs a release and upgrades when it chooses.
+- **Versioned.** A project installs a release and upgrades when it chooses
+  ([how](#-upgrade)).
 
 
 ### ▶️ Quick start
@@ -73,6 +74,7 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
   - [When you step away](#when-you-step-away)
 - [📋 Requirements](#-requirements)
 - [🛠️ Install](#️-install)
+- [🔄 Upgrade](#-upgrade)
 - [🗂️ What goes where](#️-what-goes-where)
 - [⚠️ Things to know](#️-things-to-know)
 - [📦 This repository](#-this-repository)
@@ -171,27 +173,23 @@ in the middle of a task, which no hook can stop.
 
 ### When you step away
 
-Three commands tell the squad you are leaving and coming back. Type them in the CTO's session: the
-CTO passes them on to DEV and QA and answers you once for the three. Typed in DEV's or QA's
-session, a command applies to that agent alone.
+One command tells the squad you are leaving, or that you are back. The CTO passes it on to DEV
+and QA, and answers you once for the three. Typed in DEV's or QA's session, it applies to that
+agent alone.
 
-| When | Type | What the squad does |
+| Type&nbsp;in&nbsp;the&nbsp;CTO's&nbsp;session | When | What happens |
 |---|---|---|
-| You are about to close the laptop | `/squad-pause` | Each agent finishes the short step in hand, starts nothing long, writes its state on its issue (or on the PR it is reviewing) and stops. The CTO tells you how long each still needs, then that the three are safe to close. |
-| You leave, and the machine stays on | `/squad-away` | The agents go on with the work that needs no decision from you, and park the rest on its issue, labelled `needs-ceo`. They save their state after every step, since closing the lid still sleeps the machine. The CTO keeps macOS awake while work remains, and lets it sleep when nothing is left. |
-| You are back | `/squad-resume` | The CTO gives you one summary: what each agent did, what was merged or released, and what waits for you. It ends with the plan ahead: the release in progress step by step, the next one, what waits for a decision, and what you will be asked next. Paused agents pick up where they stopped. |
+| ⏸️&nbsp;`/squad-pause` | You need everything stopped at a safe point: to close the laptop, to use the machine for something else, or for any other reason | Each agent finishes what it is doing, saves where it is on GitHub, and stops. The CTO tells you when it is safe. |
+| ⏩&nbsp;`/squad-away` | You leave, and the machine stays on | The agents carry on with whatever needs no decision from you, and leave those decisions on GitHub for when you are back. |
+| ▶️&nbsp;`/squad-resume` | You are back | The CTO sums up what was done, what waits for you, and the plan ahead. Paused agents pick up where they stopped. |
 
 Nothing notifies you while you are away: `/squad-resume` tells you what happened, and the issues
 labelled `needs-ceo` are your inbox.
 
-These three act on one squad. When several squads are open on the machine, `/squad-pause-all`,
-`/squad-away-all` and `/squad-resume-all` act on all of them. Type one in any squad's CTO session:
-that CTO does the same for its own squad and passes the command on to every other squad's CTO,
-or, for a squad with no CTO session open, to its DEV and QA. It then answers you once, grouped
-by squad: how long each still needs and "all N squads are safe to close", or one summary for all
-of them. `/squad-away-all` keeps the machine awake with one `caffeinate` for every squad. The
-other squads need only the single-squad commands, from v26 on, and a squad without them is named
-in the answer.
+**Several squads on the machine?** Add `-all`: `/squad-pause-all`, `/squad-away-all` and
+`/squad-resume-all`, typed in any squad's CTO session, do the same for every squad, and you get one
+answer, grouped by squad, that names any squad that did not answer. They need v29 or later in the squad you type them in, and v26 or later in
+the others.
 
 
 ## 📋 Requirements
@@ -223,13 +221,7 @@ gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/
   | bash -s -- --tag v20 /path/to/project
 ```
 
-**To upgrade, type `/squad-upgrade` in the CTO's session.** The CTO tells you which version the
-project runs and which is the latest, and sums up what the new release changes, from
-[CHANGELOG.md](CHANGELOG.md). It installs only after you say yes. It then commits what the
-installer leaves *By hand* through a pull request, and tells the agents which rules changed. A
-running session keeps the rules it loaded until it restarts or is compacted, so when the charter
-changed, the CTO suggests `/squad-save-state` and then `/compact` in each session. A project on
-a release older than v28 has no `/squad-upgrade` yet: that one time, run the install line again.
+To upgrade later, see [Upgrade](#-upgrade).
 
 The installer can run as often as you like, and it never overwrites or deletes a file your project
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
@@ -259,6 +251,18 @@ exits with 1 if any item failed, and proves that the pre-push gate really refuse
 Right after installing, the items on the *By hand* list fail until the CTO completes them. In a
 brand-new repository with no commits, so do the worktrees and the default branch: the installer
 sets both when it runs again after the first commit.
+
+
+## 🔄 Upgrade
+
+When a new release is out, type `/squad-upgrade` in the CTO's session. The CTO tells you which
+release the project runs, what the new one changes and whether you need to do anything, and
+installs it only when you say yes. Afterwards it tells the agents what changed, and tells you
+whether the sessions need a `/squad-save-state` and `/compact` to pick up the new rules. The
+release notes are in [CHANGELOG.md](CHANGELOG.md).
+
+A project on a release older than v28 has no `/squad-upgrade` yet: that one time, run the install
+line again ([Install](#️-install)).
 
 
 ## 🗂️ What goes where
