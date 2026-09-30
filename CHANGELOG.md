@@ -1,5 +1,22 @@
 # Changelog
 
+## v26 — 2026-09-30
+- **When the CEO steps away** (#101): `/squad-pause` gets each agent to a safe point before the
+  laptop closes, `/squad-away` has the squad go on with what needs no decision while the machine
+  stays on (macOS kept awake with `caffeinate` while work remains), and `/squad-resume` gives the
+  CEO one summary on return. The CEO types them in the CTO's session, which relays them, or in one
+  agent's session for that agent alone. The installer writes them into `.claude/commands/` like
+  `/squad-save-state`, and one `.gitignore` rule, `.claude/commands/squad-*.md`, covers the four.
+  `--check` verifies them. The commands were tried at the CEO's real absences before this tag.
+  §6 and the README (*When you step away*) describe them. The `needs-ceo` recipe lists every open
+  issue (`--limit 1000`), not the first 30 (§3).
+- **Worktree exclusions anchored at the project root** (#120): the Metro setting of v24 was
+  unanchored and, inside a worktree, excluded the worktree's own files; `templates/AGENTS.md` now
+  anchors it, and Watchman gets no `ignore_dirs` for `.agent-squad`, since a worktree's watch
+  reuses the main checkout's (§2.4, README).
+- **Signatures in bold** (#111): everywhere a signature is written, `**👷🏼‍♂️[CTO]:**`; the merge
+  gate recognises a body-only finding whether its signature is bold or plain.
+
 ## v25 — 2026-09-29
 - §3: **a PR or an issue carries no more than one state label** (#99). Whoever sets a state label removes the
   other two in the same command, never listing the label it adds among those it removes: when one

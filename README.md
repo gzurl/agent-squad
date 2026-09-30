@@ -70,6 +70,7 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
   - [Built on Claude Code and GitHub](#built-on-claude-code-and-github)
   - [How the team works](#how-the-team-works)
   - [When a session's context fills up](#when-a-sessions-context-fills-up)
+  - [When you step away](#when-you-step-away)
 - [📋 Requirements](#-requirements)
 - [🛠️ Install](#️-install)
 - [🗂️ What goes where](#️-what-goes-where)
@@ -168,6 +169,21 @@ a hook stops the compaction and reminds you; a second `/compact` within ten minu
 anyway. A compaction you choose, at a quiet moment, loses less than one that Claude Code triggers
 in the middle of a task, which no hook can stop.
 
+### When you step away
+
+Three commands tell the squad you are leaving and coming back. Type them in the CTO's session: the
+CTO passes them on to DEV and QA and answers you once for the three. Typed in DEV's or QA's
+session, a command applies to that agent alone.
+
+| When | Type | What the squad does |
+|---|---|---|
+| You are about to close the laptop | `/squad-pause` | Each agent finishes the short step in hand, starts nothing long, writes its state on its issue (or on the PR it is reviewing) and stops. The CTO tells you how long each still needs, then that the three are safe to close. |
+| You leave, and the machine stays on | `/squad-away` | The agents go on with the work that needs no decision from you, and park the rest on its issue, labelled `needs-ceo`. They save their state after every step, since closing the lid still sleeps the machine. The CTO keeps macOS awake while work remains, and lets it sleep when nothing is left. |
+| You are back | `/squad-resume` | The CTO gives you one summary: what each agent did, what was merged or released, and what waits for you. Paused agents pick up where they stopped. |
+
+Nothing notifies you while you are away: `/squad-resume` tells you what happened, and the issues
+labelled `needs-ceo` are your inbox.
+
 
 ## 📋 Requirements
 
@@ -205,11 +221,11 @@ line, its *By hand* list says so, and the CTO commits it through a pull request.
 
 The installer can run as often as you like, and it never overwrites or deletes a file your project
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
-`.claude/settings.local.json`, writes the `/squad-save-state` command into `.claude/commands/`, adds
-three lines to `.gitignore`, installs a small pre-push hook, creates the DEV and QA worktrees, and
-adds GitHub issue and pull request templates if the project has none. It prints every step, and ends
-with a *By hand* list of what it leaves to the CTO, who takes care of it while following
-`BOOTSTRAP.md`:
+`.claude/settings.local.json`, writes the squad's commands (`/squad-save-state`, `/squad-pause`,
+`/squad-away`, `/squad-resume`) into `.claude/commands/`, adds three lines to `.gitignore`, installs
+a small pre-push hook, creates the DEV and QA worktrees, and adds GitHub issue and pull request
+templates if the project has none. It prints every step, and ends with a *By hand* list of what it
+leaves to the CTO, who takes care of it while following `BOOTSTRAP.md`:
 
 - the *Squad* section of `AGENTS.md`, which loads the charter into every session (the installer
   prints it);
@@ -241,10 +257,10 @@ the installer touches only the files listed before it:
 <project>/
 ├── AGENTS.md, CLAUDE.md → AGENTS.md      in git    your conventions, and the charter's import
 ├── .agent-squad-checks                   in git    the checks the pre-push gate runs
-├── .gitignore                            in git    ignores .agent-squad/, the local settings, the command
+├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
 ├── .claude/settings.local.json           ignored   the squad's four hooks, next to your settings
-├── .claude/commands/squad-save-state.md  ignored   the /squad-save-state command
+├── .claude/commands/squad-*.md           ignored   the squad's four commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored
     ├── playbook/          the installed release: charter, scripts, templates
@@ -280,7 +296,8 @@ what, and when.
   snapshots, the evidence and `.claude/settings.local.json`, and with `-ff` the worktrees too.
 - **`gh issue list --label` silently returns nothing** for a label whose emoji is made of several
   characters, as the owner labels and `needs-ceo` are. Filter on GitHub's web page, or with
-  `gh issue list --json labels` and `jq`.
+  `gh issue list --state open --limit 1000 --json number,title,labels` and `jq`; without
+  `--limit`, the list stops at 30 issues.
 
 
 ## 📦 This repository
@@ -289,7 +306,7 @@ what, and when.
 |---|---|---|
 | `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
 | `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and this guide | Yes |
-| `commands/squad-save-state.md` | The `/squad-save-state` command | Yes; the installer copies it into `.claude/commands/` |
+| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-away`, `/squad-resume` | Yes; the installer copies them into `.claude/commands/` |
 | `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the compaction hooks, the merge gate, the checks runner and the pre-push gate | Yes |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |
