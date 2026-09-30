@@ -10,6 +10,11 @@ The CEO is back. Your role is your session name. The squad's commands are in the
 2. Send DEV and QA one message each: "The CEO is back (`/squad-resume`): follow the part for every
    agent in `squad-resume.md`, in the main checkout's `.claude/commands/`, and send me your
    summary." Then do that part yourself.
+   Every message you send for this command ends with "Sent at <time>; if you read this more than
+   10 minutes later, ask me whether it still holds before acting.", where `<time>` is
+   `date '+%Y-%m-%d %H:%M'` when you send it.
+   A session that `ListAgents` shows as **waiting** is held by a question or a permission prompt
+   in its own terminal and reads no message until the CEO answers it there: name it to the CEO.
 3. Give the CEO one summary for the three agents, in the CEO's language (`AGENTS.md`, *Language*):
    - what each agent did while the CEO was away;
    - what was merged or released;

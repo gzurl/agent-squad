@@ -188,8 +188,13 @@ labelled `needs-ceo` are your inbox.
 
 **Several squads on the machine?** Add `-all`: `/squad-pause-all`, `/squad-away-all` and
 `/squad-resume-all`, typed in any squad's CTO session, do the same for every squad, and you get one
-answer, grouped by squad, that names any squad that did not answer. They need v29 or later in the squad you type them in, and v26 or later in
-the others.
+answer, grouped by squad, that names any squad that did not answer. They need v29 or later in the
+squad you type them in, and v26 or later in the others.
+
+A session that is waiting for you in its own terminal, on a question or a permission prompt,
+cannot act on a command until you answer it there: the CTO tells you which one, and passes the
+command to the rest of its squad. A command that reaches an agent late is checked with whoever sent
+it before anyone acts on it.
 
 
 ## 📋 Requirements

@@ -2,14 +2,20 @@
 description: The CEO needs the squad stopped at a safe point (agent-squad)
 ---
 The CEO needs the squad stopped at a safe point: to close the laptop, to use the machine for
-something else, or for any other reason. Act as if everything on this machine were about to stop:
-running commands, long runs, messages in flight. Get to a safe point now. Your role is your session name. The
-squad's commands are in the main checkout's `.claude/commands/`, not in the worktrees.
+something else, or for any other reason. Act as if everything on this machine were about to
+stop: running commands, long runs, messages in flight. Get to a safe point now. Your role is your
+session name. The squad's commands are in the main checkout's `.claude/commands/`, not in the
+worktrees.
 
 ## If you are the CTO
-1. Send DEV and QA one message each: "The CEO needs the squad stopped at a safe point (`/squad-pause`): follow the
-   part for every agent in `squad-pause.md`, in the main checkout's `.claude/commands/`, now, and
-   tell me how long you still need." Then do that part yourself.
+1. Send DEV and QA one message each: "The CEO needs the squad stopped at a safe point
+   (`/squad-pause`): follow the part for every agent in `squad-pause.md`, in the main checkout's
+   `.claude/commands/`, now, and tell me how long you still need." Then do that part yourself.
+   Every message you send for this command ends with "Sent at <time>; if you read this more than
+   10 minutes later, ask me whether it still holds before acting.", where `<time>` is
+   `date '+%Y-%m-%d %H:%M'` when you send it.
+   A session that `ListAgents` shows as **waiting** is held by a question or a permission prompt
+   in its own terminal and reads no message until the CEO answers it there: name it to the CEO.
 2. Tell the CEO, in one line and in the CEO's language (`AGENTS.md`, *Language*), how long each of
    the three still needs, from their answers.
 3. Tell the CEO that all three are at a safe point only when each agent has saved its state on
