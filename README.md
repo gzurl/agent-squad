@@ -275,6 +275,12 @@ what, and when.
   it once you are sure it is not needed, and only then use `--force`.
 - **Never run `git clean -d` with `-x` or `-X` in the main checkout.** It deletes the playbook, the
   snapshots, the evidence and `.claude/settings.local.json`, and with `-ff` the worktrees too.
+- **A project that uses Git LFS runs LFS's pre-push hook from `.git/hooks/pre-push.local`.** The
+  squad's shim owns `.git/hooks/pre-push`, so `git lfs install` cannot add LFS's hook there, and a
+  push would send pointers without their files. Put `git lfs pre-push "$@"` in an executable
+  `.git/hooks/pre-push.local`, which the shim runs first. A project that had LFS's hook before the
+  install already has it there. `--check` shows an item for it when a `.gitattributes` of the
+  project has `filter=lfs`.
 - **`gh issue list --label` silently returns nothing** for a label whose emoji is made of several
   characters, as the owner labels and `needs-ceo` are. Filter on GitHub's web page, or with
   `gh issue list --json labels` and `jq`.

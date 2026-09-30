@@ -109,6 +109,16 @@ ignored_by_project() {
   git -C "$project" check-ignore -q --no-index "$1" 2>/dev/null \
     && [ "$(git -C "$project" check-ignore -v --no-index "$1" 2>/dev/null | cut -d: -f1)" = .gitignore ]
 }
+# `uses_lfs` passes when the project routes files through Git LFS: a .gitattributes of its own, at
+# the root or tracked anywhere below it, has filter=lfs.
+uses_lfs() {
+  local files
+  files="$({ [ -f "$project/.gitattributes" ] && echo .gitattributes
+    git -C "$project" ls-files -- ':(glob)**/.gitattributes'; } | sort -u)"
+  [ -n "$files" ] || return 1
+  (cd "$project" && printf '%s\n' "$files" | while IFS= read -r file; do cat -- "$file" 2>/dev/null; done) \
+    | grep -qE '(^|[[:space:]])filter=lfs([[:space:]]|$)'
+}
 # `squad_commands` lists the playbook's commands by file name, in order. It reads the playbook when
 # called, since an install replaces it first.
 squad_commands() {
@@ -295,7 +305,7 @@ gate_refusal() {
 }
 
 check_installation() {
-  local why version last agent worktree changed expected actual path branch
+  local why version last agent worktree changed expected actual path branch local_hook
 
   # 9 first, as the heading of the report: which version is installed, and since when. The last
   #   line of install.log must record that version's tag: an install cut short after the playbook
@@ -376,6 +386,20 @@ check_installation() {
     why="the shim is not the one this installer writes; install again"
   fi
   verdict "the pre-push shim is installed and core.hooksPath is unset" "$why"
+
+  # 12. A project that uses Git LFS runs LFS's pre-push from hooks/pre-push.local, which the shim
+  #     runs before the squad's gate: git lfs install cannot put its hook where the shim is
+  #     (agent-squad #121). The item is shown only for such a project.
+  if uses_lfs; then
+    why=""
+    local_hook="$hooks_dir/pre-push.local"
+    if [ ! -f "$local_hook" ] || [ ! -x "$local_hook" ]; then
+      why="the project uses Git LFS (.gitattributes has filter=lfs), and there is no executable $local_hook; write one that runs git lfs pre-push \"\$@\", which the shim runs before the squad's gate"
+    elif ! grep -q 'git lfs pre-push' "$local_hook"; then
+      why="the project uses Git LFS (.gitattributes has filter=lfs), and $local_hook does not run git lfs pre-push; add git lfs pre-push \"\$@\" to it"
+    fi
+    verdict "Git LFS's pre-push runs from hooks/pre-push.local" "$why"
+  fi
 
   # 5. The pre-push gate runs.
   verdict "the gate refuses a failing check and lets a passing one through" "$(gate_refusal)"
