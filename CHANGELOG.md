@@ -1,5 +1,20 @@
 # Changelog
 
+## v29 — 2026-09-30
+- **Step-away commands for every squad on the machine** (#117): `/squad-pause-all`,
+  `/squad-away-all` and `/squad-resume-all`, next to the single-squad commands, which do not
+  change. Typed in any squad's CTO session, the command is run for that squad and relayed to every
+  other squad's CTO, or to the DEV and QA of a squad with no CTO session, and the CEO gets one
+  answer grouped by squad. `/squad-away-all` keeps one `caffeinate` for the machine. The other
+  squads need only the single-squad commands (v26 or later), and a project that runs no squad is
+  told what to do without them. Tried at the CEO's real absences with four projects open. §6 and
+  the README (*When you step away*) describe them.
+- **`/squad-resume` ends with the plan ahead** (#131): the release in progress step by step, the
+  next one, what waits for a decision, and what the CEO will be asked next.
+- **The pre-compact gate no longer stops every interactive `/compact`** (#134): the interactive CLI
+  writes a plain `/compact` entry before the command's markup, and the gate now skips it, so a
+  `/compact` right after `/squad-save-state` goes through.
+
 ## v28 — 2026-09-30
 - **`/squad-upgrade`** (#118): typed by the CEO in the CTO's session, it has the CTO say which
   version the project runs and which is the latest, summarise what the releases in between change
