@@ -21,5 +21,8 @@ would.
    main checkout's `.claude/commands/`, and send me your summary."
 3. **Give the CEO one summary, grouped by squad**, in the CEO's language (`AGENTS.md`,
    *Language*): for each squad, what its agents did while the CEO was away, what was merged or
-   released, and what waits for the CEO (its open `needs-ceo` issues, each linked). Name any
-   squad that did not answer, with what its sessions are doing.
+   released, and what waits for the CEO (its open `needs-ceo` issues, each linked), then its plan
+   ahead, as `/squad-resume`'s step 4 says (now, next, later, what the CEO will be asked next).
+   Each other squad's CTO sends its own plan with its summary; a squad with no CTO session has no
+   plan to report, so say so for it. Name any squad that did not answer, with what its sessions
+   are doing.

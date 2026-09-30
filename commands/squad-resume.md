@@ -17,6 +17,13 @@ The CEO is back. Your role is your session name. The squad's commands are in the
      with `gh issue list --state open --limit 1000 --json number,title,labels` and `jq`:
      `gh issue list --label` finds nothing for that label (§3), and without `--limit` the list
      stops at 30 issues.
+4. End that summary with **the plan ahead**, short: the next few items, each linked, not the
+   whole backlog.
+   - **Now:** the release in progress, step by step, with who does each step and its state
+     (⏳ in progress, ✅ done, or waiting, and on what).
+   - **Next:** the following release, and what it contains.
+   - **Later:** the open issues that wait for a CEO decision or a definition.
+   - **What the CEO will be asked next,** and roughly when; or that nothing is coming.
 
 ## For every agent (and, typed in DEV's or QA's session, for that agent alone)
 1. **If you paused,** resume from the state you saved, on your issue or on the PR you were
