@@ -82,8 +82,8 @@ jq_holds() { jq -e "$1" "$2" >/dev/null; }
 # The items of --check, as it names them.
 item_playbook="playbook/ is complete and unmodified"
 item_hooks="the four hooks are in .claude/settings.local.json and point at the playbook"
-item_ignore=".gitignore ignores .agent-squad/, .claude/settings.local.json and .claude/commands/squad-save-state.md"
-item_command="the /squad-save-state command in .claude/commands/ is the playbook's"
+item_ignore=".gitignore ignores .agent-squad/, .claude/settings.local.json and .claude/commands/squad-*.md"
+item_command="the squad's commands in .claude/commands/ are the playbook's"
 item_shim="the pre-push shim is installed and core.hooksPath is unset"
 item_gate="the gate refuses a failing check and lets a passing one through"
 item_list=".agent-squad-checks exists and is tracked"
@@ -252,9 +252,19 @@ check "install.log has one line" [ "$(log_lines "$project")" -eq 1 ]
 check "which says none -> $tag_a" log_ends_with "$project" "none -> $tag_a"
 check ".gitignore has .agent-squad/, .claude/settings.local.json and the command" \
   has_lines "$project/.gitignore" ".agent-squad/" ".claude/settings.local.json" \
-  ".claude/commands/squad-save-state.md"
-check "the /squad-save-state command is in .claude/commands/, as the playbook has it" \
-  cmp -s "$squad/playbook/commands/squad-save-state.md" "$project/.claude/commands/squad-save-state.md"
+  ".claude/commands/squad-*.md"
+# `same_commands <project>` passes when each of the playbook's commands is in .claude/commands/, byte
+# for byte, and there is at least one: it walks the playbook's own list, not one kept here.
+same_commands() {
+  local file count=0
+  for file in "$1/.agent-squad/playbook/commands"/squad-*.md; do
+    [ -f "$file" ] || return 1
+    cmp -s "$file" "$1/.claude/commands/$(basename "$file")" || return 1
+    count=$((count + 1))
+  done
+  [ "$count" -ge 4 ]
+}
+check "the squad's four commands are in .claude/commands/, as the playbook has them" same_commands "$project"
 check "the missing issue template was created from the playbook" \
   cmp -s "$squad/playbook/.github/ISSUE_TEMPLATE/task.md" "$project/.github/ISSUE_TEMPLATE/task.md"
 check "the project's own PR template was kept" \
@@ -417,6 +427,21 @@ out="$("$install" --check "$target" 2>&1)"
 check "and --check fails the command item, saying that the project owns the file and which way out fits" \
   contains "$out" "check: FAILED  $item_command: .claude/commands/squad-save-state.md is tracked by git, so the project owns it: $advice; then install again"
 
+# 7f. A project upgraded from v24 or v25 has one line for /squad-save-state: the install appends the
+#     one rule for all the commands once, keeps that line, and a second run adds nothing (#101).
+target="$(new_project one-rule)" || exit 2
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+sed -i.orig 's|^\.claude/commands/squad-\*\.md$|.claude/commands/squad-save-state.md|' "$target/.gitignore" \
+  && rm "$target/.gitignore.orig" || exit 2
+out="$("$install" "$target" "$tag_a" 2>&1)"
+check "with only v24's line, the install appends the commands' rule, saying so" \
+  contains "$out" "install: .gitignore added .claude/commands/squad-*.md"
+check "and keeps v24's line, with the rule once" \
+  bash -c '[ "$(grep -cxF ".claude/commands/squad-*.md" "$1")" -eq 1 ] && grep -qxF .claude/commands/squad-save-state.md "$1"' _ "$target/.gitignore"
+out="$("$install" "$target" "$tag_a" 2>&1)"
+check "and a second run says the rule is already there" \
+  contains "$out" "install: .gitignore .claude/commands/squad-*.md is already ignored"
+
 # 8. A failed download or an incomplete tree leaves the installed playbook as it was.
 echo "not a tarball" > "$lab/broken.tgz"
 out="$(GH_TAG=vc GH_TARBALL="$lab/broken.tgz" "$install" "$project" vc 2>&1)"
@@ -559,17 +584,25 @@ check "a missing ignore line fails the .gitignore item" check_reports "$item_ign
 mended "$project/.gitignore"
 
 broken "$project/.gitignore"
-grep -vx ".claude/commands/squad-save-state.md" "$lab/mend.me" > "$project/.gitignore"
-check "a missing ignore line for the command fails the .gitignore item" check_reports "$item_ignore"
+grep -vx ".claude/commands/squad-\*.md" "$lab/mend.me" > "$project/.gitignore"
+check "a missing ignore rule for the commands fails the .gitignore item" check_reports "$item_ignore"
 mended "$project/.gitignore"
 
-command_file="$project/.claude/commands/squad-save-state.md"
-broken "$command_file"
-echo "An edit." >> "$command_file"
-check "a modified /squad-save-state fails the command item" check_reports "$item_command"
-rm "$command_file"
-check "a missing one fails it too" check_reports "$item_command"
-mended "$command_file"
+broken "$project/.gitignore"
+echo '!.claude/commands/squad-away.md' >> "$project/.gitignore"
+check "a negation of one command fails the .gitignore item" check_reports "$item_ignore"
+mended "$project/.gitignore"
+
+for command_file in "$squad/playbook/commands"/squad-*.md; do
+  name="$(basename "$command_file" .md)"
+  command_file="$project/.claude/commands/$name.md"
+  broken "$command_file"
+  echo "An edit." >> "$command_file"
+  check "a modified /$name fails the commands item" check_reports "$item_command"
+  rm "$command_file"
+  check "a missing /$name fails it too" check_reports "$item_command"
+  mended "$command_file"
+done
 
 broken "$project/.gitignore"
 echo '!.agent-squad/' >> "$project/.gitignore"
