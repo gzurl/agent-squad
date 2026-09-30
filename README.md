@@ -179,10 +179,19 @@ session, a command applies to that agent alone.
 |---|---|---|
 | You are about to close the laptop | `/squad-pause` | Each agent finishes the short step in hand, starts nothing long, writes its state on its issue (or on the PR it is reviewing) and stops. The CTO tells you how long each still needs, then that the three are safe to close. |
 | You leave, and the machine stays on | `/squad-away` | The agents go on with the work that needs no decision from you, and park the rest on its issue, labelled `needs-ceo`. They save their state after every step, since closing the lid still sleeps the machine. The CTO keeps macOS awake while work remains, and lets it sleep when nothing is left. |
-| You are back | `/squad-resume` | The CTO gives you one summary: what each agent did, what was merged or released, and what waits for you. Paused agents pick up where they stopped. |
+| You are back | `/squad-resume` | The CTO gives you one summary: what each agent did, what was merged or released, and what waits for you. It ends with the plan ahead: the release in progress step by step, the next one, what waits for a decision, and what you will be asked next. Paused agents pick up where they stopped. |
 
 Nothing notifies you while you are away: `/squad-resume` tells you what happened, and the issues
 labelled `needs-ceo` are your inbox.
+
+These three act on one squad. When several squads are open on the machine, `/squad-pause-all`,
+`/squad-away-all` and `/squad-resume-all` act on all of them. Type one in any squad's CTO session:
+that CTO does the same for its own squad and passes the command on to every other squad's CTO,
+or, for a squad with no CTO session open, to its DEV and QA. It then answers you once, grouped
+by squad: how long each still needs and "all N squads are safe to close", or one summary for all
+of them. `/squad-away-all` keeps the machine awake with one `caffeinate` for every squad. The
+other squads need only the single-squad commands, from v26 on, and a squad without them is named
+in the answer.
 
 
 ## 📋 Requirements
@@ -225,10 +234,11 @@ a release older than v28 has no `/squad-upgrade` yet: that one time, run the ins
 The installer can run as often as you like, and it never overwrites or deletes a file your project
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
 `.claude/settings.local.json`, writes the squad's commands (`/squad-save-state`, `/squad-pause`,
-`/squad-away`, `/squad-resume`, `/squad-upgrade`) into `.claude/commands/`, adds three lines to
-`.gitignore`, installs a small pre-push hook, creates the DEV and QA worktrees, and adds GitHub
-issue and pull request templates if the project has none. It prints every step, and ends with a *By
-hand* list of what it leaves to the CTO, who takes care of it while following `BOOTSTRAP.md`:
+`/squad-away`, `/squad-resume`, `/squad-upgrade`, and the three `-all` ones) into
+`.claude/commands/`, adds three lines to `.gitignore`, installs a small pre-push hook, creates the
+DEV and QA worktrees, and adds GitHub issue and pull request templates if the project has none. It
+prints every step, and ends with a *By hand* list of what it leaves to the CTO, who takes care of it
+while following `BOOTSTRAP.md`:
 
 - the *Squad* section of `AGENTS.md`, which loads the charter into every session (the installer
   prints it);
@@ -263,7 +273,7 @@ the installer touches only the files listed before it:
 ├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
 ├── .claude/settings.local.json           ignored   the squad's four hooks, next to your settings
-├── .claude/commands/squad-*.md           ignored   the squad's five commands
+├── .claude/commands/squad-*.md           ignored   the squad's eight commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored
     ├── playbook/          the installed release: charter, scripts, templates
@@ -316,7 +326,7 @@ what, and when.
 |---|---|---|
 | `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
 | `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and this guide | Yes |
-| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-away`, `/squad-resume`, `/squad-upgrade` | Yes; the installer copies them into `.claude/commands/` |
+| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-away-all`, `/squad-resume-all` | Yes; the installer copies them into `.claude/commands/` |
 | `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the compaction hooks, the merge gate, the checks runner and the pre-push gate | Yes |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |

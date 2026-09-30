@@ -263,9 +263,9 @@ same_commands() {
     cmp -s "$file" "$1/.claude/commands/$(basename "$file")" || return 1
     count=$((count + 1))
   done
-  [ "$count" -ge 5 ]
+  [ "$count" -ge 8 ]
 }
-check "the squad's five commands are in .claude/commands/, as the playbook has them" same_commands "$project"
+check "the squad's eight commands are in .claude/commands/, as the playbook has them" same_commands "$project"
 check "the missing issue template was created from the playbook" \
   cmp -s "$squad/playbook/.github/ISSUE_TEMPLATE/task.md" "$project/.github/ISSUE_TEMPLATE/task.md"
 check "the project's own PR template was kept" \
@@ -499,7 +499,7 @@ check "with nothing left behind" no_leftovers "$squad"
 # command the tree has counts too, walked from the tree: a command the installer does not require
 # fails here.
 commands_in_tree="$(cd "$lab/vb" && ls commands/squad-*.md)"
-[ "$(wc -l <<<"$commands_in_tree")" -ge 5 ] || exit 2
+[ "$(wc -l <<<"$commands_in_tree")" -ge 8 ] || exit 2
 for missing in SQUAD.md scripts/squad-install.sh templates/AGENTS.md $commands_in_tree; do
   rm -rf "$lab/incomplete" && mkdir -p "$lab/incomplete" && cp -pR "$lab/vb/." "$lab/incomplete/"
   rm "$lab/incomplete/$missing"

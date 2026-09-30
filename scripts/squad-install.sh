@@ -482,7 +482,8 @@ fi
 # (v14 and older) has no scripts/squad-install.sh, and would install without working.
 for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh \
   scripts/squad-install.sh templates/AGENTS.md commands/squad-save-state.md commands/squad-pause.md \
-  commands/squad-away.md commands/squad-resume.md commands/squad-upgrade.md; do
+  commands/squad-away.md commands/squad-resume.md commands/squad-upgrade.md \
+  commands/squad-pause-all.md commands/squad-away-all.md commands/squad-resume-all.md; do
   [ -f "$staging/$required" ] \
     || die "the tree of $tag has no $required, so this installer cannot install it (a tag older than this installer?); the installed playbook is unchanged"
 done
