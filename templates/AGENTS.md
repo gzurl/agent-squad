@@ -57,11 +57,18 @@ are the lines of `.agent-squad-checks`, which the pre-push gate runs>
 ## Tools that walk the tree
 From the main checkout, `.agent-squad/worktrees/` holds the other agents' copies of the project,
 and some tools walk into it by default. Each one this project uses excludes `.agent-squad/` in its
-own configuration (`BOOTSTRAP.md` row 9b checks it). Keep the lines for this project's tools and
+own configuration (`BOOTSTRAP.md` row 9b checks it), with a pattern anchored at the project root:
+the worktrees themselves live under `.agent-squad/`, so an unanchored pattern also excludes a
+worktree's own files when the tool runs inside it. Keep the lines for this project's tools and
 delete the others:
 - Jest: `testPathIgnorePatterns` and `modulePathIgnorePatterns` both list `<rootDir>/.agent-squad/`.
-- Metro: `resolver.blockList` matches `/\.agent-squad\/.*/`.
-- Watchman: `.watchmanconfig` holds `{"ignore_dirs": [".agent-squad"]}`.
+- Metro: `resolver.blockList` holds a pattern anchored at the project root, such as
+  `new RegExp('^' + (path.join(__dirname, '.agent-squad') + path.sep).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))`.
+  An unanchored `/\.agent-squad\//` also matches every file of a worktree.
+- Watchman: no `ignore_dirs` for `.agent-squad`. A worktree's watch reuses the main checkout's, so
+  ignoring it would hide every worktree from itself; Jest's and Metro's own settings are enough.
+  If Metro cannot resolve a module in a worktree after installing its dependencies there, recreate
+  the main checkout's watch: `watchman watch-del <repo>`, then `watchman watch-project <repo>`.
 - pytest: skips dot-directories by default; an overridden `norecursedirs` keeps `.*`.
 - Node: a worktree without its own `node_modules` silently uses the main checkout's, through
   Node's upward lookup, so DEV and QA install the dependencies in their worktree before running
