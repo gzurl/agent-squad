@@ -19,6 +19,9 @@ worktrees.
    background on purpose (§2.4 allows it; the 12-hour limit ends a forgotten one by itself), and
    note its PID on your issue. Stop it with `kill <PID>` when every agent has said it has nothing
    left, and at `/squad-resume`.
+3. Report to the CEO in §6's agent lines (one per agent, in the order CTO, DEV, QA, with its state
+   emoji), in the CEO's language (`AGENTS.md`, *Language*): what each goes on with (⏳), or that it
+   has nothing left (💤). Repeat the same lines when one changes.
 
 ## For every agent (and, typed in DEV's or QA's session, for that agent alone)
 1. **Go on** with the work that needs no decision from the CEO.

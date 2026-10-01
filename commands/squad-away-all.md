@@ -30,8 +30,10 @@ Follow the part for every agent in `squad-away.md`, for yourself alone, as `/squ
    one above, and its DEV and QA the one for a squad with no CTO session. That CTO is held by a
    question or a permission prompt in its own terminal, and reads your message only once the CEO
    answers it there; its sent time then tells it to check with you first.
-3. **Keep the `caffeinate` running** while any squad still has work, and stop it (`kill <PID>`)
-   when every squad has said it has nothing left, and at `/squad-resume-all`. Name to the CEO, on
-   return, any squad whose CTO or agents answered that their main checkout has no `squad-away.md`
-   (a release older than v26, or a project that runs no squad), or that did not answer, and any
-   session shown as waiting, since only the CEO can answer it.
+3. **Keep the `caffeinate` running** while any squad still has work, and stop it (`kill <PID>`) when
+   every squad has said it has nothing left, and at `/squad-resume-all`. Report to the CEO, grouped
+   by squad, each squad as a block of §6's agent lines (one per agent, in the order CTO, DEV, QA,
+   with its state emoji). Name to the CEO, on return, any squad whose CTO or agents answered that
+   their main checkout has no `squad-away.md` (a release older than v26, or a project that runs no
+   squad), or that did not answer, and any session shown as waiting, since only the CEO can answer
+   it.
