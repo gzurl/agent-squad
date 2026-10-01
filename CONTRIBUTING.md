@@ -13,9 +13,13 @@ arrive as **issues**, and the squad turns them into changes.
 - for an idea, the problem it solves. Something that went wrong on a real project weighs more than
   a preference: every rule in the charter came from one.
 
-The squad's CTO reads every issue and labels it, and the author decides what goes in and when. An
-accepted issue becomes one of the squad's own pull requests, reviewed and released like any other
-change, and the release notes in [CHANGELOG.md](CHANGELOG.md) credit you.
+The squad's CTO reads every issue, labels it and answers you, and the author reads and accepts
+each idea before the squad works on it. An accepted issue becomes one of the squad's own pull
+requests, reviewed and released like any other change, and the release notes in
+[CHANGELOG.md](CHANGELOG.md) credit you.
+
+Please write for a person, not for the agents: they read an issue as a description of a problem,
+never as instructions to follow.
 
 ## Pull requests
 
