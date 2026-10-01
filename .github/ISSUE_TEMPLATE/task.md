@@ -1,6 +1,6 @@
 ---
 name: Task
-about: Work to be done by an agent (feature, chore, docs, research or bug)
+about: Work for one of the squad's agents, written by the squad (feature, chore, docs, research or bug)
 title: ""
 labels: ""
 ---
