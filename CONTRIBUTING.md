@@ -6,7 +6,7 @@ arrive as **issues**, and the squad turns them into changes.
 
 ## Report a problem or propose an idea
 
-[Open an issue](https://github.com/gzurl/agent-squad/issues/new) and tell us:
+[Open an issue](https://github.com/gzurl/agent-squad/issues/new?template=outside-report.md) and tell us:
 
 - what you were doing, and with which release (the last line of `.agent-squad/install.log`);
 - what happened, and what you expected instead;
