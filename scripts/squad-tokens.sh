@@ -49,7 +49,7 @@ root="$(cd "$common/.." && pwd -P)"
 [ -d "$root/.agent-squad" ] \
   || { echo "squad-tokens: $root has no .agent-squad/: the squad is not installed there" >&2; exit 2; }
 history="$root/.agent-squad/tokens.tsv"
-header=$'day\tdir\tsession\tagent\tmodel\tresponses\tinput\tcache_write\tcache_read\toutput'
+header=$'day\tdir\tsession\ttranscript\tagent\tmodel\tresponses\tinput\tcache_write\tcache_read\toutput'
 
 # Claude Code keeps a session's transcript in a directory named after the directory it was
 # launched from, every character other than a letter or a digit replaced by "-".
@@ -61,9 +61,9 @@ trap 'rm -rf "$work" "$history.$$"' EXIT
 
 # 1. Each transcript gives one record: its directory, its session, the time of its last entry, the
 #    session's latest name, and each response it holds, the most complete record of each when a
-#    response is written several times. Each line is parsed on its own, so that a broken line
-#    cannot run into the next; one that is not JSON, or an entry that lacks a field the script
-#    needs, stops it.
+#    response is written several times. A copy that carries no usage at all, as a forked session
+#    can hold, counts for nothing. Each line is parsed on its own, so that a broken line cannot run
+#    into the next; one that is not JSON, or an entry that lacks a field the script needs, stops it.
 # shellcheck disable=SC2016 # a jq program: its $names are jq's
 read_transcript='
 def lacks:
@@ -88,7 +88,8 @@ reduce (inputs | select(length > 0) | try fromjson catch error("a line that is n
           {id: $e.message.id, model: $e.message.model, day: $e.timestamp[0:10],
            i: $e.message.usage.input_tokens, cw: $e.message.usage.cache_creation_input_tokens,
            cr: $e.message.usage.cache_read_input_tokens, o: $e.message.usage.output_tokens} as $r
-          | .responses[$r.id] |= (if . == null or ($r | size) > (. | size) then $r else . end)
+          | if $r | size == [0, 0] then .
+            else .responses[$r.id] |= (if . == null or ($r | size) > (. | size) then $r else . end) end
         end
     else . end)
 | {dir: $dir, session: $session, file: $file, last, title, responses: [.responses[]]}'
@@ -112,7 +113,7 @@ for f in "${transcripts[@]}"; do
 done
 touch "$work/transcripts"
 
-# 2. Per day, session, agent and model, the transcripts' totals. A response that several
+# 2. Per day, transcript, agent and model, the transcripts' totals. A response that several
 #    transcripts hold counts once: its most complete record, and among equal ones the record of
 #    the transcript whose last entry is latest, which Claude Code keeps longest.
 jq -nc '
@@ -122,8 +123,9 @@ jq -nc '
 | group_by(.id)
 | map(sort_by([.o, .i + .cw + .cr, .last, .file]) | last)
 | map(.agent = (($titles[.session] // "(untitled)") | gsub("[\\t\\r\\n]"; " ")))
-| group_by([.day, .dir, .session, .agent, .model])[]
-| {day: .[0].day, dir: .[0].dir, session: .[0].session, agent: .[0].agent, model: .[0].model,
+| group_by([.day, .file, .agent, .model])[]
+| {day: .[0].day, dir: .[0].dir, session: .[0].session, transcript: (.[0].file | sub("^[^/]*/"; "")),
+   agent: .[0].agent, model: .[0].model,
    responses: length, input: (map(.i) | add), cache_write: (map(.cw) | add),
    cache_read: (map(.cr) | add), output: (map(.o) | add)}' "$work/transcripts" >"$work/fresh"
 
@@ -132,28 +134,28 @@ if [ -f "$history" ]; then
   [ "$(head -n 1 "$history")" = "$header" ] || die "$history does not start with the header this script writes"
   tail -n +2 "$history" | jq -Rc '
     split("\t") as $c
-    | if ($c | length) == 10 and ($c[5:] | all(test("^[0-9]+$"))) then
-        {day: $c[0], dir: $c[1], session: $c[2], agent: $c[3], model: $c[4],
-         responses: ($c[5] | tonumber), input: ($c[6] | tonumber), cache_write: ($c[7] | tonumber),
-         cache_read: ($c[8] | tonumber), output: ($c[9] | tonumber)}
-      else error("a row that does not read day, dir, session, agent, model and five counts") end' \
+    | if ($c | length) == 11 and ($c[6:] | all(test("^[0-9]+$"))) then
+        {day: $c[0], dir: $c[1], session: $c[2], transcript: $c[3], agent: $c[4], model: $c[5],
+         responses: ($c[6] | tonumber), input: ($c[7] | tonumber), cache_write: ($c[8] | tonumber),
+         cache_read: ($c[9] | tonumber), output: ($c[10] | tonumber)}
+      else error("a row that does not read day, dir, session, transcript, agent, model and five counts") end' \
     >"$work/stored" 2>"$work/error" \
     || die "cannot read $history: $(sed -e 's/^jq: error (at <stdin>:\([0-9]*\)): /row \1: /' "$work/error" | head -1)"
 else
   : >"$work/stored"
 fi
 
-# 4. The merge, per day and session: the transcripts' rows replace the stored ones unless the
-#    stored ones count more responses, which means some of that session's transcripts are gone.
-#    A session no longer on the machine keeps its stored rows; a renamed one moves its whole day.
-jq -nr --slurpfile stored "$work/stored" --slurpfile fresh "$work/fresh" --arg header "$header" '
-def by_day_session: group_by([.day, .session]) | map({key: "\(.[0].day) \(.[0].session)", value: .}) | from_entries;
-def count: map(.responses) | add // 0;
-($stored | by_day_session) as $s | ($fresh | by_day_session) as $f
+# 4. The merge, per transcript: a transcript still on the machine is recomputed from it, so that a
+#    renamed session moves to its new name and a response that moves between two transcripts
+#    counts once; a transcript Claude Code has deleted keeps its stored rows.
+jq -nr --slurpfile stored "$work/stored" --slurpfile fresh "$work/fresh" --slurpfile files "$work/transcripts" \
+  --arg header "$header" '
+($files | map({key: .file, value: true}) | from_entries) as $present
 | $header,
-  ([($s + $f | keys[]) as $k | if ($f[$k] // [] | count) >= ($s[$k] // [] | count) then $f[$k][] else $s[$k][] end]
-   | sort_by([.day, .dir, .session, .agent, .model])[]
-   | [.day, .dir, .session, .agent, .model, .responses, .input, .cache_write, .cache_read, .output] | @tsv)' \
+  (($fresh + [$stored[] | select($present["\(.dir)/\(.transcript)"] | not)])
+   | sort_by([.day, .dir, .session, .transcript, .agent, .model])[]
+   | [.day, .dir, .session, .transcript, .agent, .model, .responses, .input, .cache_write, .cache_read, .output]
+   | @tsv)' \
   >"$history.$$"
 mv "$history.$$" "$history"
 
@@ -185,8 +187,8 @@ def report:
         ($others | sort_by(.label)[]), ($others | total("subtotal"; "sub")) else empty end),
      total("Total"; "total")];
 [inputs | split("\t")
- | {day: .[0], dir: .[1], agent: .[3], model: .[4], responses: (.[5] | tonumber), input: (.[6] | tonumber),
-    cache_write: (.[7] | tonumber), cache_read: (.[8] | tonumber), output: (.[9] | tonumber)}
+ | {day: .[0], dir: .[1], agent: .[4], model: .[5], responses: (.[6] | tonumber), input: (.[7] | tonumber),
+    cache_write: (.[8] | tonumber), cache_read: (.[9] | tonumber), output: (.[10] | tonumber)}
  | select(.day >= $since)
  | select($scope == "all" or .dir == $here)
  | (.agent | parse_name) as $n

@@ -47,14 +47,15 @@ named() { jq -nc --arg t "$1" '{type: "custom-title", customTitle: $t, sessionId
 prompt() { jq -nc --arg ts "$1" '{type: "user", timestamp: $ts, message: {role: "user", content: "go"}}'; }
 
 # This project's sessions. CTO:alpha writes r1 once per content block, its output growing as it
-# streams; r2 on the next day, with another model; a placeholder response; and a subagent's r3.
+# streams; r2 on the next day, with another model; a placeholder response, given some usage here
+# so that only its model leaves it out; and a subagent's r3.
 # alpha:QA carries its role after the colon; `notes` has no role, and one session has no name.
 d1=2026-09-10 d2=2026-09-11 d3=2026-09-12
 { named "CTO:alpha"; prompt "${d1}T07:59:00.000Z"
   response r1 claude-test-1 "${d1}T08:00:00.000Z" 1 10 100 5
   response r1 claude-test-1 "${d1}T08:00:01.000Z" 1 10 100 5
   response r1 claude-test-1 "${d1}T08:00:02.000Z" 1 10 100 40
-  response syn1 '<synthetic>' "${d1}T08:01:00.000Z" 0 0 0 0
+  response syn1 '<synthetic>' "${d1}T08:01:00.000Z" 0 0 0 9
   response r2 claude-test-2 "${d2}T09:00:00.000Z" 2 20 200 50
 } >"$projects/$here/s1.jsonl"
 mkdir -p "$projects/$here/s1/subagents"
@@ -194,10 +195,11 @@ else
   fail "from a worktree: exit $code, output:"$'\n'"$out"$'\n'"$err"
 fi
 
-# 6. The history keeps one row per day, session, agent and model, under the header it is read by.
-if [ "$(head -n 1 "$history")" = "$(tsv_row day dir session agent model responses input cache_write cache_read output)" ] \
-   && grep -qF "$(tsv_row "$d1" "$here" s1 CTO:alpha claude-test-1 2 4 40 400 100)" "$history"; then
-  pass "the history keeps one row per day, session, agent and model"
+# 6. The history keeps one row per day, transcript, agent and model, under the header it is read by.
+if [ "$(head -n 1 "$history")" = "$(tsv_row day dir session transcript agent model responses input cache_write cache_read output)" ] \
+   && grep -qxF "$(tsv_row "$d1" "$here" s1 s1.jsonl CTO:alpha claude-test-1 1 1 10 100 40)" "$history" \
+   && grep -qxF "$(tsv_row "$d1" "$here" s1 s1/subagents/agent-a1.jsonl CTO:alpha claude-test-1 1 3 30 300 60)" "$history"; then
+  pass "the history keeps one row per day, transcript, agent and model"
 else
   fail "the history reads:"$'\n'"$(cat "$history")"
 fi
@@ -219,6 +221,37 @@ if [ -z "$(row alpha:QA)" ] && [ "$(row QA:alpha)" = "$(tsv_row QA:alpha 1 5 50 
   pass "a renamed session's usage moves to its new name, and is not counted under both"
 else
   fail "after a rename: output:"$'\n'"$out"
+fi
+
+#    A response that two transcripts still on the machine share, as a fork's do, counts once
+#    however often the transcript written last changes between runs (#154): gamma's two sessions
+#    hold r40 and r41, and each is written last in turn.
+mkdir -p "$projects/-elsewhere-gamma"
+for s in A:CTO B:DEV; do
+  { named "${s#*:}:gamma"
+    response r40 claude-test-1 "${d1}T14:00:00.000Z" 1 1 1 1
+    response r41 claude-test-1 "${d1}T14:05:00.000Z" 1 1 1 1; } >"$projects/-elsewhere-gamma/${s%%:*}.jsonl"
+done
+counts=""
+for turn in A:15 B:16 A:17; do
+  prompt "${d1}T${turn#*:}:00:00.000Z" >>"$projects/-elsewhere-gamma/${turn%%:*}.jsonl"
+  run "$repo" --project gamma --tsv
+  counts="$counts$(printf '%s\n' "$out" | awk -F'\t' 'NR > 1 { n += $4 } END { print n }') "
+done
+if [ "$counts" = "2 2 2 " ]; then
+  pass "a response two present transcripts share counts once, run after run, whichever is written last"
+else
+  fail "a fork's shared responses, over three runs: $counts"
+fi
+#    Once the transcript holding a response's full record is gone, a copy of it with no usage at
+#    all, as DEV:beta holds of r9, does not count it again.
+rm "$projects/-elsewhere-beta/s6.jsonl"
+run "$repo" --all --tsv
+if [ "$(row CTO:beta)" = "$(tsv_row CTO:beta 1 9 90 900 120 claude-test-1)" ] \
+   && [ "$(row DEV:beta)" = "$(tsv_row DEV:beta 2 18 180 1800 240 claude-test-1)" ]; then
+  pass "a copy with no usage does not count a response again once its original's transcript is gone"
+else
+  fail "after the original is gone: output:"$'\n'"$out"
 fi
 
 # 7. An empty projects directory says so, and the report reads the history.
