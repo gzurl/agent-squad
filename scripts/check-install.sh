@@ -263,9 +263,9 @@ same_commands() {
     cmp -s "$file" "$1/.claude/commands/$(basename "$file")" || return 1
     count=$((count + 1))
   done
-  [ "$count" -ge 8 ]
+  [ "$count" -ge 10 ]
 }
-check "the squad's eight commands are in .claude/commands/, as the playbook has them" same_commands "$project"
+check "the squad's ten commands are in .claude/commands/, as the playbook has them" same_commands "$project"
 check "the missing issue template was created from the playbook" \
   cmp -s "$squad/playbook/.github/ISSUE_TEMPLATE/task.md" "$project/.github/ISSUE_TEMPLATE/task.md"
 check "the project's own PR template was kept" \
