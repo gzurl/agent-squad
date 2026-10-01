@@ -383,6 +383,9 @@ what, and when.
 
 ## 📦 This repository
 
+To report a problem or propose an idea, open an issue: [CONTRIBUTING.md](CONTRIBUTING.md) says how.
+The squad turns accepted issues into its own pull requests.
+
 | Path | What it is | Installed in a project? |
 |---|---|---|
 | `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
@@ -393,7 +396,7 @@ what, and when.
 | `CHANGELOG.md` | What each version changes | Yes, to read |
 | `LICENSE` | The MIT License | Yes, so every installed playbook carries it |
 | `.gitattributes` | What a release leaves out | Yes, unused there |
-| `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
+| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, contribution guide, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
 
 
 ## 📄 License
