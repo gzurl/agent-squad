@@ -32,7 +32,7 @@ would.
    for each squad, a block of §6's agent lines (one per agent, in the order CTO, DEV, QA, with its
    state emoji), each agent's state now and then what it did while the CEO was away; then what was
    merged or released, and what waits for the CEO (its open `needs-ceo` issues, each linked), then
-   its plan ahead, as `/squad-resume`'s step 4 says (now, next, later, what the CEO will be asked
+   its plan ahead, as `/squad-resume`'s step 5 says (now, next, later, what the CEO will be asked
    next). Each other squad's CTO sends its own plan with its summary; a squad with no CTO session
    has no plan to report, so say so for it. Name any squad that did not answer, with what its
    sessions are doing, and any session shown as waiting, since only the CEO can answer it.
