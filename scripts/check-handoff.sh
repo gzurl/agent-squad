@@ -46,6 +46,9 @@ nested="$main/.agent-squad/worktrees/dev"
 git -C "$main" worktree add -q --detach "$beside" || exit 2
 git -C "$main" worktree add -q --detach "$nested" || exit 2
 handoff_dir="$main/.agent-squad/handoff"
+# The paths the hooks print are physical: on macOS, TMPDIR's /var is a link to /private/var.
+main_p="$(cd "$main" && pwd -P)"
+nested_p="$(cd "$nested" && pwd -P)"
 
 # `saves_from <directory> <session> <where>` runs save there and expects that session's file in
 # the main checkout.
@@ -88,7 +91,16 @@ else
   fail "save with the session id ../escape wrote a file"
 fi
 
-# 4. startup warns, in one line, when the installed charter is missing.
+# 4. startup warns, in one line, when the installed charter is missing, and so does resume, before
+#    its re-orientation.
+if out="$(run "$nested" resume '{"session_id":"x","source":"resume"}')" \
+  && [ "$(printf '%s\n' "$out" | head -n 1)" = "Squad: the charter is not installed ($main_p/.agent-squad/playbook/SQUAD.md is missing). Stop and tell the CTO before doing anything else." ] \
+  && printf '%s' "$out" | grep -q '^Squad: this session was resumed'; then
+  pass "resume without the charter warns first, then re-orients"
+else
+  fail "resume without the charter printed: '$out'"
+fi
+
 if out="$(run "$nested" startup '{"session_id":"x"}')" && [ -n "$out" ] \
   && [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 1 ] \
   && printf '%s' "$out" | grep -q 'charter is not installed'; then
@@ -104,6 +116,38 @@ if out="$(run "$beside" startup '{"session_id":"x"}')" && [ -z "$out" ]; then
   pass "startup with the charter installed prints nothing"
 else
   fail "startup with the charter installed printed: '$out'"
+fi
+
+# 5b. resume re-orients a resumed session (#164): Claude Code starts its shell in the launch
+#     directory, the main checkout, whatever worktree the conversation last worked in. It says
+#     where the shell is, gives each role's directory as an absolute path, and says to name the
+#     directory in every command and to check the top level before any switch or checkout.
+# `has <case> <text> <output>` passes when the output holds that line, as a fixed string.
+has() {
+  if printf '%s\n' "$3" | grep -qxF -- "$2"; then pass "$1"; else fail "$1: no line '$2' in: $3"; fi
+}
+out="$(run "$main" resume '{"session_id":"x","source":"resume"}')"
+code=$?
+if [ "$code" -eq 0 ] && [ "$(printf '%s\n' "$out" | head -n 1)" = "Squad: this session was resumed. Its shell is in $main_p, the main checkout, whatever directory the conversation last worked in." ]; then
+  pass "resume says that the shell is in the main checkout"
+else
+  fail "resume, from the main checkout: exit $code, printed: $out"
+fi
+has "resume gives the CTO's directories" "  - CTO: $main_p, which stays on the default branch, or $main_p/.agent-squad/worktrees/cto-<topic> for a pull request" "$out"
+has "resume gives DEV's directory" "  - DEV: $main_p/.agent-squad/worktrees/dev" "$out"
+has "resume gives QA's directory" "  - QA: $main_p/.agent-squad/worktrees/qa" "$out"
+has "resume says to name the directory in every command" "- Name that directory in this first command and in every one after it: git -C \"<path>\" ..., or cd \"<path>\" && ..." "$out"
+has "resume says to check the top level before a switch or a checkout" "- Before any git switch or git checkout, run git -C \"<path>\" rev-parse --show-toplevel and check that it prints your directory." "$out"
+#     From a linked worktree, it names that worktree as the shell's directory, and the roles' paths
+#     are still the main checkout's; and resume never writes a file.
+before="$(find "$lab" -type f | sort)"
+out="$(run "$nested" resume '{"session_id":"x","source":"resume"}')"
+if [ "$(printf '%s\n' "$out" | head -n 1)" = "Squad: this session was resumed. Its shell is in $nested_p, whatever directory the conversation last worked in." ] \
+   && printf '%s\n' "$out" | grep -qxF "  - QA: $main_p/.agent-squad/worktrees/qa" \
+   && [ "$before" = "$(find "$lab" -type f | sort)" ]; then
+  pass "resume from a linked worktree names it, gives the main checkout's paths, and writes nothing"
+else
+  fail "resume from a linked worktree printed: $out"
 fi
 
 # 6. Run by hand, with a terminal as stdin and no payload, restore does not wait for input.

@@ -143,7 +143,8 @@ project: `CTO:<project-name>`, `DEV:<project-name>` and `QA:<project-name>`. All
 project's main folder, which lets them share Claude Code's memory, and each works in a worktree of
 its own under `.agent-squad/worktrees/`. They send each other messages. Every session loads the
 charter through `AGENTS.md`, and hooks save the project's state before Claude Code compacts a
-session and hand it back afterwards.
+session and hand it back afterwards. A session you resume, after updating Claude Code for instance,
+starts again in the main folder, and a hook reminds its agent which folder each agent works in.
 
 **GitHub holds the work.** Issues are the backlog, grouped into milestones; pull requests carry the
 changes, and reviews carry QA's verdicts. While setting up, the CTO creates a set of labels the
@@ -332,7 +333,7 @@ the installer touches only the files listed before it:
 ├── .agent-squad-checks                   in git    the checks the pre-push gate runs
 ├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
-├── .claude/settings.local.json           ignored   the squad's four hooks, next to your settings
+├── .claude/settings.local.json           ignored   the squad's five hooks, next to your settings
 ├── .claude/commands/squad-*.md           ignored   the squad's ten commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored

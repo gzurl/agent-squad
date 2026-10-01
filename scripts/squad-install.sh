@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install, upgrade or check the squad in a project (agent-squad #23): the tag's playbook in
-# <project>/.agent-squad/playbook/, the compaction hooks in .claude/settings.local.json, the
+# <project>/.agent-squad/playbook/, the session hooks in .claude/settings.local.json, the
 # squad's commands in .claude/commands/, a pre-push shim that runs the playbook's pre-push
 # gate, the GitHub templates the project lacks, and the DEV and QA worktrees. It never overwrites or
 # deletes a file the project owns, prints one line per action taken or skipped, and ends with what
@@ -172,7 +172,8 @@ imports_charter() {
     END { exit !found }' "$1" 2>/dev/null
 }
 
-# The four compaction hooks as the installer writes them (D5 and D10 of agent-squad #23). Each
+# The five session hooks as the installer writes them (D5 and D10 of agent-squad #23, and #164 for
+# resume). Each
 # command checks that the playbook's script exists, so that a missing playbook is reported to the
 # session instead of failing it.
 # shellcheck disable=SC2016 # expanded by the shell that runs the hook, not here
@@ -182,6 +183,7 @@ missing='echo "Squad: the charter is not installed ($f is missing). Stop and tel
 save_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" save; fi"
 restore_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" restore; else $missing; fi"
 startup_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" startup; else $missing; fi"
+resume_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" resume; else $missing; fi"
 
 # The pre-push shim (D8 of agent-squad #23), written into the common git directory so that every
 # worktree runs it. --check requires it byte for byte, comments included, as this installer writes
@@ -334,12 +336,13 @@ check_installation() {
   fi
   verdict "playbook/ is complete and unmodified" "$why"
 
-  # 2. The four hooks, exactly as the installer writes them.
+  # 2. The five hooks, exactly as the installer writes them.
   why=""
   expected="$(jq -cn --arg save "$save_command" --arg restore "$restore_command" \
-    --arg startup "$startup_command" \
+    --arg startup "$startup_command" --arg resume "$resume_command" \
     '[["PreCompact", "manual", $save], ["PreCompact", "auto", $save],
-      ["SessionStart", "compact", $restore], ["SessionStart", "startup", $startup]] | sort')"
+      ["SessionStart", "compact", $restore], ["SessionStart", "startup", $startup],
+      ["SessionStart", "resume", $resume]] | sort')"
   if ! actual="$(jq -c '[(.hooks // {}) | to_entries[] | .key as $event | .value[] | .matcher as $matcher
       | .hooks[] | select((.command // "") | contains("squad-handoff.sh"))
       | [$event, $matcher, .command]] | sort' "$settings" 2>/dev/null)"; then
@@ -348,7 +351,7 @@ check_installation() {
     why="$(jq -rn --argjson want "$expected" --argjson have "$actual" \
       '"missing: \([($want - $have)[] | .[1]] | join(", ") | if . == "" then "none" else . end); unexpected: \([($have - $want)[] | .[1]] | join(", ") | if . == "" then "none" else . end)"')"
   fi
-  verdict "the four hooks are in .claude/settings.local.json and point at the playbook" "$why"
+  verdict "the five hooks are in .claude/settings.local.json and point at the playbook" "$why"
 
   # 11. Every squad command is the playbook's, byte for byte, and none is the project's.
   why="$(squad_commands | while IFS= read -r name; do
@@ -552,7 +555,7 @@ for path in "${ignored_paths[@]}"; do
   fi
 done
 
-# 3. Compaction hooks (D5 and D10 of agent-squad #23), merged into .claude/settings.local.json:
+# 3. Session hooks (D5 and D10 of agent-squad #23, #164), merged into .claude/settings.local.json:
 #    every other key and hook is kept, and only entries that run squad-handoff.sh are replaced.
 # `one_object` passes when its input is exactly one JSON object: jq alone accepts an empty input,
 # and several values, without a word.
@@ -561,10 +564,10 @@ current="{}"
 [ -f "$settings" ] && current="$(cat "$settings")"
 # A blank file holds no settings yet.
 [ -n "${current//[[:space:]]/}" ] || current="{}"
-# shellcheck disable=SC2016 # $save, $restore and $startup are jq variables
+# shellcheck disable=SC2016 # $save, $restore, $startup and $resume are jq variables
 if printf '%s' "$current" | one_object \
   && merged="$(printf '%s' "$current" | jq --arg save "$save_command" --arg restore "$restore_command" \
-  --arg startup "$startup_command" '
+  --arg startup "$startup_command" --arg resume "$resume_command" '
   def ours: (.command // "") | contains("squad-handoff.sh");
   def entry($matcher; $command): {matcher: $matcher, hooks: [{type: "command", command: $command}]};
   .hooks = (.hooks // {})
@@ -573,13 +576,13 @@ if printf '%s' "$current" | one_object \
       else . end))
   | .hooks.PreCompact = (.hooks.PreCompact // []) + [entry("manual"; $save), entry("auto"; $save)]
   | .hooks.SessionStart = (.hooks.SessionStart // [])
-      + [entry("compact"; $restore), entry("startup"; $startup)]')" \
+      + [entry("compact"; $restore), entry("startup"; $startup), entry("resume"; $resume)]')" \
   && printf '%s' "$merged" | one_object; then
   if [ -f "$settings" ] && [ "$merged" = "$current" ]; then
-    say hooks "the four hooks are already in .claude/settings.local.json"
+    say hooks "the five hooks are already in .claude/settings.local.json"
   else
     mkdir -p "$project/.claude" && printf '%s\n' "$merged" > "$settings"
-    say hooks "wrote the four hooks into .claude/settings.local.json, other settings kept"
+    say hooks "wrote the five hooks into .claude/settings.local.json, other settings kept"
   fi
 else
   say hooks "NOT INSTALLED: .claude/settings.local.json is not one JSON object with a valid \"hooks\"; it is left as it is: fix it and run again"
