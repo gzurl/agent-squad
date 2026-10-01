@@ -42,8 +42,8 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # of names, replaces the PR's labels, GATE_REVIEWS, a JSON array of reviews, replaces QA's approval
 # (a review bound to the head unless it names its commit_id), and GATE_COMMENTS and GATE_INLINE,
 # JSON arrays of bodies, are the PR's comments and its inline review comments. A comment given as
-# an object keeps the author_association it carries, or none; any other is the owner's. Files are reported as GitHub does: a rename under its new
-# name, with the old one as previous_filename.
+# an object keeps the author_association it carries, or none; any other is the owner's. Files are
+# reported as GitHub does: a rename under its new name, with the old one as previous_filename.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -297,13 +297,13 @@ for first_line in 'Closes #7.' '' 'Thanks, **👩🏼‍🔬[QA]:** found it.'; 
 done
 export PR_BODY="**👨🏼‍💻[DEV]:** Closes #7."$'\n\n'"$pr_text"
 
-# 1e. Only accounts with write access count (#160): a review or a PR comment whose author_association
-#     is OWNER, MEMBER or COLLABORATOR. Anything else is ignored, as if it were not there: a
+# 1e. Only the squad's accounts count (#160): a review or a PR comment whose author_association is
+#     OWNER, MEMBER or COLLABORATOR. Anything else is ignored, as if it were not there: a
 #     stranger's review ending in QA-VERDICT: APPROVED approves nothing, and a stranger's comment
 #     shaped like QA's finding blocks nothing. A review or a comment whose association cannot be
 #     read stops the gate, which then cannot tell whose it is.
-# `verdict_by <association> <verdict> [commit]` prints a review with that verdict, on the head unless
-# a commit is given; `finding_by <association> <body>` prints a PR comment.
+# `verdict_by <association> <verdict> [commit]` prints a review with that verdict, on the head
+# unless a commit is given; `finding_by <association> <body>` prints a PR comment.
 verdict_by() {
   jq -nc --arg a "$1" --arg v "$2" --arg c "${3:-}" \
     '{body: "a review\n\nQA-VERDICT: \($v)", author_association: $a} + (if $c == "" then {} else {commit_id: $c} end)'
@@ -340,7 +340,8 @@ for association in OWNER MEMBER COLLABORATOR; do
     "[$(verdict_by OWNER CHANGES-REQUESTED),$(verdict_by "$association" APPROVED)]"
 done
 #     The refusal is the gate's only word, not mixed into another check's.
-# `unreadable <what>` prints the gate's refusal when it cannot tell who wrote one of the PR's <what>.
+# `unreadable <what>` prints the gate's refusal when it cannot tell who wrote one of the PR's
+# <what>.
 unreadable() { echo "cannot tell who wrote the $1 of PR #7: one has no author_association"; }
 reviews "a review whose association cannot be read" "$(unreadable reviews)" \
   "[$(verdict_by OWNER APPROVED),$(jq -nc '{body: "Looks good.", author_association: null}')]"

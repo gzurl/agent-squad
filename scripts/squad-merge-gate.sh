@@ -6,9 +6,10 @@
 #   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
 # cannot merge over an open thread, a stale verdict, a missing label or a second state label, an
 # unsettled body-only finding, a red or absent CI, or a head that moved between the check and the
-# merge. Only the reviews and comments of accounts with write access count (agent-squad #160). When the PR is behind its base, it says what the base changed since (agent-squad #64),
-# and stops when the base changed a file the PR changes too, until the author acknowledges that
-# base with SQUAD_BEHIND_CHECKED (agent-squad #80).
+# merge. Only the reviews and comments of the repository's owner, its organization's members and
+# its collaborators count (agent-squad #160). When the PR is behind its base, it says what the
+# base changed since (agent-squad #64), and stops when the base changed a file the PR changes too,
+# until the author acknowledges that base with SQUAD_BEHIND_CHECKED (agent-squad #80).
 #
 # Usage: [SQUAD_BEHIND_CHECKED=<base sha>] squad-merge-gate.sh <pr-number> [owner/repo]
 # Exit: 0 may be merged; 1 a condition failed; 2 bad usage; 3 behind a base that changed a file the
@@ -19,10 +20,12 @@ case "$pr" in ""|*[!0-9]*) echo "gate: usage: $0 <pr-number> [owner/repo]" >&2; 
 repo="${2:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
 owner="${repo%%/*}"; name="${repo##*/}"
 fail() { echo "gate FAILED: $*" >&2; exit 1; }
-# Only the squad's accounts speak for the squad: a review or a comment counts when its author has
-# write access to the repository, which the API reports as its author_association, and anything
-# else is ignored as if it were not there (agent-squad #160). `squad_only <what>` keeps those of a
-# page list, joined, and stops jq, and with it the gate, when an association cannot be read.
+# Only the squad's accounts speak for the squad: a review or a comment counts when its author is
+# the repository's owner, a member of the organization that owns it, or a collaborator, as the
+# API's author_association reports (OWNER, MEMBER, COLLABORATOR). On a repository a person owns,
+# those are the accounts with write access. Anything else is ignored as if it were not there
+# (agent-squad #160). `squad_only <what>` keeps those of a page list, joined, and stops jq, and
+# with it the gate, when an association cannot be read.
 # shellcheck disable=SC2016 # a jq program: its $names are jq's
 squad_only='def squad_only($what):
   add // [] | if any(.[]; .author_association | type != "string")
@@ -51,11 +54,12 @@ open_threads="$(gh api graphql -f query="{repository(owner:\"$owner\",name:\"$na
 [ "$open_threads" = "0" ] || fail "$open_threads unresolved review thread(s)"
 
 # 3. Every body-only finding (a PR comment by the reviewer whose first line carries a priority tag,
-#    written by one of the squad's accounts) is settled. The reviewer is QA, or DEV on a PR that QA authors (SQUAD.md §4), and the author
-#    signs the first line of the description (§6): a gate that cannot tell who reviews stops
-#    (agent-squad #150). Lines are read without their Markdown bold markers, so that a signature
-#    written in bold or plain, and a Settled: line in either form, count alike (agent-squad #111): a
-#    finding the gate cannot see would let the merge through.
+#    written by one of the squad's accounts) is settled. The reviewer is QA, or DEV on a PR that
+#    QA authors (SQUAD.md §4), and the author signs the first line of the description (§6): a
+#    gate that cannot tell who reviews stops (agent-squad #150). Lines are read without their
+#    Markdown bold markers, so that a signature written in bold or plain, and a Settled: line in
+#    either form, count alike (agent-squad #111): a finding the gate cannot see would let the
+#    merge through.
 author="$(gh api "repos/$repo/pulls/$pr" --jq '.body // "" | split("\n") | first // "" | gsub("\\*\\*"; "")' 2>/dev/null)" \
   || fail "cannot read the description of PR #$pr"
 case "$author" in
