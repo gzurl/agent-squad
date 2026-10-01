@@ -127,7 +127,9 @@ for f in README.md tool.sh other.txt; do echo "first $f" > "$scratch/$f"; done
 git -C "$scratch" add -A && git -C "$scratch" commit -qm "the base" || exit 2
 git -C "$scratch" switch -q -c pr && echo "the PR's change" >> "$scratch/tool.sh" \
   && git -C "$scratch" commit -qam "the PR" || exit 2
-export SCRATCH="$scratch" PR_BODY="Makes tool.sh faster, as the README.md explains. It leaves a note in \`notes\`."
+# The description opens with its author's signature, as §6 has every PR's: DEV's, so QA reviews.
+pr_text="Makes tool.sh faster, as the README.md explains. It leaves a note in \`notes\`."
+export SCRATCH="$scratch" PR_BODY="**👨🏼‍💻[DEV]:** Closes #7."$'\n\n'"$pr_text"
 head="$(git -C "$scratch" rev-parse pr)"
 
 # `run_gate` runs the gate on PR 7, leaving its stdout in $out, its stderr in $err and its exit code
@@ -253,6 +255,44 @@ unset GATE_INLINE
 #     sentence, as a finding about the convention itself would, does not (#114).
 findings "a finding that only mentions Settled: inside a line, not settled" 1 \
   "$(jq -n --arg b "$bold"$'\n\nEnd it with a `Settled: <URL>` line once the README is fixed.' '[$b]')"
+
+# 1d. The reviewer is read from the author's signature on the description's first line (#150): QA,
+#     or DEV on a PR that QA authors. A body-only finding is the reviewer's, so on a PR QA authors
+#     QA's answers do not count and DEV's findings do. A description whose first line carries no
+#     signature stops the gate: it cannot tell who reviews.
+# `findings_by <case> <unsettled> <author's first line> <comments as JSON>` runs `findings` on a PR
+# whose description opens with that line.
+findings_by() {
+  local default="$PR_BODY"
+  export PR_BODY="$3"$'\n\n'"$pr_text"
+  findings "$1" "$2" "$4"
+  export PR_BODY="$default"
+}
+qa_author='**👩🏼‍🔬[QA]:** Closes #7.'
+dev_finding='**👨🏼‍💻[DEV]:** ⚠️ [P2] claims: no. A test is missing.'
+qa_answer='**👩🏼‍🔬[QA]:** ✅ [P3] declined: a matter of taste.'
+findings_by "a PR QA authors, with QA's answer shaped like a finding" 0 "$qa_author" \
+  "$(jq -n --arg b "$qa_answer" '[$b]')"
+findings_by "a PR QA authors, with DEV's finding not settled" 1 "$qa_author" \
+  "$(jq -n --arg b "$dev_finding" '[$b]')"
+findings_by "a PR QA authors, with DEV's finding settled" 0 "$qa_author" \
+  "$(jq -n --arg b "$dev_finding$(printf '%b' "$settled_by")" '[$b]')"
+findings_by "a PR DEV authors, with DEV's comment shaped like a finding" 0 '**👨🏼‍💻[DEV]:** Closes #7.' \
+  "$(jq -n --arg b "$dev_finding" '[$b]')"
+findings_by "a PR the CTO authors, with QA's finding not settled" 1 '**👷🏼‍♂️[CTO]:** Closes #7.' \
+  "$(jq -n --arg b "$bold" '[$b]')"
+findings_by "a PR QA authors, signed plain as before v26, with DEV's finding not settled" 1 \
+  '👩🏼‍🔬[QA]: Closes #7.' "$(jq -n --arg b "$dev_finding" '[$b]')"
+for first_line in 'Closes #7.' '' 'Thanks, **👩🏼‍🔬[QA]:** found it.'; do
+  export PR_BODY="$first_line"$'\n\n'"$pr_text"
+  run_gate
+  if [ "$code" -eq 1 ] && [ -z "$out" ] && grep -qF "cannot tell who reviews PR #7" <<<"$err"; then
+    pass "a description whose first line is '$first_line' stops the gate: it cannot tell who reviews"
+  else
+    fail "a description whose first line is '$first_line': the gate exited $code, printed '$out', and said: $err"
+  fi
+done
+export PR_BODY="**👨🏼‍💻[DEV]:** Closes #7."$'\n\n'"$pr_text"
 
 # 2. Behind, with no file in common: main gains a commit that touches README.md and other.txt and
 #    adds two files: `a`, which the description only seems to name ("a note"), and `notes`, which
