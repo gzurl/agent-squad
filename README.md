@@ -53,8 +53,9 @@ Plan: now v34 (DEV finishes #119, then the version PR); next, publishing.
 
 ### 🏗️ Built by its own squad
 
-agent-squad is built by its own squad. By 2026-10-02 it had merged 75 pull requests, every one
-with a QA verdict, 23 of them sent back for changes first, and it had shipped 27 releases. For a
+agent-squad is built by its own squad. In the two weeks up to release v34, it merged 71 pull
+requests, every one with a QA verdict, 20 of them sent back for changes first, and it shipped 27
+releases. For a
 review that caught a real bug, see [PR #154](https://github.com/gzurl/agent-squad/pull/154), where
 QA found that a forked session counted its tokens twice.
 
@@ -418,7 +419,8 @@ agent's tokens; most of the input is read from the cache, which costs far less.
 hooks and commands) and on GitHub.
 
 **Do I have to watch three terminals?** No: you talk only to the CTO. The others work on their own
-and report through it.
+and report through it, and the CTO tells you when one of them is waiting for you in its own
+terminal, for a permission or a question.
 
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
