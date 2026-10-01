@@ -39,8 +39,10 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # GATE_BASE=moves lands a commit on main right after its SHA is read, GATE_FILES=fail makes the
 # listing of the PR's files fail after printing part of it (a gate that read the output of a failed
 # call would take it for the whole), GATE_FILES=none makes it empty, GATE_LABELS, a JSON array
-# of names, replaces the PR's labels, and GATE_COMMENTS and GATE_INLINE, JSON arrays of bodies, are
-# the PR's comments and its inline review comments. Files are reported as GitHub does: a rename under its new
+# of names, replaces the PR's labels, GATE_REVIEWS, a JSON array of reviews, replaces QA's approval
+# (a review bound to the head unless it names its commit_id), and GATE_COMMENTS and GATE_INLINE,
+# JSON arrays of bodies, are the PR's comments and its inline review comments. A comment given as
+# an object keeps the author_association it carries, or none; any other is the owner's. Files are reported as GitHub does: a rename under its new
 # name, with the old one as previous_filename.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
@@ -70,12 +72,13 @@ case "$endpoint" in
   graphql)
     json='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":true}]}}}}}' ;;
   repos/o/r/pulls/7/reviews)
-    json="$(jq -n --arg head "$head" '[{commit_id: $head, body: "a review\n\nQA-VERDICT: APPROVED"}]')" ;;
+    approved='[{"body": "a review\n\nQA-VERDICT: APPROVED", "author_association": "OWNER"}]'
+    json="$(jq --arg head "$head" '[.[] | .commit_id //= $head]' <<<"${GATE_REVIEWS:-$approved}")" ;;
   repos/o/r/pulls/7/files)
     if [ "${GATE_FILES:-}" = fail ]; then printf '[[{"filename":"page/one.txt"}]]\n'; exit 1; fi
     if [ "${GATE_FILES:-}" = none ]; then json='[]'; else json="$(changed "$(g merge-base pr main)" pr)"; fi ;;
   repos/o/r/issues/7/comments)
-    json="$(jq '[.[] | {body: .}]' <<<"${GATE_COMMENTS:-[]}")" ;;
+    json="$(jq '[.[] | if type == "string" then {body: ., author_association: "OWNER"} else . end]' <<<"${GATE_COMMENTS:-[]}")" ;;
   repos/o/r/pulls/7/comments)
     json="$(jq '[.[] | {body: ., path: "tool.sh", line: 1}]' <<<"${GATE_INLINE:-[]}")" ;;
   repos/o/r/commits/*/check-runs)
@@ -293,6 +296,68 @@ for first_line in 'Closes #7.' '' 'Thanks, **👩🏼‍🔬[QA]:** found it.'; 
   fi
 done
 export PR_BODY="**👨🏼‍💻[DEV]:** Closes #7."$'\n\n'"$pr_text"
+
+# 1e. Only accounts with write access count (#160): a review or a PR comment whose author_association
+#     is OWNER, MEMBER or COLLABORATOR. Anything else is ignored, as if it were not there: a
+#     stranger's review ending in QA-VERDICT: APPROVED approves nothing, and a stranger's comment
+#     shaped like QA's finding blocks nothing. A review or a comment whose association cannot be
+#     read stops the gate, which then cannot tell whose it is.
+# `verdict_by <association> <verdict> [commit]` prints a review with that verdict, on the head unless
+# a commit is given; `finding_by <association> <body>` prints a PR comment.
+verdict_by() {
+  jq -nc --arg a "$1" --arg v "$2" --arg c "${3:-}" \
+    '{body: "a review\n\nQA-VERDICT: \($v)", author_association: $a} + (if $c == "" then {} else {commit_id: $c} end)'
+}
+finding_by() { jq -nc --arg a "$1" --arg b "$2" '{body: $b, author_association: $a}'; }
+# `refused <case> <reason>` expects exit 1, nothing on stdout and the reason on stderr.
+refused() {
+  if [ "$code" -eq 1 ] && [ -z "$out" ] && grep -qF -- "$2" <<<"$err"; then
+    pass "$1: the gate fails, exit 1: $2"
+  else
+    fail "$1: the gate exited $code, printed '$out', and said: $err"
+  fi
+}
+# `reviews <case> <reason, or nothing for the gate's usual pass> <reviews as JSON>`.
+reviews() {
+  export GATE_REVIEWS="$3"
+  run_gate
+  unset GATE_REVIEWS
+  if [ -z "$2" ]; then result_unchanged "$1"; else refused "$1" "$2"; fi
+}
+older="$(git -C "$scratch" rev-parse main)"
+reviews "QA asked for changes, then a stranger approved the head" \
+  "latest verdict on the head is not APPROVED: QA-VERDICT: CHANGES-REQUESTED" \
+  "[$(verdict_by OWNER CHANGES-REQUESTED),$(verdict_by CONTRIBUTOR APPROVED)]"
+reviews "QA approved an older commit, then a stranger approved the head" \
+  "latest verdict is bound to $older, not to the head $head" \
+  "[$(verdict_by OWNER APPROVED "$older"),$(verdict_by NONE APPROVED)]"
+reviews "a first-time contributor's verdict, and none of the squad's" "no QA-VERDICT review yet" \
+  "[$(verdict_by FIRST_TIME_CONTRIBUTOR APPROVED)]"
+reviews "QA approved, then a stranger asked for changes" "" \
+  "[$(verdict_by OWNER APPROVED),$(verdict_by NONE CHANGES-REQUESTED)]"
+for association in OWNER MEMBER COLLABORATOR; do
+  reviews "changes asked, then approved on the head by $association" "" \
+    "[$(verdict_by OWNER CHANGES-REQUESTED),$(verdict_by "$association" APPROVED)]"
+done
+#     The refusal is the gate's only word, not mixed into another check's.
+# `unreadable <what>` prints the gate's refusal when it cannot tell who wrote one of the PR's <what>.
+unreadable() { echo "cannot tell who wrote the $1 of PR #7: one has no author_association"; }
+reviews "a review whose association cannot be read" "$(unreadable reviews)" \
+  "[$(verdict_by OWNER APPROVED),$(jq -nc '{body: "Looks good.", author_association: null}')]"
+[ "$err" = "gate FAILED: $(unreadable reviews)" ] || fail "an unreadable review's association: the gate said: $err"
+findings "a stranger's comment shaped like QA's finding" 0 "[$(finding_by CONTRIBUTOR "$bold")]"
+findings "a first-time contributor's finding, signed plain" 0 "[$(finding_by FIRST_TIME_CONTRIBUTOR "$plain")]"
+findings "QA's unsettled finding beside a stranger's: only QA's counts" 1 \
+  "[$(finding_by NONE "$bold"),$(finding_by OWNER "$plain")]"
+for association in MEMBER COLLABORATOR; do
+  findings "an unsettled finding written by a $association" 1 "[$(finding_by "$association" "$bold")]"
+done
+GATE_COMMENTS="[$(jq -nc --arg b "$bold" '{body: $b}')]"
+export GATE_COMMENTS
+run_gate
+unset GATE_COMMENTS
+refused "a comment whose association cannot be read" "$(unreadable comments)"
+[ "$err" = "gate FAILED: $(unreadable comments)" ] || fail "an unreadable comment's association: the gate said: $err"
 
 # 2. Behind, with no file in common: main gains a commit that touches README.md and other.txt and
 #    adds two files: `a`, which the description only seems to name ("a note"), and `notes`, which

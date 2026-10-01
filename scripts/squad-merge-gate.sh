@@ -6,7 +6,7 @@
 #   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
 # cannot merge over an open thread, a stale verdict, a missing label or a second state label, an
 # unsettled body-only finding, a red or absent CI, or a head that moved between the check and the
-# merge. When the PR is behind its base, it says what the base changed since (agent-squad #64),
+# merge. Only the reviews and comments of accounts with write access count (agent-squad #160). When the PR is behind its base, it says what the base changed since (agent-squad #64),
 # and stops when the base changed a file the PR changes too, until the author acknowledges that
 # base with SQUAD_BEHIND_CHECKED (agent-squad #80).
 #
@@ -19,13 +19,25 @@ case "$pr" in ""|*[!0-9]*) echo "gate: usage: $0 <pr-number> [owner/repo]" >&2; 
 repo="${2:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
 owner="${repo%%/*}"; name="${repo##*/}"
 fail() { echo "gate FAILED: $*" >&2; exit 1; }
+# Only the squad's accounts speak for the squad: a review or a comment counts when its author has
+# write access to the repository, which the API reports as its author_association, and anything
+# else is ignored as if it were not there (agent-squad #160). `squad_only <what>` keeps those of a
+# page list, joined, and stops jq, and with it the gate, when an association cannot be read.
+# shellcheck disable=SC2016 # a jq program: its $names are jq's
+squad_only='def squad_only($what):
+  add // [] | if any(.[]; .author_association | type != "string")
+    then error("cannot tell who wrote the \($what) of PR #\($pr): one has no author_association")
+    else map(select(.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))) end;'
 
 head="$(gh api "repos/$repo/pulls/$pr" --jq .head.sha 2>/dev/null)" || fail "cannot read PR #$pr"
 
-# 1. The latest review that contains a QA-VERDICT line says APPROVED and is bound to the head.
-#    --slurp joins the pages before jq runs (gh cannot combine --slurp with --jq); inline replies create empty reviews.
+# 1. The latest review by the squad that contains a QA-VERDICT line says APPROVED and is bound to
+#    the head. --slurp joins the pages before jq runs (gh cannot combine --slurp with --jq); inline
+#    replies create empty reviews.
 verdict="$(gh api --paginate --slurp "repos/$repo/pulls/$pr/reviews" \
-  | jq -r '[add[] | select(.body | test("QA-VERDICT: "))] | last // empty | "\(.commit_id) \(.body | split("\n") | map(select(test("QA-VERDICT: "))) | last)"')"
+  | jq -r --arg pr "$pr" "$squad_only"' squad_only("reviews") | map(select(.body | test("QA-VERDICT: ")))
+      | last // empty | "\(.commit_id) \(.body | split("\n") | map(select(test("QA-VERDICT: "))) | last)"' 2>&1)" \
+  || fail "${verdict#jq: error (at <stdin>:*): }"
 [ -n "$verdict" ] || fail "no QA-VERDICT review yet"
 case "$verdict" in
   "$head QA-VERDICT: APPROVED") ;;
@@ -38,8 +50,8 @@ open_threads="$(gh api graphql -f query="{repository(owner:\"$owner\",name:\"$na
   --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length')"
 [ "$open_threads" = "0" ] || fail "$open_threads unresolved review thread(s)"
 
-# 3. Every body-only finding (a PR comment by the reviewer whose first line carries a priority tag)
-#    is settled. The reviewer is QA, or DEV on a PR that QA authors (SQUAD.md §4), and the author
+# 3. Every body-only finding (a PR comment by the reviewer whose first line carries a priority tag,
+#    written by one of the squad's accounts) is settled. The reviewer is QA, or DEV on a PR that QA authors (SQUAD.md §4), and the author
 #    signs the first line of the description (§6): a gate that cannot tell who reviews stops
 #    (agent-squad #150). Lines are read without their Markdown bold markers, so that a signature
 #    written in bold or plain, and a Settled: line in either form, count alike (agent-squad #111): a
@@ -52,9 +64,11 @@ case "$author" in
   *) fail "cannot tell who reviews PR #$pr: the first line of its description carries no author's signature (§6), so the reviewer's body-only findings cannot be told apart" ;;
 esac
 unsettled="$(gh api --paginate --slurp "repos/$repo/issues/$pr/comments" \
-  | jq -r --arg reviewer "$reviewer" '[add[] | .body | split("\n") | map(gsub("\\*\\*"; ""))
-      | select((first | test("^" + $reviewer + ": \\S+ \\[P[123]\\]")) and (.[1:] | any(startswith("Settled: ")) | not))]
-    | length')"
+  | jq -r --arg pr "$pr" --arg reviewer "$reviewer" "$squad_only"' squad_only("comments")
+      | [.[] | .body | split("\n") | map(gsub("\\*\\*"; ""))
+         | select((first | test("^" + $reviewer + ": \\S+ \\[P[123]\\]")) and (.[1:] | any(startswith("Settled: ")) | not))]
+      | length' 2>&1)" \
+  || fail "${unsettled#jq: error (at <stdin>:*): }"
 [ "$unsettled" = "0" ] || fail "$unsettled body-only finding(s) without a Settled: line"
 
 # 4. The PR carries the approved status label, and no other of the three state labels: with two, a
