@@ -84,18 +84,54 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
 
 ## 💡 Why agent-squad
 
-I built agent-squad for myself. For several months I tried different ways of working with Claude
-Code agents on real projects, and this is the one that fits me best: I decide what to build and
-why, and the team does the rest, with reviews I can trust.
+I have been programming since I was seven (oh boy, those wonderful years of BASIC and assembler on
+an 8-bit ZX Spectrum!), and I have been a software engineer since 2003. I have to admit that
+generative AI has changed the way we build software forever; whether for better or for worse, time
+will tell. First, GitHub Copilot seemed to guess the next block of code I was about to write. Then
+ChatGPT gave me valuable snippets I could paste into my IDE. But the real explosion came in the
+spring of 2025, when I started using Claude Code, and my relationship with programming changed
+radically. The first versions felt like a sharp intern, then like a junior engineer, and in the end
+it wrote code better and faster than any human I know. Writing code stopped being my main value as
+an engineer. I had to raise the level where I add value: organising the AI's work, knowing what has
+to be done, when is the right moment to do it and why (weighing the pros, the cons and the expected
+value), and arranging the work so that it gets done as effectively as possible. It also meant
+learning to talk to the AI efficiently, and to ask for things in a way that gets me what I want.
+That sounds obvious, but there is a particular way of talking to an AI: it is less about being
+strict with words and grammar than about what to include and what to leave out, which is probably
+where prompt engineering came from.
 
-Put several Claude Code sessions on one project without a method and they soon get in each other's
-way. They edit the same files, forget what they agreed once their context is compacted, merge work
-nobody reviewed, and push straight to `main`. Every rule in [SQUAD.md](SQUAD.md) comes from
-something like that, and records the incident that led to it. The rules that matter most are
-enforced by scripts, because good intentions alone do not keep them.
+With Claude Code I went through several stages: a single session in the terminal, then desktop
+interfaces, then back to the terminal (iTerm2, then tmux, Ghostty, and finally cmux, for its agent
+integration). Like almost everyone, I then tried several agents on the same repository, each on its
+own feature, and ran into the conflicts between them and the extra friction of using and managing
+Git worktrees. Several tools appeared to automate that, but I felt I was not getting all the juice
+that coding agents could give me.
 
-The method keeps changing as it is used: when an agent finds a flaw in it, the fix comes back here
-as a new release, and [CHANGELOG.md](CHANGELOG.md) says what each release changed.
+So, to be more effective, I moved to a two-role layout: a developer and a QA engineer. One builds,
+the other verifies. QA works from a different context, which keeps it from fooling itself, as the
+developer would. That worked for a while, until I noticed how much of my time went into carrying
+one agent's decisions, plus my own feedback, to the other. The `SendMessage` tool, which lets
+sessions message each other, took me out of the middle (I was no longer the bottleneck man in the
+middle). The next rock in the road was quality: on a given feature, the two could not agree on
+whether the work was good enough (the famous P2s and P3s of one model reviewing another), and they
+would get stuck in a pointless loop that only burned tokens. That brought the last step up: DEV and
+QA needed a boss, and not me, but an AI-agent CTO.
+
+That is how agent-squad's three-agent model was born. I play the CEO, or product manager, of a
+small team: a CTO, a developer and a QA. I only talk to the CTO, about vision, product, software
+stack, architecture and so on. Together we set the project's direction, and the CTO deals with the
+rest of the team and settles their disagreements. Each member works in its own local worktree, and
+the work lives on GitHub: its issues and pull requests are the single source of truth, where I, as
+the CEO, can step in whenever I want.
+
+Every rule in [SQUAD.md](SQUAD.md) comes from something that went wrong on a real project, and the
+rules that matter most are enforced by scripts, because good intentions alone do not keep them. The
+method keeps changing as it is used: when an agent finds a flaw in it, the fix comes back here as a
+new release, and [CHANGELOG.md](CHANGELOG.md) says what each release changed.
+
+agent-squad is my own, very personal take on how to build software today with Git, GitHub and
+Claude Code. I am sure it has plenty of flaws and limits, which is why I am making it public, for
+anyone who wants to lend a hand and contribute.
 
 
 ## 🔭 Overview
