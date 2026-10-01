@@ -1,5 +1,17 @@
 # Changelog
 
+## v33 — 2026-10-01
+- **The merge gate keys body-only findings on the reviewer** (#150, found by rogue-trader's QA): on
+  a PR that QA authors, DEV reviews, so the gate reads the author from the first line of the PR's
+  description and takes as findings the comments signed by the reviewer, DEV there and QA
+  otherwise. QA's answers on its own PR no longer read as findings, and DEV's findings there now
+  hold the merge. A description with no signature on its first line makes the gate refuse. §4.8
+  and §4.9 say "the reviewer".
+- §4.9: **after the merge, the author checks that the issue closed** (#127), and closes it with a
+  comment naming the PR if it did not. A PR's closing link, read through the API before the merge,
+  proves nothing: on two repositories it filled in only some time after the merge. So the gate
+  does not check it.
+
 ## v32 — 2026-09-30
 - **The pre-push gate lets through a tag of a past release** (#143, found by trivial-tape's CTO): a
   pushed ref whose commit one of the remote's branches already contains carries no new code, so it
