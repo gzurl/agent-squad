@@ -173,9 +173,8 @@ imports_charter() {
 }
 
 # The five session hooks as the installer writes them (D5 and D10 of agent-squad #23, and #164 for
-# resume). Each
-# command checks that the playbook's script exists, so that a missing playbook is reported to the
-# session instead of failing it.
+# resume). Each command checks that the playbook's script exists, so that a missing playbook is
+# reported to the session instead of failing it.
 # shellcheck disable=SC2016 # expanded by the shell that runs the hook, not here
 handoff='"$CLAUDE_PROJECT_DIR"/.agent-squad/playbook/scripts/squad-handoff.sh'
 # shellcheck disable=SC2016 # same
