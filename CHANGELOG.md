@@ -1,5 +1,32 @@
 # Changelog
 
+## v34 — 2026-10-01
+- **`/squad-usage` and `/squad-usage-all`: the tokens each agent used** (#119, the CEO's request).
+  `scripts/squad-tokens.sh` reads the transcripts Claude Code keeps on the machine, and only reads
+  them. It reports each agent by its session's name, such as `CTO:trivial-tape`, with the role read
+  on either side of the colon, and gives its input, the share of it read from the cache, its output
+  and its models. Each model response counts once, by its message id, even when a forked session
+  holds a copy.
+  - `/squad-usage` reports the project it is typed in. `/squad-usage-all` reports the whole
+    machine, one block per project, with subtotals per role, then other sessions, then the total,
+    and relays nothing to other squads.
+  - Both cover the whole history by default, and take `Nd` or a date for a period. Any session of
+    the squad may run them.
+  - Each run merges per-day figures into `.agent-squad/tokens.tsv`, so that they outlive Claude
+    Code's cleanup of transcripts about 30 days after a session's last use.
+  - A change in the transcripts' format stops the script, and is never counted as zero.
+
+  The installer now requires ten commands, so upgrading writes the two new ones. The README has a
+  section on it, *How many tokens the agents use*.
+- §6: **a report of the agents' state gives one line per agent** (#130, defined with the CEO):
+  - the lines go in the order CTO, DEV, QA, in the third person, the CTO's included;
+  - each line starts with an emoji for one of five states: working, paused, free, waiting for the
+    CEO in its terminal, or no answer;
+  - every update repeats the same lines, with a closing line on where things stand, and several
+    squads give one block each;
+  - it holds for the six step-away commands, which now apply it, and for any status given on
+    request. The README says so in *When you step away*.
+
 ## v33 — 2026-10-01
 - **The merge gate keys body-only findings on the reviewer** (#150, found by rogue-trader's QA): on
   a PR that QA authors, DEV reviews, so the gate reads the author from the first line of the PR's
