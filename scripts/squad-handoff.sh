@@ -7,6 +7,9 @@
 #            that it is re-injected into the compacted session's context.
 #   startup  SessionStart(startup) hook: print a one-line warning when the charter is not installed,
 #            and nothing otherwise.
+#   resume   SessionStart(resume) hook: the same warning, then where the resumed session's shell is
+#            and each role's directory, since Claude Code starts that shell in the launch directory
+#            whatever worktree the conversation last worked in (agent-squad #164).
 #
 # save and restore read the hook's JSON payload on stdin and key the file by session_id, so the
 # script works for any role without knowing which session it runs in. Snapshots live in the main
@@ -175,6 +178,31 @@ compact_gate() {
   exit 2
 }
 
+# A session that cannot read the charter must not start working as if it could.
+charter_warning() {
+  if [ ! -f "$charter" ]; then
+    echo "Squad: the charter is not installed ($charter is missing). Stop and tell the CTO before doing anything else."
+  fi
+}
+
+# Where a resumed session's shell is, and where each role works, as absolute paths: the
+# conversation remembers the last directory it worked in, and the shell no longer is there. Both
+# paths are read physically, so that a symbolic link in either does not hide that they are one.
+reorient() {
+  local here main where
+  here="$(pwd -P)"
+  main="$(cd "$main_checkout" 2>/dev/null && pwd -P || echo "$main_checkout")"
+  where="$here"
+  [ "$here" != "$main" ] || where="$here, the main checkout"
+  echo "Squad: this session was resumed. Its shell is in $where, whatever directory the conversation last worked in."
+  echo "- Your role is your session name. Each role works in its own directory (SQUAD.md §2.4):"
+  echo "  - CTO: $main, which stays on the default branch, or $main/.agent-squad/worktrees/cto-<topic> for a pull request"
+  echo "  - DEV: $main/.agent-squad/worktrees/dev"
+  echo "  - QA: $main/.agent-squad/worktrees/qa"
+  echo "- Name that directory in this first command and in every one after it: git -C \"<path>\" ..., or cd \"<path>\" && ..."
+  echo "- Before any git switch or git checkout, run git -C \"<path>\" rev-parse --show-toplevel and check that it prints your directory."
+}
+
 case "$action" in
   save)
     if [ -n "$session_id" ] && mkdir -p "$handoff_dir" 2>/dev/null; then
@@ -195,13 +223,14 @@ case "$action" in
     fi
     ;;
   startup)
-    # A session that cannot read the charter must not start working as if it could.
-    if [ ! -f "$charter" ]; then
-      echo "Squad: the charter is not installed ($charter is missing). Stop and tell the CTO before doing anything else."
-    fi
+    charter_warning
+    ;;
+  resume)
+    charter_warning
+    reorient
     ;;
   *)
-    echo "usage: $0 save|restore|startup" >&2
+    echo "usage: $0 save|restore|startup|resume" >&2
     ;;
 esac
 exit 0

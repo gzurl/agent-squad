@@ -81,7 +81,7 @@ jq_holds() { jq -e "$1" "$2" >/dev/null; }
 
 # The items of --check, as it names them.
 item_playbook="playbook/ is complete and unmodified"
-item_hooks="the four hooks are in .claude/settings.local.json and point at the playbook"
+item_hooks="the five hooks are in .claude/settings.local.json and point at the playbook"
 item_ignore=".gitignore ignores .agent-squad/, .claude/settings.local.json and .claude/commands/squad-*.md"
 item_command="the squad's commands in .claude/commands/ are the playbook's"
 item_shim="the pre-push shim is installed and core.hooksPath is unset"
@@ -287,8 +287,8 @@ check "settings.local.json keeps the project's permissions" \
   jq_holds '.permissions.allow == ["Bash(ls:*)"]' "$settings"
 check "and the project's own hook" \
   jq_holds '.hooks.PreToolUse[0].hooks[0].command == "echo own hook"' "$settings"
-check "and has the four squad hooks once each, the older entry replaced" \
-  jq_holds "$ours == [\"manual\", \"auto\", \"compact\", \"startup\"]" "$settings"
+check "and has the five squad hooks once each, the older entry replaced" \
+  jq_holds "$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\"]" "$settings"
 
 # 3. A second run changes nothing but the log, which gains one line.
 before="$(project_state "$project")"
@@ -329,7 +329,7 @@ run_hook() {
 }
 mv "$squad/playbook" "$lab/playbook-aside"
 check "the shim refuses a push when the playbook is missing" refused push_from "$dev" no-playbook
-for matcher in startup compact; do
+for matcher in startup compact resume; do
   check "the $matcher hook warns that the charter is not installed" \
     prints "charter is not installed" run_hook "$matcher"
 done
@@ -337,6 +337,7 @@ check "the save hook does nothing and exits 0" prints_nothing run_hook manual
 mv "$lab/playbook-aside" "$squad/playbook"
 check "with the playbook back, the startup hook prints nothing" prints_nothing run_hook startup
 check "and the compact hook re-orients the session" prints "Context was compacted" run_hook compact
+check "and the resume hook says where the shell is" prints "Squad: this session was resumed" run_hook resume
 
 # 7. An upgrade replaces the playbook whole and leaves the rest of .agent-squad/ alone. It is run
 #    as the README says, by the installed installer, which replaces the directory it runs from.
@@ -528,7 +529,7 @@ check "a linked worktree is refused with exit 2" [ "$code" -eq 2 ]
 check "and nothing is created in it" absent "$dev" .agent-squad
 
 # 11. Blank settings count as none; settings that are not one JSON object are left as they are.
-four_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\"]"
+five_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\"]"
 for kind in empty blank; do
   target="$(new_project "settings-$kind")" || exit 2
   mkdir -p "$target/.claude"
@@ -539,7 +540,7 @@ for kind in empty blank; do
   out="$("$install" "$target" "$tag_a" 2>&1)"
   code=$?
   check "an $kind settings.local.json exits 0" [ "$code" -eq 0 ]
-  check "and gets the four hooks" jq_holds "$four_hooks" "$target/.claude/settings.local.json"
+  check "and gets the five hooks" jq_holds "$five_hooks" "$target/.claude/settings.local.json"
 done
 for kind in not-json two-objects; do
   target="$(new_project "settings-$kind")" || exit 2
@@ -625,6 +626,11 @@ mended "$squad/playbook/README.md"
 broken "$settings"
 jq '.hooks.SessionStart |= map(select(.matcher != "startup"))' "$lab/mend.me" > "$settings"
 check "a missing hook fails the hooks item" check_reports "$item_hooks"
+mended "$settings"
+broken "$settings"
+jq '.hooks.SessionStart |= map(select(.matcher != "resume"))' "$lab/mend.me" > "$settings"
+check "a missing resume hook fails the hooks item" check_reports "$item_hooks"
+check "naming it" contains "$("$install" --check "$project" 2>&1)" "$item_hooks: missing: resume; unexpected: none"
 mended "$settings"
 
 broken "$project/.gitignore"
