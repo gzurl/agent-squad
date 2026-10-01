@@ -16,7 +16,8 @@ The CEO is back. Your role is your session name. The squad's commands are in the
    A session that `ListAgents` shows as **waiting** is held by a question or a permission prompt
    in its own terminal and reads no message until the CEO answers it there: name it to the CEO.
 3. Give the CEO one summary for the three agents, in the CEO's language (`AGENTS.md`, *Language*):
-   - what each agent did while the CEO was away;
+   - §6's agent lines (one per agent, in the order CTO, DEV, QA, with its state emoji): each
+     agent's state now, then what it did while the CEO was away;
    - what was merged or released;
    - what waits for the CEO: the open issues labelled `👨🏻‍💼 needs-ceo`, each linked. Filter them
      with `gh issue list --state open --limit 1000 --json number,title,labels` and `jq`:

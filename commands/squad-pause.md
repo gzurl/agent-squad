@@ -16,13 +16,15 @@ worktrees.
    `date '+%Y-%m-%d %H:%M'` when you send it.
    A session that `ListAgents` shows as **waiting** is held by a question or a permission prompt
    in its own terminal and reads no message until the CEO answers it there: name it to the CEO.
-2. Tell the CEO, in one line and in the CEO's language (`AGENTS.md`, *Language*), how long each of
-   the three still needs, from their answers.
-3. Tell the CEO that all three are at a safe point only when each agent has saved its state on
+2. Report to the CEO in §6's agent lines (one per agent, in the order CTO, DEV, QA, with its state
+   emoji), in the CEO's language (`AGENTS.md`, *Language*): how long each of the three still needs,
+   from their answers, and where each one's state is. Repeat the same lines in every update.
+3. Close with "the three are at a safe point" only when each agent has saved its state on
    GitHub, on its issue or on the PR it is reviewing, or has said that it works on neither (check
    GitHub, not the reply alone), and its session shows as idle (`ListAgents`). If an agent has not
-   answered after a few minutes, or its session is still busy, name it and say what the CEO can
-   do: wait, look at that session, or go ahead anyway, knowing what it was doing.
+   answered after a few minutes (❓), or its session is still busy, or it waits for the CEO (✋),
+   say on its line what the CEO can do: wait, look at that session, or go ahead anyway, knowing
+   what it was doing.
 
 ## For every agent (and, typed in DEV's or QA's session, for that agent alone)
 1. **The step in hand:** finish it if it is short (a push, a merge, a comment, a short test run).

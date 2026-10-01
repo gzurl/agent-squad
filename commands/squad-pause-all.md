@@ -29,12 +29,14 @@ Follow the part for every agent in `squad-pause.md`, for yourself alone, as `/sq
    one above, and its DEV and QA the one for a squad with no CTO session. That CTO is held by a
    question or a permission prompt in its own terminal, and reads your message only once the CEO
    answers it there; its sent time then tells it to check with you first.
-3. **Answer the CEO once, grouped by squad**, in the CEO's language (`AGENTS.md`, *Language*): how
-   long each squad still needs, from its CTO's report or its agents'. Say "all N squads are at a
-   safe point" only when each squad has reported safe and `ListAgents` shows its sessions idle.
-   Name any session shown as waiting: only the CEO can answer it, in its own terminal. Name any
-   squad that did not answer after a few minutes, or whose CTO or agents answered that
-   their main checkout has no `squad-pause.md` (a release older than v26, or a project that runs
-   no squad, whose agents say what they did instead): you cannot see other
-   squads' checkouts, since `ListAgents` gives no paths. Say what its sessions were doing (busy
-   or idle) and what the CEO can do: wait, look at those sessions, or go ahead anyway.
+3. **Answer the CEO once, grouped by squad**, in the CEO's language (`AGENTS.md`, *Language*): each
+   squad as a block of §6's agent lines (one per agent, in the order CTO, DEV, QA, with its state
+   emoji), from its CTO's report or its agents', with how long each still needs. Close with "all N
+   squads are at a safe point" only when each squad has reported safe and `ListAgents` shows its
+   sessions idle, and otherwise with how many are and what is missing. Name any session shown as
+   waiting: only the CEO can answer it, in its own terminal. Name any squad that did not answer
+   after a few minutes, or whose CTO or agents answered that their main checkout has no
+   `squad-pause.md` (a release older than v26, or a project that runs no squad, whose agents say
+   what they did instead): you cannot see other squads' checkouts, since `ListAgents` gives no
+   paths. Say what its sessions were doing (busy or idle) and what the CEO can do: wait, look at
+   those sessions, or go ahead anyway.

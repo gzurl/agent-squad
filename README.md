@@ -186,6 +186,11 @@ agent alone.
 Nothing notifies you while you are away: `/squad-resume` tells you what happened, and the issues
 labelled `needs-ceo` are your inbox.
 
+Whenever the CTO reports on the agents, during these commands or when you ask how they are doing,
+each agent gets a line of its own, always in the order CTO, DEV, QA, with an emoji for its state:
+working, paused, free, waiting for you, or no answer. The same lines come back in every update, so
+you see at a glance who is still busy.
+
 **Several squads on the machine?** Add `-all`: `/squad-pause-all`, `/squad-away-all` and
 `/squad-resume-all`, typed in any squad's CTO session, do the same for every squad, and you get one
 answer, grouped by squad, that names any squad that did not answer.
