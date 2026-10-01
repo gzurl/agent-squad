@@ -1,11 +1,8 @@
 # agent-squad
 
-**Your own software team of Claude Code agents.** You decide what to build; a CTO plans it, a
-developer builds it, and QA checks every change before it lands.
-
-**You, the human, are the CEO of a small software team of Claude Code agents.** You decide what
-gets built. A CTO turns your ideas into a plan, a developer writes the code, and a QA reviews every
-change. The team works the way a good team does, and comes to you when a decision is yours.
+**You, the human, are the CEO of a small software team of Claude Code agents.** You decide what to
+build; a CTO plans it, a developer builds it, and QA checks every change before it is merged. The
+team comes to you when a decision is yours.
 
 The agents run on **Claude Code** and coordinate on **GitHub**: issues hold the work to do, pull
 requests carry each change and its review, and milestones show how far along each goal is.
