@@ -72,6 +72,7 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
   - [How the team works](#how-the-team-works)
   - [When a session's context fills up](#when-a-sessions-context-fills-up)
   - [When you step away](#when-you-step-away)
+  - [How many tokens the agents use](#how-many-tokens-the-agents-use)
 - [📋 Requirements](#-requirements)
 - [🛠️ Install](#️-install)
 - [🔄 Upgrade](#-upgrade)
@@ -200,6 +201,19 @@ cannot act on a command until you answer it there: the CTO tells you which one, 
 command to the rest of its squad. A command that reaches an agent late is checked with whoever sent
 it before anyone acts on it.
 
+### How many tokens the agents use
+
+Type `/squad-usage` in any of the squad's sessions to see how many tokens each agent of the project
+has used: its input, the share of that input read from the cache, its output, and the models it ran
+on. `/squad-usage 30d` covers the last 30 days, and `/squad-usage 2026-09-24` starts on that day.
+`/squad-usage-all` reports every project on the machine, one block per project, and asks no other
+squad: it reads every session's figures itself.
+
+The figures come from the transcripts Claude Code keeps on your machine, which it deletes about 30
+days after a session was last used. Each report also adds them to a history in
+`.agent-squad/tokens.tsv`, so they outlive the transcripts. Nothing leaves the machine. Tokens are
+not cost: most of the input is read from the cache, which is billed far below fresh input.
+
 
 ## 📋 Requirements
 
@@ -283,7 +297,7 @@ the installer touches only the files listed before it:
 ├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
 ├── .claude/settings.local.json           ignored   the squad's four hooks, next to your settings
-├── .claude/commands/squad-*.md           ignored   the squad's eight commands
+├── .claude/commands/squad-*.md           ignored   the squad's ten commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored
     ├── playbook/          the installed release: charter, scripts, templates
@@ -291,6 +305,7 @@ the installer touches only the files listed before it:
     ├── handoff/           the snapshot saved before each compaction
     ├── evidence/          the files QA's reviews rely on
     ├── install.log        one line per install or upgrade
+    ├── tokens.tsv         the history of the tokens each agent used, kept by /squad-usage
     └── playbook.manifest  the checksums that --check compares the playbook against
 ```
 
@@ -336,8 +351,8 @@ what, and when.
 |---|---|---|
 | `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
 | `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and this guide | Yes |
-| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-away-all`, `/squad-resume-all` | Yes; the installer copies them into `.claude/commands/` |
-| `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the compaction hooks, the merge gate, the checks runner and the pre-push gate | Yes |
+| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-away-all`, `/squad-resume-all`, `/squad-usage`, `/squad-usage-all` | Yes; the installer copies them into `.claude/commands/` |
+| `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the compaction hooks, the merge gate, the checks runner, the token report and the pre-push gate | Yes |
 | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |
 | `LICENSE` | The MIT License | Yes, so every installed playbook carries it |
