@@ -1,8 +1,8 @@
 # agent-squad
 
-**You, the human, are the CEO of a small software team of Claude Code agents.** You decide what
-gets built. A CTO turns your ideas into a plan, a developer writes the code, and a QA reviews every
-change. The team works the way a good team does, and comes to you when a decision is yours.
+**You, the human, are the CEO of a small software team of Claude Code agents.** You decide what to
+build; a CTO plans it, a developer builds it, and QA checks every change before it is merged. The
+team comes to you when a decision is yours.
 
 The agents run on **Claude Code** and coordinate on **GitHub**: issues hold the work to do, pull
 requests carry each change and its review, and milestones show how far along each goal is.
@@ -11,29 +11,53 @@ agent-squad needs both.
 
 ### ✅ Features
 
-- **A team with clear roles:**
-  - 👨🏻‍💼 **CEO, you.** You decide what to build and why, and you only need to talk to the CTO. The
-    agents write to you in your language, and to each other in English.
-  - 👷🏼‍♂️ **CTO.** Your partner on the product. It talks through with you what to build, helps you
-    shape the vision and choose the stack, and plans the work as GitHub issues. It settles any
-    disagreement between DEV and QA, and brings you the decisions that are yours, as options with a
-    recommendation.
-  - 👨🏼‍💻 **DEV.** Writes the code and its tests, and opens a pull request for each issue.
-  - 👩🏼‍🔬 **QA.** Reviews every pull request in two ways: it reads the code, and it tests what the
-    pull request says it does.
-- **A team that coordinates itself.** Each agent works in its own git worktree, a separate copy of
-  the project, so nobody touches another's files. They message each other and follow the work on
-  GitHub, without you in the middle.
-- **Rules that scripts enforce.** Before every push, your project's checks must pass, and nothing
-  goes straight to `main`. Before every merge, QA must have approved the latest commit, every
-  comment must be settled, and CI must be green; `SQUAD.md` §4.9 has the details.
-- **A clean install.** Everything lives in a `.agent-squad/` folder that git ignores. The installer
-  never overwrites your files, and `--check` tells you whether the installation works.
-- **Sessions that keep the thread.** Each session loads the rules when it starts, and a session
-  whose context gets compacted is handed back the state of the project
-  ([how](#when-a-sessions-context-fills-up)).
-- **Versioned.** A project installs a release and upgrades when it chooses
-  ([how](#-upgrade)).
+- 👥 **A full team:** a CTO, a developer and a QA, each in its own Claude Code session. You talk
+  only to the CTO, in your own language.
+- 🔍 **Every change is a pull request** that QA reviews before it merges.
+- 🌳 **Each agent works in its own git worktree,** so nobody steps on anyone's files.
+- 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main`, no merge
+  without QA's approval.
+- ☕ **Step away and come back:** pause the squad, or leave it working, and get a summary when you
+  return. Sessions keep the thread across compactions and restarts.
+- 📈 **Grows with you:** several projects at once, token usage per agent, and upgrades in one
+  command.
+
+
+### 👥 The team
+
+- 👨🏻‍💼 **CEO, you.** You decide what to build and why, and you only need to talk to the CTO. The
+  agents write to you in your language, and to each other in English.
+- 👷🏼‍♂️ **CTO.** Your partner on the product. It talks through with you what to build, helps you
+  shape the vision and choose the stack, and plans the work as GitHub issues. It settles any
+  disagreement between DEV and QA, and brings you the decisions that are yours, as options with a
+  recommendation.
+- 👨🏼‍💻 **DEV.** Writes the code and its tests, and opens a pull request for each issue.
+- 👩🏼‍🔬 **QA.** Reviews every pull request in two ways: it reads the code, and it tests what the
+  pull request says it does.
+
+
+### 💬 What you see as the CEO
+
+The CTO reports in your language, one line per agent. After `/squad-resume`, for instance:
+
+```
+👷🏼‍♂️[CTO]: ✅ The squad is back:
+💤 CTO: free. While you were away it merged PR #152 and released v33.
+⏳ DEV: on #119 (token usage per agent), about 1 h. While you were away it merged PR #151.
+💤 QA: free. While you were away it reviewed PRs #151 and #152 and verified v33.
+
+Waiting for you: #119, choose how token usage is reported (A, B or C).
+Plan: now v34 (DEV finishes #119, then the version PR); next, publishing.
+```
+
+
+### 🏗️ Built by its own squad
+
+agent-squad is built by its own squad. In the two weeks up to release v34, it merged 71 pull
+requests, every one with a QA verdict, 20 of them sent back for changes first, and it shipped 27
+releases. For a
+review that caught a real bug, see [PR #154](https://github.com/gzurl/agent-squad/pull/154), where
+QA found that a forked session counted its tokens twice.
 
 
 ### ▶️ Quick start
@@ -78,6 +102,7 @@ You need Claude Code, a GitHub repository for your project, and the GitHub CLI (
 - [🔄 Upgrade](#-upgrade)
 - [🗂️ What goes where](#️-what-goes-where)
 - [⚠️ Things to know](#️-things-to-know)
+- [❓ FAQ](#-faq)
 - [📦 This repository](#-this-repository)
 - [📄 License](#-license)
 
@@ -380,6 +405,26 @@ what, and when.
   characters, as the owner labels and `needs-ceo` are. Filter on GitHub's web page, or with
   `gh issue list --state open --limit 1000 --json number,title,labels` and `jq`; without
   `--limit`, the list stops at 30 issues.
+
+
+## ❓ FAQ
+
+**Why three agents, and not one?** One agent checks its own work with the same context it wrote it
+in. A second one, with a fresh context, checks it honestly, and a CTO settles their disagreements
+so that you are not dragged into them.
+
+**How many tokens does it use?** Three Claude Code sessions per project. `/squad-usage` shows each
+agent's tokens; most of the input is read from the cache, which costs far less.
+
+**Does it work with Cursor, Codex or other tools?** No. It is built on Claude Code (its sessions,
+hooks and commands) and on GitHub.
+
+**Do I have to watch three terminals?** No: you talk only to the CTO. The others work on their own
+and report through it, and the CTO tells you when one of them is waiting for you in its own
+terminal, for a permission or a question.
+
+**Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
+you what it needs to know.
 
 
 ## 📦 This repository
