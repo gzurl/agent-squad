@@ -3,7 +3,9 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2172A7.svg?style=for-the-badge&labelColor=000"></a>
   <a href="https://github.com/gzurl/agent-squad/tags"><img alt="Latest release" src="https://img.shields.io/github/v/tag/gzurl/agent-squad?sort=semver&label=release&style=for-the-badge&color=2172A7&labelColor=000"></a>
+  <a href="https://github.com/gzurl/agent-squad/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/gzurl/agent-squad/ci.yml?branch=main&label=CI&style=for-the-badge&labelColor=000"></a>
   <img alt="Built for Claude Code" src="https://img.shields.io/badge/Built%20for-Claude%20Code-D97757.svg?style=for-the-badge&labelColor=000">
+  <a href="#️-built-by-its-own-squad"><img alt="Every PR reviewed by QA" src="https://img.shields.io/badge/Every%20PR-reviewed%20by%20QA-2EA44F.svg?style=for-the-badge&labelColor=000"></a>
 </p>
 
 **You, the human, are the CEO of a small software team of Claude Code agents.** You decide what to
