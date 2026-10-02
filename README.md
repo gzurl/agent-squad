@@ -1,4 +1,10 @@
-# agent-squad
+<h1 align="center"><img alt="agent-squad" src="docs/images/wordmark.png" width="520"></h1>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2172A7.svg?style=for-the-badge&labelColor=000"></a>
+  <a href="https://github.com/gzurl/agent-squad/tags"><img alt="Latest release" src="https://img.shields.io/github/v/tag/gzurl/agent-squad?sort=semver&label=release&style=for-the-badge&color=2172A7&labelColor=000"></a>
+  <img alt="Built for Claude Code" src="https://img.shields.io/badge/Built%20for-Claude%20Code-D97757.svg?style=for-the-badge&labelColor=000">
+</p>
 
 **You, the human, are the CEO of a small software team of Claude Code agents.** You decide what to
 build; a CTO plans it, a developer builds it, and QA checks every change before it is merged. The
@@ -7,6 +13,9 @@ team comes to you when a decision is yours.
 The agents run on **Claude Code** and coordinate on **GitHub**: issues hold the work to do, pull
 requests carry each change and its review, and milestones show how far along each goal is.
 agent-squad needs both.
+
+
+<p align="center"><img src="docs/images/team.jpg" alt="The CEO behind the squad's three agents: the CTO, the developer and the QA" width="800"></p>
 
 
 ### ✅ Features
@@ -25,6 +34,8 @@ agent-squad needs both.
 
 ### 👥 The team
 
+<img src="docs/images/logo.png" alt="agent-squad: three robot agents, a CTO, a developer and a QA" width="340" align="right">
+
 - 👨🏻‍💼 **CEO, you.** You decide what to build and why, and you only need to talk to the CTO. The
   agents write to you in your language, and to each other in English.
 - 👷🏼‍♂️ **CTO.** Your partner on the product. It talks through with you what to build, helps you
@@ -37,6 +48,11 @@ agent-squad needs both.
 
 
 ### 💬 What you see as the CEO
+
+Each agent works in a session of its own; here, in cmux, the CTO's on the left and DEV's and QA's on
+the right. You talk only to the CTO.
+
+<p align="center"><img src="docs/images/squad-in-cmux.png" alt="The squad in cmux: the CTO's session on the left, DEV's and QA's on the right" width="900"></p>
 
 The CTO reports in your language, one line per agent. After `/squad-resume`, for instance:
 
@@ -442,7 +458,7 @@ The squad turns accepted issues into its own pull requests.
 | `CHANGELOG.md` | What each version changes | Yes, to read |
 | `LICENSE` | The MIT License | Yes, so every installed playbook carries it |
 | `.gitattributes` | What a release leaves out | Yes, unused there |
-| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/outside-report.md`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, contribution guide and form, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
+| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/outside-report.md`, `docs/images/`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, contribution guide and form, the README's images, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
 
 
 ## 📄 License
