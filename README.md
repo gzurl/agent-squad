@@ -72,8 +72,8 @@ Plan: now v34 (DEV finishes #119, then the version PR); next, publishing.
 
 ### 🏗️ Built by its own squad
 
-agent-squad is built by its own squad. In the 16 days up to release v35, it merged 87 pull
-requests, every one with a QA verdict, 27 of them sent back for changes first, and it shipped 28
+agent-squad is built by its own squad. In the 16 days up to release v36, it merged 92 pull
+requests, every one with a QA verdict, 29 of them sent back for changes first, and it shipped 29
 releases. For a review that caught a real bug, see
 [PR #154](https://github.com/gzurl/agent-squad/pull/154), where QA found that a forked session
 counted its tokens twice.
