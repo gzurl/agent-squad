@@ -25,7 +25,10 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # squad-checks.sh with line 5 run; a copy of it with the same four lines, 3 and 4 run, one written
 # as "hits/total"; a different squad-checks.sh with other lines, all run; and .githooks/pre-push.
 # For check-handoff.sh, which runs after it, it records line 9 of squad-checks.sh as run and line 5
-# as not, and fails. As kcov does, each record names its files past the part they share, which the
+# as not, and fails. For check-merge-gate.sh it records lines of squad-merge-gate.sh: 30 and 31,
+# which carry on a quoted jq program, 40, which ends with a \ inside a $( ), and 63, which ends
+# with a \ after it, all unrun; 41, which carries on a $( ), run; 33, which ends the program, and
+# 64, which ends 63's statement, run; and 50, a statement of its own, unrun. As kcov does, each record names its files past the part they share, which the
 # cobertura.xml beside it gives as its <source>: "/" for check-gate.sh, whose files are in two
 # places, and the scripts' directory for check-handoff.sh. KCOV_RECORDS=none makes
 # it record nothing. --merge writes an index.
@@ -44,6 +47,8 @@ case "$test" in
       "tmp/lab/playbook/scripts/squad-checks.sh": {"3": 1, "4": "2/2", "5": 0, "9": 0},
       "tmp/lab/stub/squad-checks.sh": {"1": 5, "2": 5},
       ($r + "/.githooks/pre-push"): {"2": 1, "7": 0}}}' ;;
+  *check-merge-gate.sh) echo "<sources><source>$root/</source></sources>" > "$dir/cobertura.xml"
+    jq -n '{coverage: {"scripts/squad-merge-gate.sh": {"30": 0, "31": 0, "33": 1, "40": 0, "41": 5, "50": 0, "63": 0, "64": 1}}}' ;;
   *check-handoff.sh) echo "<sources><source>$root/scripts/</source></sources>" > "$dir/cobertura.xml"
     jq -n '{coverage: {"squad-checks.sh": {"3": 0, "5": 0, "9": "1/1"}}}'
     exit 1 ;;
@@ -69,14 +74,17 @@ summary_of "a copy with the same lines counts, a different script of that name d
   '| `scripts/squad-checks.sh` (and 1 copy) | 4 | 4 | 100 % |'
 summary_of "a script seen in one test only" '| `.githooks/pre-push` | 1 | 2 | 50 % |'
 summary_of "a script no test ran" '| `install.sh` | 0 | 0 | not run |'
-summary_of "the total adds up the scripts" '| **Total** | **5** | **6** | **83.3 %** |'
+summary_of "the unrun lines of a statement written over several lines are left out, and a run one stays" \
+  '| `scripts/squad-merge-gate.sh` | 3 | 4 | 75 % |'
+summary_of "the total adds up the scripts" '| **Total** | **8** | **10** | **80 %** |'
 summary_of "a test that failed under kcov is named" 'Tests that failed under kcov, so their figures may be short: `check-handoff`.'
-#    The thinnest scripts come first: those no test ran, then pre-push at 50 %, then squad-checks.
-order="$(grep -o '^| `[^`]*`' "$lab/out/summary.md" | sed 's/^| `//; s/`$//' | tail -n 2 | tr '\n' ' ')"
-if [ "$order" = ".githooks/pre-push scripts/squad-checks.sh " ]; then
+#    The thinnest scripts come first: those no test ran, then pre-push at 50 %, squad-merge-gate at
+#    75 % and squad-checks at 100 %.
+order="$(grep -o '^| `[^`]*`' "$lab/out/summary.md" | sed 's/^| `//; s/`$//' | tail -n 3 | tr '\n' ' ')"
+if [ "$order" = ".githooks/pre-push scripts/squad-merge-gate.sh scripts/squad-checks.sh " ]; then
   pass "the thinnest script comes first"
 else
-  fail "the order of the last two scripts: $order"
+  fail "the order of the last three scripts: $order"
 fi
 
 # 2. Without kcov, or with nothing recorded, it exits 1, saying why.

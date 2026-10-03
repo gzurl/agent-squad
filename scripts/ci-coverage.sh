@@ -9,7 +9,10 @@
 # Usage: ci-coverage.sh <output directory>
 # It writes there summary.md, the total and one line per script, thinnest first, which CI adds to
 # the job's summary; report/, kcov's HTML report of every test merged, where each copy keeps its
-# temporary path; and runs/, each test's own report and output. No figure fails it, and a test
+# temporary path; and runs/, each test's own report and output. A statement written over several
+# lines counts once: kcov measures each of its lines but records a run statement on one of them,
+# so the lines it can never record (the rest of a jq or awk program, of a $( ), of a line ended by
+# \ or |, a heredoc's body, an empty case branch) are left out when they did not run. No figure fails it, and a test
 # that fails under kcov is named in the summary. Exit: 0 measured; 1 kcov is missing or measured
 # nothing.
 set -u
@@ -44,9 +47,58 @@ with_source() {
   source="$(sed -n 's|.*<source>\(.*\)</source>.*|\1|p' "$(dirname "$1")/cobertura.xml" 2>/dev/null | head -n 1)"
   jq -c --arg source "$source" '{source: $source, coverage}' "$1"
 }
+# `continued <script>` prints the numbers of the lines kcov can never record as run: those after
+# which the statement goes on (inside a quote or a $( ), before a heredoc's end, after a trailing
+# \, | or &&), and empty case branches.
+continued() {
+  perl - "$1" <<'PERL'
+use strict; use warnings;
+my (@stack, @pending, $heredoc);
+while (my $line = <>) {
+  chomp $line;
+  if ($heredoc) {
+    my ($term, $strip) = @$heredoc;
+    my $text = $strip ? ($line =~ s/^\t+//r) : $line;
+    if ($text eq $term) { $heredoc = shift @pending; } else { print "$.\n"; }
+    next;
+  }
+  my @c = split //, $line;
+  my $last = '';
+  for (my $i = 0; $i < @c; $i++) {
+    my $ch = $c[$i];
+    my $ctx = @stack ? $stack[-1] : 'T';
+    if ($ctx eq 'S') { pop @stack if $ch eq "'"; next; }
+    if ($ch eq '\\') { $last = '\\' if $i == $#c; $i++; next; }
+    if ($ctx eq 'D') {
+      if ($ch eq '"') { pop @stack; }
+      elsif ($ch eq '$' && ($c[$i + 1] // '') eq '(') { push @stack, 'C'; $i++; }
+      next;
+    }
+    last if $ch eq '#' && ($i == 0 || $c[$i - 1] =~ /[\s;(]/);
+    if ($ch eq "'") { push @stack, 'S'; }
+    elsif ($ch eq '"') { push @stack, 'D'; }
+    elsif ($ch eq '$' && ($c[$i + 1] // '') eq '(') { push @stack, 'C'; $i++; }
+    elsif ($ctx eq 'C' && $ch eq '(') { push @stack, 'C'; }
+    elsif ($ctx eq 'C' && $ch eq ')') { pop @stack; }
+    elsif ($ch eq '<' && join('', @c[$i .. $#c]) =~ /^<<(-?)\s*(['"]?)(\w+)\2/) {
+      push @pending, [$3, $1 eq '-'];
+      $i += length($&) - 1;
+    }
+  }
+  (my $code = $line) =~ s/\s+$//;
+  my $continues = @stack || $last eq '\\' || (!@stack && $code =~ /(\||&&)$/ && $code !~ /^\s*#/);
+  my $empty_branch = $code =~ /^\s*[^\s#][^#]*\)\s*;;$/ && $code !~ /\)\s*\S.*;;$/;
+  print "$.\n" if $continues || $empty_branch;
+  $heredoc = shift @pending if @pending;
+}
+PERL
+}
 measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
+skippable="$(for script in "${measured[@]}"; do
+  continued "$script" | jq -Rs --arg s "$script" '{($s): (split("\n") | map(select(. != "")))}'
+done | jq -s 'add')"
 for record in "${recorded[@]}"; do with_source "$record"; done \
-  | jq -s -r --arg root "$root" --arg failed "${failed[*]}" '
+  | jq -s -r --arg root "$root" --arg failed "${failed[*]}" --argjson skippable "$skippable" '
   def hits: if type == "number" then . else tostring | split("/")[0] | tonumber end;
   def basename: split("/") | last;
   def pct($r; $m): if $m == 0 then "not run" else "\($r * 1000 / $m | round / 10) %" end;
@@ -57,17 +109,18 @@ for record in "${recorded[@]}"; do with_source "$record"; done \
    | from_entries) as $files
   | [$ARGS.positional[] as $script | ($root + "/" + $script) as $path
      | if $files[$path] == null then {script: $script, measured: 0, ran: 0}
-       else ($files[$path] | keys) as $lines
-         | [$files | to_entries[] | select((.key | basename) == ($script | basename) and (.value | keys) == $lines)]
+       else ($files[$path] | keys) as $all
+         | [$files | to_entries[] | select((.key | basename) == ($script | basename) and (.value | keys) == $all)]
            as $copies
-         | {script: $script, measured: ($lines | length), copies: (($copies | length) - 1),
-            ran: ([$lines[] as $l | select(any($copies[]; .value[$l]))] | length)}
+         | [$all[] | . as $l | select(any($copies[]; .value[$l]))] as $ran
+         | {script: $script, measured: ($all - ($skippable[$script] - $ran) | length),
+            copies: (($copies | length) - 1), ran: ($ran | length)}
        end]
   | sort_by(if .measured == 0 then -1 else .ran / .measured end) as $rows
   | ($rows | map(.ran) | add) as $ran | ($rows | map(.measured) | add) as $all
   | "## Test coverage of the scripts",
   "",
-  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies.",
+  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts once.",
   "",
   "| Script | Lines run | Lines measured | Coverage |",
   "|---|--:|--:|--:|",
