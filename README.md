@@ -390,8 +390,9 @@ the installer touches only the files listed before it:
 ```
 
 An upgrade replaces `playbook/`, only once the new one is complete, and rewrites the hooks, the
-pre-push hook and `playbook.manifest`; it leaves the rest alone. `SQUAD.md` §2.4 says who cleans up
-what, and when.
+pre-push hook and `playbook.manifest`. It removes from `.claude/commands/` any `squad-*.md` the new
+release no longer has, as after a command is renamed, unless your project tracks that file. It
+leaves the rest alone. `SQUAD.md` §2.4 says who cleans up what, and when.
 
 
 ## ⚠️ Things to know

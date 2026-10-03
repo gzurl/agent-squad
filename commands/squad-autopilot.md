@@ -25,6 +25,12 @@ Your role is your session name. The squad's commands are in the main checkout's
    Every half hour it finds work whose owner sits idle, pings that owner once, and tells the CEO
    if nothing moves within the hour; when it finds nothing, it says nothing. Nothing else wakes an
    idle session. `/squad-resume` and `/squad-pause` stop it.
+   - **If the loop cannot be scheduled,** because a permission refuses it, as auto mode may: tell
+     the CEO in one line that the stall watch is not running, and why, so that the CEO can allow
+     it on return or type `/squad-watch` by hand. Carry on with the rest.
+   - **The loop lives in your session only:** a restart of the session ends it, and Claude Code
+     ends a recurring job after seven days. If you find it gone (`CronList`) while the CEO is still
+     away, start it again.
 4. Report to the CEO in §6's agent lines (one per agent, in the order CTO, DEV, QA, with its state
    emoji), in the CEO's language (`AGENTS.md`, *Language*): what each goes on with (⏳), or that it
    has nothing left (💤). Repeat the same lines when one changes.

@@ -17,15 +17,15 @@ would.
 2. **The other squads:** list the sessions open on this machine (`ListAgents`). Their names read
    `ROLE:<project-name>`: group them by project, leaving yours out. Send each other squad's CTO
    one message: "The CEO is away and the machine stays on (`/squad-autopilot-all`): run
-   `/squad-autopilot`'s CTO part for your squad, its stall watch included, from
-   `squad-autopilot.md` in your main checkout's `.claude/commands/`, except its `caffeinate` step:
-   I keep the machine awake for every squad. Tell me when your squad has nothing left that needs no
-   decision." For a squad with no CTO session open, send its DEV and QA one message each: "The CEO
-   is away and the machine stays on (`/squad-autopilot-all`): follow the part for every agent in
-   `squad-autopilot.md`, in your main checkout's `.claude/commands/`, and tell me when you have
-   nothing left that needs no decision.
-   If there is no such file, your project runs no squad: go on with what needs no decision, save
-   your work as you go, and tell me when nothing is left."
+   `/squad-autopilot`'s CTO part for your squad, its stall watch included, from `squad-autopilot.md`
+   in your main checkout's `.claude/commands/`, except its `caffeinate` step: I keep the machine
+   awake for every squad. Tell me if your stall watch cannot start, and when your squad has nothing
+   left that needs no decision." For a squad with no CTO session open, send its DEV and QA one
+   message each: "The CEO is away and the machine stays on (`/squad-autopilot-all`): follow the part
+   for every agent in `squad-autopilot.md`, in your main checkout's `.claude/commands/`, and tell me
+   when you have nothing left that needs no decision. If there is no such file, your project runs no
+   squad: go on with what needs no decision, save your work as you go, and tell me when nothing is
+   left."
    Every message you send for this command ends with "Sent at <time>; if you read this more than
    10 minutes later, ask me whether it still holds before acting.", where `<time>` is
    `date '+%Y-%m-%d %H:%M'` when you send it.
