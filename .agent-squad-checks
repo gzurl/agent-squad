@@ -13,3 +13,4 @@ scripts/check-gh-filters.sh
 scripts/check-tokens.sh
 scripts/check-ci.sh
 scripts/check-coverage.sh
+scripts/check-stalls.sh
