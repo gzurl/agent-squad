@@ -12,8 +12,9 @@
 # temporary path; and runs/, each test's own report and output. A statement written over several
 # lines (a quoted jq or awk program, a $( ), lines ended by \ or |, a heredoc) counts as one line,
 # run when kcov recorded any of its lines: kcov measures each of them but records a run statement
-# on one only, the first or the last. An empty case branch, which kcov can never record, counts
-# only if it ran. No figure fails it, and a test
+# on one only, the first or the last, and some on none (an assignment from a $( ) whose one command
+# spans lines). So such a statement that kcov recorded nowhere is left out, and the summary says how
+# many were. An empty case branch, which kcov can never record, counts only if it ran. No figure fails it, and a test
 # that fails under kcov is named in the summary. Exit: 0 measured; 1 kcov is missing or measured
 # nothing.
 set -u
@@ -126,16 +127,19 @@ for record in "${recorded[@]}"; do with_source "$record"; done \
             | select((any($empty[]; . == $l) | not) or any($hit[]; . == $l))
             | {line: $l, start: ($l | until((. - 1) as $p | any($continued[]; . == $p) | not; . - 1))}]
          | group_by(.start)
-         | map({start: .[0].start, ran: any(.[]; .line as $l | any($hit[]; . == $l))}) as $statements
+         | map({start: .[0].start, ran: any(.[]; .line as $l | any($hit[]; . == $l)),
+                multi: any(.[]; .line as $l | any($continued[]; . == $l))})
+         | [.[] | select(.ran or (.multi | not))] as $statements
          | {script: $script, measured: ($statements | length), copies: (($copies | length) - 1),
-            ran: ([$statements[] | select(.ran)] | length),
+            ran: ([$statements[] | select(.ran)] | length), left_out: (length - ($statements | length)),
             unrun: [$statements[] | select(.ran | not) | .start]}
        end]
   | sort_by(if .measured == 0 then -1 else .ran / .measured end) as $rows
   | ($rows | map(.ran) | add) as $ran | ($rows | map(.measured) | add) as $all
+  | ($rows | map(.left_out // 0) | add) as $left_out
   | "## Test coverage of the scripts",
   "",
-  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts once.",
+  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end)",
   "",
   "| Script | Lines run | Lines measured | Coverage |",
   "|---|--:|--:|--:|",

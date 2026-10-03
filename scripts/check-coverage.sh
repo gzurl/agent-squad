@@ -30,7 +30,8 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # with a \ after it, all unrun; 41, which carries on a $( ), run; 33, which ends the program, and
 # 64, which ends 63's statement, run; 50, a statement of its own, unrun; and 70, which starts a
 # $( ) over six lines, run, with 75, which ends it, unrun, as kcov records some statements on their
-# first line; and 84, an empty case branch, unrun. As kcov does, each record names its files past the part they share, which the
+# first line; 84, an empty case branch, unrun; and 52, which starts a $( ) over two lines, recorded
+# on neither. As kcov does, each record names its files past the part they share, which the
 # cobertura.xml beside it gives as its <source>: "/" for check-gate.sh, whose files are in two
 # places, and the scripts' directory for check-handoff.sh. KCOV_RECORDS=none makes
 # it record nothing. --merge writes an index.
@@ -50,7 +51,7 @@ case "$test" in
       "tmp/lab/stub/squad-checks.sh": {"1": 5, "2": 5},
       ($r + "/.githooks/pre-push"): {"2": 1, "7": 0}}}' ;;
   *check-merge-gate.sh) echo "<sources><source>$root/</source></sources>" > "$dir/cobertura.xml"
-    jq -n '{coverage: {"scripts/squad-merge-gate.sh": {"30": 0, "31": 0, "33": 1, "40": 0, "41": 5, "50": 0, "63": 0, "64": 1, "70": 2, "75": 0, "84": 0}}}' ;;
+    jq -n '{coverage: {"scripts/squad-merge-gate.sh": {"30": 0, "31": 0, "33": 1, "40": 0, "41": 5, "50": 0, "63": 0, "64": 1, "70": 2, "75": 0, "84": 0, "52": 0}}}' ;;
   *check-handoff.sh) echo "<sources><source>$root/scripts/</source></sources>" > "$dir/cobertura.xml"
     jq -n '{coverage: {"squad-checks.sh": {"3": 0, "5": 0, "9": "1/1"}}}'
     exit 1 ;;
@@ -79,6 +80,11 @@ summary_of "a script no test ran" '| `install.sh` | 0 | 0 | not run |'
 summary_of "the unrun lines of a statement written over several lines are left out, and a run one stays" \
   '| `scripts/squad-merge-gate.sh` | 4 | 5 | 80 % |'
 summary_of "the total adds up the scripts" '| **Total** | **9** | **11** | **81.8 %** |'
+if grep -qF 'kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out.' "$lab/out/summary.md"; then
+  pass "a statement over several lines that kcov recorded nowhere is left out, and counted in the text"
+else
+  fail "the statement kcov recorded nowhere: $(sed -n 3p "$lab/out/summary.md")"
+fi
 summary_of "a test that failed under kcov is named" 'Tests that failed under kcov, so their figures may be short: `check-handoff`.'
 summary_of "the lines no test ran are listed, without the lines that carry on a statement" '- `scripts/squad-merge-gate.sh`: 50'
 summary_of "the list is a collapsed block" '<details><summary>The lines no test ran</summary>'
