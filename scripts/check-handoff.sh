@@ -229,6 +229,47 @@ else
   fail "with 5 PRs and issues, the snapshot did not list them plainly"
 fi
 
+# 7b. Each open PR shows its latest QA-VERDICT and whether it is bound to the head (#184): current,
+#     STALE when the head moved past it, none yet, and an API error when the reviews cannot be
+#     read. This gh answers four PRs on the same head: #1's latest verdict is on the head, after
+#     an older one; #2's is on an earlier commit; #3 has reviews but no verdict; #4's reviews
+#     cannot be read.
+mkdir -p "$lab/bin-verdicts"
+cat > "$lab/bin-verdicts/gh" <<'GH'
+#!/usr/bin/env bash
+head=0123456789abcdef0123456789abcdef01234567
+older=fedcba9876543210fedcba9876543210fedcba98
+review() { jq -nc --arg c "$1" --arg b "$2" '{commit_id: $c, body: $b}'; }
+case "$1 ${2:-} ${3:-}" in
+  "repo view "*) echo sandbox ;;
+  "pr list "*)
+    jq -n --arg h "$head" '[range(1; 5) | {number: ., title: "PR \(.)", headRefName: "b\(.)", headRefOid: $h, labels: []}]' ;;
+  "api --paginate repos/sandbox/sandbox/pulls/1/reviews")
+    printf '[%s,%s]\n' "$(review "$older" $'a review\n\nQA-VERDICT: CHANGES-REQUESTED')" "$(review "$head" $'again\n\nQA-VERDICT: APPROVED')" ;;
+  "api --paginate repos/sandbox/sandbox/pulls/2/reviews")
+    printf '[%s]\n' "$(review "$older" $'a review\n\nQA-VERDICT: APPROVED')" ;;
+  "api --paginate repos/sandbox/sandbox/pulls/3/reviews") printf '[%s]\n' "$(review "$head" 'a comment')" ;;
+  "api --paginate repos/sandbox/sandbox/pulls/4/reviews") echo "gh: HTTP 502" >&2; exit 1 ;;
+  "api graphql "*) echo 0 ;;
+  "issue list "*) echo '[]' ;;
+  *) exit 1 ;;
+esac
+GH
+chmod +x "$lab/bin-verdicts/gh"
+rm -f "$handoff_dir/verdicts.md"
+(cd "$main" && echo '{"session_id":"verdicts","trigger":"auto"}' | PATH="$lab/bin-verdicts:$PATH" "$handoff" save)
+snapshot="$(cat "$handoff_dir/verdicts.md" 2>/dev/null)"
+# `verdict_line <case> <PR> <expected verdict>` passes when that PR's verdict line reads so.
+verdict_line() {
+  local got
+  got="$(printf '%s\n' "$snapshot" | grep -A2 "^- PR #$2 " | grep '^  verdict ')"
+  if [ "$got" = "  verdict $3; unresolved threads 0" ]; then pass "$1"; else fail "$1: PR #$2 reads '$got'"; fi
+}
+verdict_line "a verdict on the head is marked current, the latest one counting" 1 "0123456 QA-VERDICT: APPROVED (current)"
+verdict_line "a verdict on an earlier commit is marked STALE" 2 "fedcba9 QA-VERDICT: APPROVED (STALE: not the head)"
+verdict_line "reviews without a verdict read none yet" 3 "none yet"
+verdict_line "reviews that cannot be read read API error" 4 "API error"
+
 # 8. The snapshot's last section is the remote's default branch as git records it (origin/HEAD),
 #    whatever its name, not origin/main (#85); when git does not know it, the section says that it
 #    shows the local log instead.
