@@ -460,7 +460,7 @@ The squad turns accepted issues into its own pull requests.
 | `CHANGELOG.md` | What each version changes | Yes, to read |
 | `LICENSE` | The MIT License | Yes, so every installed playbook carries it |
 | `.gitattributes` | What a release leaves out | Yes, unused there |
-| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/outside-report.md`, `docs/images/`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh` | This repository's own conventions, contribution guide and form, the README's images, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
+| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/outside-report.md`, `docs/images/`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh`, `scripts/ci-*.sh` | This repository's own conventions, contribution guide and form, the README's images, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
 
 
 ## 📄 License
