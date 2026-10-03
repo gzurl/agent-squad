@@ -30,6 +30,9 @@
 - **The installer writes nothing through a symlinked `.gitignore`** (#186): it reports NOT IGNORED
   with what to do, and `--check` names the link.
 - The README's *Install* names all ten commands (#163).
+- **§6's emoji rule** also allows one emoji at the start of each item of a list, and those of an
+  example report shown as the CEO sees it, as the README's *Features* and *What you see as the CEO*
+  do (#169).
 
 ## v34 — 2026-10-01
 - **`/squad-usage` and `/squad-usage-all`: the tokens each agent used** (#119, the CEO's request).
