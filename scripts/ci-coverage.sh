@@ -27,8 +27,10 @@ for test in scripts/check-*.sh; do
   kcov --include-pattern=squad-,pre-push,install.sh "$out/runs/$name" "$test" \
     >"$out/runs/$name.log" 2>&1 </dev/null || failed+=("$name")
 done
-shopt -s nullglob
-recorded=("$out"/runs/*/kcov-merged/codecov.json)
+# kcov writes a codecov.json per script it ran and, for some tests, a merged one too: reading
+# every one is safe, since a line counts as run when any record says so.
+recorded=()
+while IFS= read -r file; do recorded+=("$file"); done < <(find "$out/runs" -name codecov.json)
 [ ${#recorded[@]} -gt 0 ] || { echo "ci-coverage: kcov recorded nothing in $out/runs" >&2; exit 1; }
 
 # 2. Per script, across every test and every copy with the same lines: the lines kcov measures,
