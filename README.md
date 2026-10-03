@@ -444,6 +444,13 @@ terminal, for a permission or a question.
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
 
+**What comes next?** A few features we would like to add, with no dates promised: a squad board
+inside Claude Code, with each agent's state and current issue at a glance
+([#172](https://github.com/gzurl/agent-squad/issues/172)); a way to catch silent stalls, when two
+agents wait on each other ([#174](https://github.com/gzurl/agent-squad/issues/174)); and measured
+test coverage ([#180](https://github.com/gzurl/agent-squad/issues/180)). Ideas are welcome as
+issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
+
 
 ## 📦 This repository
 
