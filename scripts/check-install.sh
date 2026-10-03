@@ -869,4 +869,102 @@ check "then a second run exits 0 and records origin/HEAD" \
 check "and makes the worktrees at origin/main" \
   detached_at "$lab/new-project" "$lab/new-project/.agent-squad/worktrees/dev" main
 
+# 17. The failure paths the first coverage report found that no test ran (#184). Each needs a
+#     decision or stops the run, and says why.
+# A tag name that is no tag's.
+for bad in '' 'v1;x'; do
+  out="$("$install" "$lab/new-project" "$bad" 2>&1)"
+  code=$?
+  check "the tag name '$bad' is refused with exit 2, saying so" \
+    bash -c '[ "$1" -eq 2 ] && grep -qF "'"'"'$2'"'"' is not a tag name" <<<"$3"' _ "$code" "$bad" "$out"
+done
+# --check on an installed project, broken one way at a time.
+target="$(new_project failures)" || exit 2
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+project="$target" squad="$target/.agent-squad" hooks="$target/.git/hooks"
+mv "$squad/playbook.manifest" "$lab/manifest-aside"
+check "a playbook installed without checksums fails the playbook item, saying to install again" \
+  check_reason "$item_playbook" "no checksums were recorded when it was installed; install again"
+mv "$lab/manifest-aside" "$squad/playbook.manifest"
+mv "$squad/playbook/README.md" "$lab/readme-aside" && ln -s ../LICENSE "$squad/playbook/README.md"
+check "a playbook file replaced by a symbolic link fails the playbook item, naming it" \
+  check_reason "$item_playbook" "changed since it was installed: README.md"
+rm "$squad/playbook/README.md" && mv "$lab/readme-aside" "$squad/playbook/README.md"
+mv "$hooks/pre-push" "$lab/shim-aside"
+check "a missing shim fails the shim item" check_reason "$item_shim" "there is no $(cd "$hooks" && pwd -P)/pre-push"
+printf '#!/bin/sh\nexit 0\n' > "$hooks/pre-push"
+check "a pre-push that is not the shim fails it" check_reason "$item_shim" "$hooks/pre-push is not the squad's shim"
+cp -p "$lab/shim-aside" "$hooks/pre-push" && echo "# an edit" >> "$hooks/pre-push"
+check "an edited shim fails it, saying to install again" \
+  check_reason "$item_shim" "the shim is not the one this installer writes; install again"
+out="$("$install" "$target" "$tag_a" 2>&1)"
+check "and an install rewrites it" contains "$out" "pre-push   rewrote the shim"
+check "as the installer writes it" cmp -s "$lab/shim-aside" "$hooks/pre-push"
+git -C "$target" rm -q --cached .agent-squad-checks
+check "an untracked list of checks fails the list item" check_reason "$item_list" ".agent-squad-checks is not tracked"
+git -C "$target" add .agent-squad-checks
+check "a gate check that cannot make its sandbox says so" \
+  env TMPDIR="$lab/no-such-tmp" bash -c "$(declare -f check_reason); install=\"\$1\" project=\"\$2\"; check_reason \"\$3\" \"\$4\"" _ \
+  "$install" "$target" "$item_gate" "cannot create a temporary directory"
+check "and makes no directory there" absent "$lab" no-such-tmp
+mkdir -p "$lab/no-init"
+printf '#!/usr/bin/env bash\n[ "${1:-}" = init ] && exit 1\nexec %q "$@"\n' "$(command -v git)" > "$lab/no-init/git"
+chmod +x "$lab/no-init/git"
+check "a gate check whose sandbox git cannot make says so, and does not blame the gate" \
+  env PATH="$lab/no-init:$PATH" bash -c "$(declare -f check_reason); install=\"\$1\" project=\"\$2\"; check_reason \"\$3\" \"\$4\"" _ \
+  "$install" "$target" "$item_gate" "cannot build a throw-away repository to test the gate in"
+# An upgrade whose new playbook cannot be moved in place keeps the installed one.
+mkdir -p "$lab/no-mv"
+printf '#!/usr/bin/env bash\ncase "${1:-}" in */playbook.new.*) exit 1 ;; esac\nexec %q "$@"\n' "$(command -v mv)" > "$lab/no-mv/mv"
+chmod +x "$lab/no-mv/mv"
+before="$(tree_state "$squad/playbook")"
+out="$(PATH="$lab/no-mv:$PATH" "$install" --source "$lab/vb" "$target" "$tag_b" 2>&1)"
+code=$?
+check "an upgrade that cannot move its playbook in place exits 2, saying the installed one is unchanged" \
+  bash -c '[ "$1" -eq 2 ] && grep -qF "cannot move the new playbook in place; the installed one is unchanged" <<<"$2"' _ "$code" "$out"
+check "and the installed playbook is the one it had" [ "$before" = "$(tree_state "$squad/playbook")" ]
+check "with nothing left behind" no_leftovers "$squad"
+# A .gitignore whose last line has no newline gets one before the squad's lines; one that is a
+# symbolic link, which git does not read, is reported as still not ignoring them.
+target="$(new_project no-newline)" || exit 2
+printf 'build' > "$target/.gitignore"
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+check "a .gitignore without a final newline keeps its last line whole" has_lines "$target/.gitignore" build .agent-squad/
+target="$(new_project linked-gitignore)" || exit 2
+: > "$lab/linked-gitignore.target" && ln -s "$lab/linked-gitignore.target" "$target/.gitignore"
+out="$("$install" "$target" "$tag_a" 2>&1)"
+code=$?
+check "a .gitignore git does not read makes the installer exit 1" [ "$code" -eq 1 ]
+check "and say that the line it added is still not applied" \
+  contains "$out" "NOT IGNORED: .agent-squad/ was added, and still git does not ignore it"
+# Commands it cannot write, a worktree it cannot make, and a branch the remote does not have yet.
+target="$(new_project no-commands)" || exit 2
+mkdir -p "$target/.claude" && echo "not a directory" > "$target/.claude/commands"
+out="$("$install" "$target" "$tag_a" 2>&1)"
+code=$?
+check "commands that cannot be written make the installer exit 1, saying which" \
+  bash -c '[ "$1" -eq 1 ] && grep -qF "NOT INSTALLED: cannot write .claude/commands/squad-save-state.md" <<<"$2"' _ "$code" "$out"
+target="$(new_project no-worktrees)" || exit 2
+mkdir -p "$target/.agent-squad" && echo "not a directory" > "$target/.agent-squad/worktrees"
+out="$("$install" "$target" "$tag_a" 2>&1)"
+code=$?
+check "a worktree git cannot make makes the installer exit 1, with git's reason" \
+  bash -c '[ "$1" -eq 1 ] && grep -qF "worktrees  NOT CREATED: .agent-squad/worktrees/dev: " <<<"$2"' _ "$code" "$out"
+target="$(new_project no-base)" || exit 2
+git -C "$target" update-ref -d refs/remotes/origin/main
+out="$("$install" "$target" "$tag_a" 2>&1)"
+code=$?
+check "a default branch the clone does not have yet makes the installer exit 1, asking for another run" \
+  bash -c '[ "$1" -eq 1 ] && grep -qF "because origin/main does not exist yet; run again once it does" <<<"$2"' _ "$code" "$out"
+# A tree without the issue template, or whose template of AGENTS.md has no Squad section.
+rm -rf "$lab/partial" && mkdir -p "$lab/partial" && cp -pR "$lab/vb/." "$lab/partial/"
+rm "$lab/partial/.github/ISSUE_TEMPLATE/task.md"
+printf '# AGENTS.md\n\nNo section of the squad here.\n' > "$lab/partial/templates/AGENTS.md"
+target="$(new_project partial-tree)" || exit 2
+out="$("$install" --source "$lab/partial" "$target" "$tag_b" 2>&1)"
+check "a tree without the issue template skips it, saying so" \
+  contains "$out" "templates  .github/ISSUE_TEMPLATE/task.md is not in the playbook, skipped"
+check "and a template of AGENTS.md without a Squad section is named, not printed" \
+  contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md"
+
 exit "$status"

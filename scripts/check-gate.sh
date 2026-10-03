@@ -397,4 +397,26 @@ else
   fail "a commit only a stale remote-tracking ref knows went through, or was refused otherwise: $errors"
 fi
 
+# 10. A tree whose tracked files have uncommitted changes is refused before any check runs: the
+#     checks would test those changes, not the commit being pushed (#184). An untracked file does
+#     not count, since no check sees it as part of the commit.
+echo "pushed from a dirty tree" >> "$wt/pushed.txt"
+commit "$wt" "a commit pushed while a tracked file changes" >/dev/null
+echo "not committed" >> "$wt/pushed.txt"
+runs_before="$(runs)"
+if ! errors="$(git -C "$wt" push -q origin HEAD:refs/heads/dirty 2>&1)" \
+  && grep -qF 'tracked files have uncommitted changes' <<<"$errors" && [ "$(runs)" = "$runs_before" ]; then
+  pass "a tree with uncommitted changes to tracked files is refused, saying so, before any check runs"
+else
+  fail "a dirty tree went through, ran a check, or was refused for another reason: $errors"
+fi
+git -C "$wt" checkout -q -- pushed.txt
+echo "not tracked" > "$wt/untracked.txt"
+if git -C "$wt" push -q origin HEAD:refs/heads/dirty 2>/dev/null && [ "$(runs)" -gt "$runs_before" ]; then
+  pass "an untracked file does not stop the push, and the checks run"
+else
+  fail "an untracked file stopped the push, or no check ran"
+fi
+rm -f "$wt/untracked.txt"
+
 exit "$status"
