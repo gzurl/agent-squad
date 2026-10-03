@@ -1,5 +1,36 @@
 # Changelog
 
+## v36 — 2026-10-04
+- **The stall watch** (#174): `scripts/squad-stalls.sh` and `/squad-watch`, one pass in the CTO's
+  session.
+  - It finds work whose next step has waited half an hour on an idle agent, and pings the agent who
+    owns that step. If nothing has moved an hour later, it tells the CEO. A session that waits in
+    its own terminal, or is gone, is reported to the CEO at once.
+  - Declared waits are left out: an item labelled `needs-ceo` or `⛔ status:blocked`, and a PR
+    whose closing issue carries one of them.
+  - A pass that finds nothing says nothing. What it reported is kept in `.agent-squad/watch.tsv`,
+    so that each stall is reported once, and a `watch.tsv` that cannot be kept fails the run.
+- **`/squad-away` becomes `/squad-autopilot`** (#188), and `/squad-away-all` becomes
+  `/squad-autopilot-all`, with no alias.
+  - Autopilot starts `/loop 30m /squad-watch`, and `/squad-pause` and `/squad-resume` stop it. The
+    CTO says so when the loop cannot be scheduled or is gone.
+  - On upgrade, the installer removes the squad's commands that the release no longer has, such
+    as `squad-away.md` and `squad-away-all.md`, unless the project tracks them. The squad now has
+    eleven commands.
+- **Rules that change** (#191):
+  - **§4.7:** a push after a verdict pings the reviewer again, with the new head, in the same
+    message as the answers to the threads, and puts the PR back in review. P3s that come with an
+    `APPROVED` verdict, or after it, are declined or deferred by default.
+  - **§6, *A message may not arrive*:** an agent that ends its turn waiting for another says so on
+    its issue or PR: what it waits for, from whom, and since when. The stall watch is the
+    backstop: it runs by itself under autopilot and by hand at any time, and it leaves out
+    declared waits.
+  - **§6, *When the CEO steps away*:** `/squad-autopilot` replaces `/squad-away` and runs the
+    watch.
+- **The README** (#196):
+  - *Features* and *Work that stalls* say what autopilot and the watch do;
+  - the FAQ lists `/loop` among the Claude Code features the squad relies on.
+
 ## v35 — 2026-10-04
 - **A README that makes people want to try it** (#167, #169, #173, #189, with the CEO's texts and
   images):
