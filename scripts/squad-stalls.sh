@@ -9,7 +9,10 @@
 # - a draft: its author, to finish it;
 # - an issue in progress: the role of its owner label, to carry on; with none, the CTO.
 # The author is the signature on the first line of the PR's description (§6), and only reviews by
-# the repository's owner, its organization's members and its collaborators count (§4.9).
+# the repository's owner, its organization's members and its collaborators count (§4.9). An item
+# whose wait is already declared is left out, and nothing is reported about it: one labelled
+# needs-ceo, the CEO's inbox, or status:blocked, whose reason is in its last comment (§3), and a PR
+# whose closing issue is (agent-squad #174, PR #193).
 #
 # An item has stalled when GitHub shows no activity on it (its updatedAt) for 30 minutes and its
 # owner's session is idle: the owner is to be pinged, once. When the same stall is still there an
@@ -52,13 +55,16 @@ common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
 squad="$(dirname "$common")/.agent-squad"
 [ -d "$squad" ] || { echo "squad-stalls: $(dirname "$common") has no .agent-squad/: the squad is not installed there" >&2; exit 2; }
 state="$squad/watch.tsv"
+# A record that cannot be kept would report the same findings on every pass: the run fails first.
+cannot_keep() { echo "squad-stalls: cannot keep its records in $state${1:+: $1}" >&2; exit 1; }
+[ ! -e "$state" ] || [ -f "$state" ] || cannot_keep "it is not a file"
 now="${SQUAD_NOW:-$(date +%s)}"
 
 # 1. What GitHub holds: the open PRs, the latest verdict on each by the squad's accounts, and the
 #    open issues. A call that fails stops the run: an unread GitHub must not read as no stall.
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || die "cannot read the repository from GitHub"
 [ -n "$repo" ] || die "cannot read the repository from GitHub"
-prs="$(gh pr list --state open --limit 1000 --json number,title,isDraft,headRefOid,body,updatedAt,url 2>/dev/null)" \
+prs="$(gh pr list --state open --limit 1000 --json number,title,isDraft,headRefOid,body,updatedAt,url,labels,closingIssuesReferences 2>/dev/null)" \
   || die "cannot read the open pull requests"
 issues="$(gh issue list --state open --limit 1000 --json number,title,labels,updatedAt,url 2>/dev/null)" \
   || die "cannot read the open issues"
@@ -80,6 +86,13 @@ reported="$( [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | to
 result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdicts "$verdicts" \
   --argjson sessions "$sessions" --argjson reported "$reported" --argjson now "$now" '
   def local: strflocaltime("%Y-%m-%d %H:%M");
+  # A declared wait: needs-ceo or status:blocked on the item, or on the issue a PR closes, as
+  # GitHub names it or as the description says ("Closes #N").
+  def declared: any((.labels // [])[].name; endswith("needs-ceo") or endswith("status:blocked"));
+  ($issues | map({key: (.number | tostring), value: declared}) | from_entries) as $waits
+  | def closes: [(.closingIssuesReferences // [])[].number]
+      + [.body // "" | scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?) #([0-9]+)") | .[0] | tonumber];
+  def waits: declared or any(closes[]; $waits[tostring] // false);
   def author: (.body // "" | split("\n") | first // "" | gsub("\\*\\*"; "")) as $line
     | first(("QA", "DEV", "CTO") as $role
         | select($line | startswith({QA: "👩🏼‍🔬", DEV: "👨🏼‍💻", CTO: "👷🏼‍♂️"}[$role] + "[\($role)]:")) | $role) // null;
@@ -98,8 +111,8 @@ result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdi
   def issue_step:
     ([.labels[].name | capture("owner:(?<role>cto|dev|qa)$").role | ascii_upcase] | first) as $owner
     | if $owner == null then {owner: "CTO", step: "give it an owner"} else {owner: $owner, step: "carry on with it"} end;
-  ([$prs | sort_by(.number)[] | {item: "PR #\(.number)", url, updatedAt} + pr_step]
-   + [$issues | sort_by(.number)[] | select(any(.labels[].name; endswith("status:in-progress")))
+  ([$prs | sort_by(.number)[] | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step]
+   + [$issues | sort_by(.number)[] | select(declared | not) | select(any(.labels[].name; endswith("status:in-progress")))
       | {item: "#\(.number)", url, updatedAt} + issue_step])
   | map(select($now - (.updatedAt | fromdateiso8601) >= 1800)
         | . + {since: (.updatedAt | fromdateiso8601 | local), key: "\(.item)|\(.owner)|\(.step)|\(.updatedAt)",
@@ -119,7 +132,6 @@ result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdi
      records: [.[] | .record | [.key, (.at | tostring), (if .told then "1" else "0" end)] | @tsv]}')" || exit 1
 
 # 3. Keep the records, then print the findings.
-# A record that cannot be kept would report the same findings again: the run fails instead.
 { jq -r '.records[]' <<<"$result" > "$state.$$" && mv "$state.$$" "$state"; } 2>/dev/null \
-  || { rm -f "$state.$$"; echo "squad-stalls: cannot write $state" >&2; exit 1; }
+  || { rm -f "$state.$$"; cannot_keep; }
 jq -r '.findings[]' <<<"$result"

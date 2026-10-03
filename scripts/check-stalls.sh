@@ -3,7 +3,9 @@
 # serves fixed pull requests, issues and reviews, at a fixed time. Who owns the next step: the
 # reviewer of a PR whose head has no verdict (DEV on one QA authors), the author of one whose
 # verdict asks for changes or approves, the author of a draft, the owner of an issue in progress.
-# A stall is an item quiet for 30 minutes whose owner's session is idle: the owner is pinged once,
+# Items whose wait is declared, labelled needs-ceo or status:blocked themselves or through a PR's
+# closing issue, are not watched. A stall is an item quiet for 30 minutes whose owner's session is
+# idle: the owner is pinged once,
 # and the CEO told once if it is still there an hour later. A session that waits on the CEO, or is
 # not open, is reported to the CEO at once; a busy one never. Activity starts a stall afresh.
 # Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
@@ -183,6 +185,49 @@ finds "activity between two passes makes the next quiet a new stall" \
   "$(tsv ping QA "PR #1" https://github.com/o/r/pull/1 "review its head 1111111" "2026-10-03 12:05" "")"
 run 60 "${everyone_idle[@]}"
 finds "and the CEO is not told an hour after the first ping" ""
+
+# 6b. A PR whose description carries no signature is the CTO's, to find its author.
+rm -f "$state"
+github "[$(pr 1 none "$head1" 40)]" '[]'
+run 0 "${everyone_idle[@]}"
+finds "an unsigned PR is the CTO's, to find its author" \
+  "$(tsv ping CTO "PR #1" https://github.com/o/r/pull/1 "find its author: its description is not signed" "2026-10-03 11:20" "")"
+
+# 6c. A declared wait is not a stall (#174, the CTO's decision on PR #193): an issue or PR labelled
+#     needs-ceo or status:blocked, and a PR whose closing issue is, named by GitHub or by the PR's
+#     own "Closes #N", are left out. #24, waiting on nobody, is the control.
+rm -f "$state"
+labelled() { jq -c --arg l "$1" '.labels = [{name: $l}]'; }
+closing() { jq -c --argjson n "$1" '.closingIssuesReferences = [{number: $n}]'; }
+needs_ceo='👨🏻‍💼 needs-ceo' blocked='⛔ status:blocked'
+github "[$(pr 20 DEV "$head1" 40 | labelled "$needs_ceo"),$(pr 21 DEV "$head1" 40 | labelled "$blocked"),$(pr 22 DEV "$head1" 40 | closing 30),$(pr 23 DEV "$head1" 40 | jq -c '.body += "\nCloses #31."'),$(pr 24 DEV "$head1" 40)]" \
+  "[$(issue 25 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 45 | jq -c --arg l "$needs_ceo" '.labels += [{name: $l}]'),$(issue 26 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 45 | jq -c --arg l "$blocked" '.labels += [{name: $l}]'),$(issue 30 '' '' 45 | labelled "$needs_ceo"),$(issue 31 '' '' 45 | labelled "$blocked")]"
+run 0 "${everyone_idle[@]}"
+finds "needs-ceo and status:blocked, on an issue, on a PR or on a PR's closing issue, leave the item out" \
+  "$(tsv ping QA "PR #24" https://github.com/o/r/pull/24 "review its head 1111111" "2026-10-03 11:20" "")"
+
+# 6d. Records that cannot be kept fail the run, since every pass would then report the same
+#     findings again: a directory where watch.tsv goes, or a .agent-squad/ that cannot be written.
+rm -f "$state"
+github "[$(pr 1 DEV "$head1" 40)]" '[]'
+# The script names the physical path: on macOS, TMPDIR's /var is a link to /private/var.
+state_p="$(cd "$repo/.agent-squad" && pwd -P)/watch.tsv"
+mkdir "$state"
+run 0 "${everyone_idle[@]}"
+if [ "$code" -eq 1 ] && [ -z "$out" ] && [[ "$err" == "squad-stalls: cannot keep its records in $state_p"* ]]; then
+  pass "a directory in watch.tsv's place fails the run, exit 1, before anything is reported"
+else
+  fail "a directory in watch.tsv's place: exit $code, printed '$out', said '$err'"
+fi
+rmdir "$state"
+chmod 500 "$repo/.agent-squad"
+run 0 "${everyone_idle[@]}"
+chmod 700 "$repo/.agent-squad"
+if [ "$code" -eq 1 ] && [[ "$err" == "squad-stalls: cannot keep its records in $state_p"* ]] && [ ! -e "$state" ]; then
+  pass "an .agent-squad/ that cannot be written fails the run, exit 1"
+else
+  fail "an unwritable .agent-squad/: exit $code, printed '$out', said '$err'"
+fi
 
 # 7. Nothing to find prints nothing; GitHub unreadable is an error, never an all-clear.
 rm -f "$state"

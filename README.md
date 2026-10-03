@@ -281,6 +281,12 @@ cannot act on a command until you answer it there: the CTO tells you which one, 
 command to the rest of its squad. A command that reaches an agent late is checked with whoever sent
 it before anyone acts on it.
 
+**Work that stalls.** An agent waits only for a message, and a message can go astray.
+`/squad-watch`, in the CTO's session, finds work whose next step has waited half an hour on an
+agent that sits idle: it pings that agent, and tells you if nothing has moved an hour later. It
+leaves out what already waits on you (`needs-ceo`) and what is blocked on purpose
+(`status:blocked`), and when it finds nothing, it says nothing.
+
 ### How many tokens the agents use
 
 Type `/squad-usage` in any of the squad's sessions to see how many tokens each agent of the project
@@ -329,7 +335,8 @@ To upgrade later, see [Upgrade](#-upgrade).
 The installer can run as often as you like, and it never overwrites or deletes a file your project
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
 `.claude/settings.local.json`, writes the squad's commands (`/squad-save-state`, `/squad-pause`,
-`/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-usage`, and the four `-all` ones) into
+`/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-usage`, `/squad-watch`, and the four
+`-all` ones) into
 `.claude/commands/`, adds three lines to `.gitignore`, installs a small pre-push hook, creates the
 DEV and QA worktrees, and adds GitHub issue and pull request templates if the project has none. It
 prints every step, and ends with a *By hand* list of what it leaves to the CTO, who takes care of it

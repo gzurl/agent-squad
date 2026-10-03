@@ -38,6 +38,11 @@ nothing else.
 5. **When the detector prints nothing,** send nothing to anyone, and tell the CEO nothing. Say at
    most one line in your own terminal: `squad-watch: nothing stalled`.
 
+**What it leaves out:** an issue or a PR labelled `👨🏻‍💼 needs-ceo` or `⛔ status:blocked`, and a PR
+whose closing issue is. Their wait is already declared: the CEO reads the `needs-ceo` inbox, and a
+blocked item says why in its last comment (§3). A hold on purpose, such as a PR that waits for a
+release, is `⛔ status:blocked` on its issue, with the reason.
+
 The detector reports each stall once: one ping, and one word to the CEO if the stall is still there
 an hour later. It keeps what it reported in `.agent-squad/watch.tsv`, so running this command again
 does not repeat itself.
