@@ -40,7 +40,7 @@ targets() {
 
 # `broken <file> <target>` prints why a target of the file does not resolve, or nothing.
 broken() {
-  local file="$1" target="$2" path dest anchor
+  local file="$1" target="$2" path dest anchor ids
   path="${target%%#*}"
   case "$target" in *'#'*) anchor="${target#*#}" ;; *) anchor="" ;; esac
   if [ -n "$path" ]; then
@@ -53,8 +53,11 @@ broken() {
     dest="$file"
   fi
   case "$dest" in *.md|*.MD|*.markdown) ;; *) return ;; esac
-  [ -z "$anchor" ] || anchors "$dest" | grep -qxF -- "$anchor" \
-    || echo "$file: no heading or id #$anchor in $dest"
+  [ -n "$anchor" ] || return
+  # The anchors are read whole before grep looks at them: grep -q in a pipe stops reading at the
+  # first match, and GNU sed, upstream, then complains of a broken pipe.
+  ids="$(anchors "$dest")"
+  grep -qxF -- "$anchor" <<<"$ids" || echo "$file: no heading or id #$anchor in $dest"
 }
 
 found=0
