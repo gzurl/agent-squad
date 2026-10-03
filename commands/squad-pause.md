@@ -16,6 +16,8 @@ worktrees.
    `date '+%Y-%m-%d %H:%M'` when you send it.
    A session that `ListAgents` shows as **waiting** is held by a question or a permission prompt
    in its own terminal and reads no message until the CEO answers it there: name it to the CEO.
+   Stop the stall watch, if it runs: delete the scheduled job that `/loop 30m /squad-watch` made
+   (`CronList` shows it, `CronDelete` removes it).
 2. Report to the CEO in §6's agent lines (one per agent, in the order CTO, DEV, QA, with its state
    emoji), in the CEO's language (`AGENTS.md`, *Language*): how long each of the three still needs,
    from their answers, and where each one's state is. Repeat the same lines in every update.

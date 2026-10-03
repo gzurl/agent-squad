@@ -5,8 +5,9 @@ The CEO is back. Your role is your session name. The squad's commands are in the
 `.claude/commands/`, not in the worktrees.
 
 ## If you are the CTO
-1. If a `caffeinate` you started for `/squad-away` is still running (its PID is on your issue),
-   stop it with `kill <PID>`.
+1. If a `caffeinate` you started for `/squad-autopilot` is still running (its PID is on your
+   issue), stop it with `kill <PID>`. Stop the stall watch too, if it runs: delete the scheduled
+   job that `/loop 30m /squad-watch` made (`CronList` shows it, `CronDelete` removes it).
 2. Send DEV and QA one message each: "The CEO is back (`/squad-resume`): follow the part for every
    agent in `squad-resume.md`, in the main checkout's `.claude/commands/`, and send me your
    summary." Then do that part yourself.
