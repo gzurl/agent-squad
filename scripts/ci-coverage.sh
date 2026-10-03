@@ -10,9 +10,10 @@
 # It writes there summary.md, the total and one line per script, thinnest first, then the lines no
 # test ran in each, which CI adds to the job's summary; report/, kcov's HTML report of every test merged, where each copy keeps its
 # temporary path; and runs/, each test's own report and output. A statement written over several
-# lines counts once: kcov measures each of its lines but records a run statement on one of them,
-# so the lines it can never record (the rest of a jq or awk program, of a $( ), of a line ended by
-# \ or |, a heredoc's body, an empty case branch) are left out when they did not run. No figure fails it, and a test
+# lines (a quoted jq or awk program, a $( ), lines ended by \ or |, a heredoc) counts as one line,
+# run when kcov recorded any of its lines: kcov measures each of them but records a run statement
+# on one only, the first or the last. An empty case branch, which kcov can never record, counts
+# only if it ran. No figure fails it, and a test
 # that fails under kcov is named in the summary. Exit: 0 measured; 1 kcov is missing or measured
 # nothing.
 set -u
@@ -47,9 +48,9 @@ with_source() {
   source="$(sed -n 's|.*<source>\(.*\)</source>.*|\1|p' "$(dirname "$1")/cobertura.xml" 2>/dev/null | head -n 1)"
   jq -c --arg source "$source" '{source: $source, coverage}' "$1"
 }
-# `continued <script>` prints the numbers of the lines kcov can never record as run: those after
-# which the statement goes on (inside a quote or a $( ), before a heredoc's end, after a trailing
-# \, | or &&), and empty case branches.
+# `continued <script>` prints, one per line, "c <n>" for each line after which the statement goes
+# on (inside a quote or a $( ), before a heredoc's end, after a trailing \, | or &&), and "e <n>" for
+# each empty case branch.
 continued() {
   perl - "$1" <<'PERL'
 use strict; use warnings;
@@ -59,7 +60,7 @@ while (my $line = <>) {
   if ($heredoc) {
     my ($term, $strip) = @$heredoc;
     my $text = $strip ? ($line =~ s/^\t+//r) : $line;
-    if ($text eq $term) { $heredoc = shift @pending; } else { print "$.\n"; }
+    if ($text eq $term) { $heredoc = shift @pending; } else { print "c $.\n"; }
     next;
   }
   my @c = split //, $line;
@@ -88,17 +89,21 @@ while (my $line = <>) {
   (my $code = $line) =~ s/\s+$//;
   my $continues = @stack || $last eq '\\' || (!@stack && $code =~ /(\||&&)$/ && $code !~ /^\s*#/);
   my $empty_branch = $code =~ /^\s*[^\s#][^#]*\)\s*;;$/ && $code !~ /\)\s*\S.*;;$/;
-  print "$.\n" if $continues || $empty_branch;
+  print "c $.\n" if $continues;
+  print "e $.\n" if $empty_branch && !$continues;
   $heredoc = shift @pending if @pending;
 }
 PERL
 }
 measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
-skippable="$(for script in "${measured[@]}"; do
-  continued "$script" | jq -Rs --arg s "$script" '{($s): (split("\n") | map(select(. != "")))}'
+shape="$(for script in "${measured[@]}"; do
+  continued "$script" | jq -Rs --arg s "$script" '
+    split("\n") | map(select(. != "") | split(" ")) as $marks
+    | {($s): {continued: [$marks[] | select(.[0] == "c") | .[1] | tonumber],
+              empty: [$marks[] | select(.[0] == "e") | .[1] | tonumber]}}'
 done | jq -s 'add')"
 for record in "${recorded[@]}"; do with_source "$record"; done \
-  | jq -s -r --arg root "$root" --arg failed "${failed[*]}" --argjson skippable "$skippable" '
+  | jq -s -r --arg root "$root" --arg failed "${failed[*]}" --argjson shape "$shape" '
   def hits: if type == "number" then . else tostring | split("/")[0] | tonumber end;
   def basename: split("/") | last;
   def pct($r; $m): if $m == 0 then "not run" else "\($r * 1000 / $m | round / 10) %" end;
@@ -112,10 +117,19 @@ for record in "${recorded[@]}"; do with_source "$record"; done \
        else ($files[$path] | keys) as $all
          | [$files | to_entries[] | select((.key | basename) == ($script | basename) and (.value | keys) == $all)]
            as $copies
-         | [$all[] | . as $l | select(any($copies[]; .value[$l]))] as $ran
-         | ($all - ($skippable[$script] - $ran)) as $counted
-         | {script: $script, measured: ($counted | length), copies: (($copies | length) - 1),
-            ran: ($ran | length), unrun: ($counted - $ran | map(tonumber) | sort)}
+         | [$all[] | . as $l | select(any($copies[]; .value[$l])) | tonumber] as $hit
+         | $shape[$script].continued as $continued | $shape[$script].empty as $empty
+         # A line belongs to the statement that starts at the first line of its run of continued
+         # lines, and the statement ran when any of its lines did. An empty case branch counts
+         # only if it ran.
+         | [$all[] | tonumber as $l
+            | select((any($empty[]; . == $l) | not) or any($hit[]; . == $l))
+            | {line: $l, start: ($l | until((. - 1) as $p | any($continued[]; . == $p) | not; . - 1))}]
+         | group_by(.start)
+         | map({start: .[0].start, ran: any(.[]; .line as $l | any($hit[]; . == $l))}) as $statements
+         | {script: $script, measured: ($statements | length), copies: (($copies | length) - 1),
+            ran: ([$statements[] | select(.ran)] | length),
+            unrun: [$statements[] | select(.ran | not) | .start]}
        end]
   | sort_by(if .measured == 0 then -1 else .ran / .measured end) as $rows
   | ($rows | map(.ran) | add) as $ran | ($rows | map(.measured) | add) as $all
