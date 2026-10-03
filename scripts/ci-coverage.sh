@@ -34,15 +34,24 @@ while IFS= read -r file; do recorded+=("$file"); done < <(find "$out/runs" -name
 [ ${#recorded[@]} -gt 0 ] || { echo "ci-coverage: kcov recorded nothing in $out/runs" >&2; exit 1; }
 
 # 2. Per script, across every test and every copy with the same lines: the lines kcov measures,
-#    and those that ran at least once. kcov writes a line's hits as a number, or as "hits/total",
-#    and a file under the directory it ran in by its path relative to it.
+#    and those that ran at least once. kcov writes a line's hits as a number, or as "hits/total".
+#    It names each file by its path past the part all the run's files share, which it gives as the
+#    <source> of the cobertura.xml beside each record: "/" when a test ran files from both the
+#    repository and a temporary directory, the scripts' directory when it ran only those.
+# `with_source <codecov.json>` prints the record with that common part.
+with_source() {
+  local source
+  source="$(sed -n 's|.*<source>\(.*\)</source>.*|\1|p' "$(dirname "$1")/cobertura.xml" 2>/dev/null | head -n 1)"
+  jq -c --arg source "$source" '{source: $source, coverage}' "$1"
+}
 measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
-cat "${recorded[@]}" | jq -s -r --arg root "$root" --arg failed "${failed[*]}" '
+for record in "${recorded[@]}"; do with_source "$record"; done \
+  | jq -s -r --arg root "$root" --arg failed "${failed[*]}" '
   def hits: if type == "number" then . else tostring | split("/")[0] | tonumber end;
   def basename: split("/") | last;
   def pct($r; $m): if $m == 0 then "not run" else "\($r * 1000 / $m | round / 10) %" end;
   # path -> {line: ran?}, every test merged.
-  (map(.coverage | to_entries[] | .key |= if startswith("/") then . else $root + "/" + . end) | group_by(.key)
+  (map(.source as $source | .coverage | to_entries[] | .key |= $source + .) | group_by(.key)
    | map({key: .[0].key, value: (map(.value | with_entries(.value |= (hits > 0))) | reduce .[] as $m ({};
        reduce ($m | to_entries[]) as $l (.; .[$l.key] = ((.[$l.key] // false) or $l.value))))})
    | from_entries) as $files
