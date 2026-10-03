@@ -10,3 +10,4 @@ scripts/check-install.sh
 scripts/check-one-line-install.sh
 scripts/check-gh-filters.sh
 scripts/check-tokens.sh
+scripts/check-ci.sh

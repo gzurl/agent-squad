@@ -31,3 +31,7 @@ jobs:
         run: scripts/check-one-line-install.sh
       - name: No squad script filters gh by label
         run: scripts/check-gh-filters.sh
+      - name: The token report counts each response once and keeps its history
+        run: scripts/check-tokens.sh
+      - name: CI runs every test the pre-push gate runs
+        run: scripts/check-ci.sh
