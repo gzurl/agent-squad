@@ -28,8 +28,9 @@ agent-squad needs both.
 - 🌳 **Each agent works in its own git worktree,** so nobody steps on anyone's files.
 - 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main`, no merge
   without QA's approval.
-- ☕ **Step away and come back:** pause the squad, or leave it working, and get a summary when you
-  return. Sessions keep the thread across compactions and restarts.
+- ☕ **Step away and come back:** pause the squad, or put it on autopilot, which checks every half
+  hour that no work has stalled, and get a summary when you return. Sessions keep the thread across
+  compactions and restarts.
 - 📈 **Grows with you:** several projects at once, token usage per agent, and upgrades in one
   command.
 
@@ -285,7 +286,8 @@ it before anyone acts on it.
 `/squad-watch`, in the CTO's session, finds work whose next step has waited half an hour on an
 agent that sits idle: it pings that agent, and tells you if nothing has moved an hour later. It
 leaves out what already waits on you (`needs-ceo`) and what is blocked on purpose
-(`status:blocked`), and when it finds nothing, it says nothing.
+(`status:blocked`), and when it finds nothing, it says nothing. `/squad-autopilot` runs it every
+half hour until you pause or resume the squad, and you can type it yourself at any time.
 
 ### How many tokens the agents use
 
@@ -336,11 +338,10 @@ The installer can run as often as you like, and it never overwrites or deletes a
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
 `.claude/settings.local.json`, writes the squad's commands (`/squad-save-state`, `/squad-pause`,
 `/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-usage`, `/squad-watch`, and the
-four `-all` ones) into
-`.claude/commands/`, adds three lines to `.gitignore`, installs a small pre-push hook, creates the
-DEV and QA worktrees, and adds GitHub issue and pull request templates if the project has none. It
-prints every step, and ends with a *By hand* list of what it leaves to the CTO, who takes care of it
-while following `BOOTSTRAP.md`:
+four `-all` ones) into `.claude/commands/`, adds three lines to `.gitignore`, installs a small
+pre-push hook, creates the DEV and QA worktrees, and adds GitHub issue and pull request templates
+if the project has none. It prints every step, and ends with a *By hand* list of what it leaves to
+the CTO, who takes care of it while following `BOOTSTRAP.md`:
 
 - the *Squad* section of `AGENTS.md`, which loads the charter into every session (the installer
   prints it);
@@ -466,12 +467,9 @@ terminal, for a permission or a question.
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
 
-**What comes next?** A few features we would like to add, with no dates promised: a squad board
-inside Claude Code, with each agent's state and current issue at a glance
-([#172](https://github.com/gzurl/agent-squad/issues/172)); a way to catch silent stalls, when two
-agents wait on each other ([#174](https://github.com/gzurl/agent-squad/issues/174)); and measured
-test coverage ([#180](https://github.com/gzurl/agent-squad/issues/180)). Ideas are welcome as
-issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
+**What comes next?** A squad board inside Claude Code, with each agent's state and current issue
+at a glance ([#172](https://github.com/gzurl/agent-squad/issues/172)), with no date promised. Ideas
+are welcome as issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 
 ## 📦 This repository
