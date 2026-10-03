@@ -6,17 +6,19 @@
 # name when kcov found exactly the same lines to measure in both, which a different script of that
 # name (the pre-push shim, a stub installer) does not have.
 #
+# A statement written over several lines (a quoted jq or awk program, a $( ), lines ended by \ or
+# |, a heredoc) counts as one line, run when kcov recorded any of its lines: kcov measures each of
+# them but records a run statement on one only, the first or the last, and some on none (an
+# assignment from a $( ) whose one command spans lines). Such a statement that kcov recorded
+# nowhere is left out, and the summary says how many were. An empty case branch, which kcov can
+# never record, counts only if it ran.
+#
 # Usage: ci-coverage.sh <output directory>
-# It writes there summary.md, the total and one line per script, thinnest first, then the lines no
-# test ran in each, which CI adds to the job's summary; report/, kcov's HTML report of every test merged, where each copy keeps its
-# temporary path; and runs/, each test's own report and output. A statement written over several
-# lines (a quoted jq or awk program, a $( ), lines ended by \ or |, a heredoc) counts as one line,
-# run when kcov recorded any of its lines: kcov measures each of them but records a run statement
-# on one only, the first or the last, and some on none (an assignment from a $( ) whose one command
-# spans lines). So such a statement that kcov recorded nowhere is left out, and the summary says how
-# many were. An empty case branch, which kcov can never record, counts only if it ran. No figure fails it, and a test
-# that fails under kcov is named in the summary. Exit: 0 measured; 1 kcov is missing or measured
-# nothing.
+# It writes there summary.md, which CI adds to the job's summary: the total, one line per script,
+# thinnest first, and the lines no test ran in each. Also report/, kcov's HTML report of every test
+# merged into one, and runs/, each test's own report and output. No figure fails it, and a test
+# that fails under kcov is named in the summary.
+# Exit: 0 measured; 1 kcov is missing or recorded nothing.
 set -u
 out="${1:?usage: ci-coverage.sh <output directory>}"
 command -v kcov >/dev/null 2>&1 || { echo "ci-coverage: kcov is not installed" >&2; exit 1; }
@@ -55,8 +57,8 @@ with_source() {
   jq -c --arg source "$source" '{source: $source, coverage}' "$1"
 }
 # `continued <script>` prints, one per line, "c <n>" for each line after which the statement goes
-# on (inside a quote or a $( ), before a heredoc's end, after a trailing \, | or &&), and "e <n>" for
-# each empty case branch.
+# on (inside a quote or a $( ), before a heredoc's end, after a trailing \, | or &&), and
+# "e <n>" for each empty case branch.
 continued() {
   perl - "$1" <<'PERL'
 use strict; use warnings;
