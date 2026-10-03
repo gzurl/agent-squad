@@ -7,8 +7,8 @@
 # name (the pre-push shim, a stub installer) does not have.
 #
 # Usage: ci-coverage.sh <output directory>
-# It writes there summary.md, the total and one line per script, thinnest first, which CI adds to
-# the job's summary; report/, kcov's HTML report of every test merged, where each copy keeps its
+# It writes there summary.md, the total and one line per script, thinnest first, then the lines no
+# test ran in each, which CI adds to the job's summary; report/, kcov's HTML report of every test merged, where each copy keeps its
 # temporary path; and runs/, each test's own report and output. A statement written over several
 # lines counts once: kcov measures each of its lines but records a run statement on one of them,
 # so the lines it can never record (the rest of a jq or awk program, of a $( ), of a line ended by
@@ -113,8 +113,9 @@ for record in "${recorded[@]}"; do with_source "$record"; done \
          | [$files | to_entries[] | select((.key | basename) == ($script | basename) and (.value | keys) == $all)]
            as $copies
          | [$all[] | . as $l | select(any($copies[]; .value[$l]))] as $ran
-         | {script: $script, measured: ($all - ($skippable[$script] - $ran) | length),
-            copies: (($copies | length) - 1), ran: ($ran | length)}
+         | ($all - ($skippable[$script] - $ran)) as $counted
+         | {script: $script, measured: ($counted | length), copies: (($copies | length) - 1),
+            ran: ($ran | length), unrun: ($counted - $ran | map(tonumber) | sort)}
        end]
   | sort_by(if .measured == 0 then -1 else .ran / .measured end) as $rows
   | ($rows | map(.ran) | add) as $ran | ($rows | map(.measured) | add) as $all
@@ -126,7 +127,13 @@ for record in "${recorded[@]}"; do with_source "$record"; done \
   "|---|--:|--:|--:|",
   "| **Total** | **\($ran)** | **\($all)** | **\(pct($ran; $all))** |",
   ($rows[] | "| `\(.script)`\(if (.copies // 0) > 0 then " (and \(.copies) cop\(if .copies == 1 then "y" else "ies" end))" else "" end) | \(.ran) | \(.measured) | \(pct(.ran; .measured)) |"),
-  (if $failed == "" then empty else "", "Tests that failed under kcov, so their figures may be short: `\($failed)`." end)
+  (if $failed == "" then empty else "", "Tests that failed under kcov, so their figures may be short: `\($failed)`." end),
+  "",
+  "<details><summary>The lines no test ran</summary>",
+  "",
+  ($rows[] | select((.unrun // []) != []) | "- `\(.script)`: \(.unrun | map(tostring) | join(", "))"),
+  "",
+  "</details>"
 ' --args "${measured[@]}" >"$out/summary.md" || exit 1
 
 # 3. kcov's own report, every test merged into one.

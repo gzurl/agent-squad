@@ -78,6 +78,13 @@ summary_of "the unrun lines of a statement written over several lines are left o
   '| `scripts/squad-merge-gate.sh` | 3 | 4 | 75 % |'
 summary_of "the total adds up the scripts" '| **Total** | **8** | **10** | **80 %** |'
 summary_of "a test that failed under kcov is named" 'Tests that failed under kcov, so their figures may be short: `check-handoff`.'
+summary_of "the lines no test ran are listed, without the lines that carry on a statement" '- `scripts/squad-merge-gate.sh`: 50'
+summary_of "the list is a collapsed block" '<details><summary>The lines no test ran</summary>'
+if grep -q '^- `scripts/squad-checks.sh`' "$lab/out/summary.md"; then
+  fail "squad-checks.sh, whose lines all ran, is listed among the lines not run"
+else
+  pass "a script whose lines all ran has no line in the list"
+fi
 #    The thinnest scripts come first: those no test ran, then pre-push at 50 %, squad-merge-gate at
 #    75 % and squad-checks at 100 %.
 order="$(grep -o '^| `[^`]*`' "$lab/out/summary.md" | sed 's/^| `//; s/`$//' | tail -n 3 | tr '\n' ' ')"
