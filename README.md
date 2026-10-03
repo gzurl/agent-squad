@@ -377,7 +377,7 @@ the installer touches only the files listed before it:
 ├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
 ├── .claude/settings.local.json           ignored   the squad's five hooks, next to your settings
-├── .claude/commands/squad-*.md           ignored   the squad's ten commands
+├── .claude/commands/squad-*.md           ignored   the squad's eleven commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored
     ├── playbook/          the installed release: charter, scripts, templates
@@ -386,6 +386,7 @@ the installer touches only the files listed before it:
     ├── evidence/          the files QA's reviews rely on
     ├── install.log        one line per install or upgrade
     ├── tokens.tsv         the history of the tokens each agent used, kept by /squad-usage
+    ├── watch.tsv          what /squad-watch has reported, so that each stall is reported once
     └── playbook.manifest  the checksums that --check compares the playbook against
 ```
 
@@ -435,7 +436,7 @@ so that you are not dragged into them.
 agent's tokens; most of the input is read from the cache, which costs far less.
 
 **Does it work with Cursor, Codex or other tools?** No. It is built on Claude Code (its sessions,
-hooks and commands) and on GitHub.
+hooks, commands and `/loop`) and on GitHub.
 
 **Do I have to watch three terminals?** No: you talk only to the CTO. The others work on their own
 and report through it, and the CTO tells you when one of them is waiting for you in its own
@@ -461,8 +462,8 @@ The squad turns accepted issues into its own pull requests.
 |---|---|---|
 | `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
 | `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and this guide | Yes |
-| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-away-all`, `/squad-resume-all`, `/squad-usage`, `/squad-usage-all` | Yes; the installer copies them into `.claude/commands/` |
-| `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the session hooks, the merge gate, the checks runner, the token report and the pre-push gate | Yes |
+| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-away-all`, `/squad-resume-all`, `/squad-usage`, `/squad-usage-all`, `/squad-watch` | Yes; the installer copies them into `.claude/commands/` |
+| `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the session hooks, the merge gate, the checks runner, the token report, the stall detector and the pre-push gate | Yes |
 | `.github/ISSUE_TEMPLATE/task.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |
 | `LICENSE` | The MIT License | Yes, so every installed playbook carries it |

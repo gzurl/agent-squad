@@ -39,6 +39,8 @@ jobs:
         run: scripts/check-ci.sh
       - name: The coverage summary counts copies and lines as it says
         run: scripts/check-coverage.sh
+      - name: The stall detector finds who owns each stalled next step
+        run: scripts/check-stalls.sh
 
   # How much of the scripts the tests run (agent-squad #180): every scripts/check-*.sh under kcov,
   # the total and one line per script in the job's summary, and as an artifact kcov's report and

@@ -490,7 +490,7 @@ for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squa
   scripts/squad-install.sh templates/AGENTS.md commands/squad-save-state.md commands/squad-pause.md \
   commands/squad-away.md commands/squad-resume.md commands/squad-upgrade.md \
   commands/squad-pause-all.md commands/squad-away-all.md commands/squad-resume-all.md \
-  commands/squad-usage.md commands/squad-usage-all.md; do
+  commands/squad-usage.md commands/squad-usage-all.md commands/squad-watch.md; do
   [ -f "$staging/$required" ] \
     || die "the tree of $tag has no $required, so this installer cannot install it (a tag older than this installer?); the installed playbook is unchanged"
 done
