@@ -71,11 +71,11 @@ Plan: now v34 (DEV finishes #119, then the version PR); next, publishing.
 
 ### 🏗️ Built by its own squad
 
-agent-squad is built by its own squad. In the two weeks up to release v34, it merged 71 pull
-requests, every one with a QA verdict, 20 of them sent back for changes first, and it shipped 27
-releases. For a
-review that caught a real bug, see [PR #154](https://github.com/gzurl/agent-squad/pull/154), where
-QA found that a forked session counted its tokens twice.
+agent-squad is built by its own squad. In the two and a half weeks up to release v35, it merged
+87 pull requests, every one with a QA verdict, 26 of them sent back for changes first, and it
+shipped 28 releases. For a review that caught a real bug, see
+[PR #154](https://github.com/gzurl/agent-squad/pull/154), where QA found that a forked session
+counted its tokens twice.
 
 
 ### ▶️ Quick start
@@ -316,8 +316,8 @@ In your project's main checkout (the folder you cloned, not a worktree), run:
 gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh | bash
 ```
 
-That installs the latest release. To pick a version or another folder, add them
-after `bash -s --`:
+That installs the latest release. To pick a version or another folder, add them after
+`bash -s --`:
 
 ```bash
 gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh \
