@@ -7,11 +7,13 @@
 # URLs, and anchors into files that are not Markdown (LICENSE#L1), are not checked. templates/ holds
 # skeletons whose links resolve once copied into a project, and is left out.
 #
-# A heading's id is the one GitHub gives it: its text, lowercased (ASCII letters only), without
-# every character that is not a letter, a mark, a number, an underscore, a space or a hyphen,
-# spaces made hyphens; a repeated id gets -1, -2 and so on. An emoji is dropped, and the variation
-# selector that often follows it is a mark and stays: "## 🛠️ Install" is #️-install, not #-install.
-# Headings inside fenced code blocks are not headings.
+# A heading's id is the one GitHub gives it: its text, lowercased in every alphabet, without every
+# character that is not a letter, a mark, a number, an underscore, a space or a hyphen, spaces made
+# hyphens; a repeated id gets -1, -2 and so on. An emoji is dropped, and the variation selector
+# that often follows it is a mark and stays: "## 🛠️ Install" is #️-install, not #-install. Only
+# ATX headings that start at the line's first column are read (# to ######, then a space or a
+# tab); setext headings, underlined with = or -, and headings inside fenced code blocks are not.
+# jq lowercases ASCII only, so perl does it.
 set -u
 root="$(git rev-parse --show-toplevel)" || exit 2
 cd "$root" || exit 2
@@ -21,10 +23,11 @@ cd "$root" || exit 2
 anchors() {
   awk '/^ ? ? ?(```|~~~)/ { fenced = !fenced; next }
     !fenced && /^(#|##|###|####|#####|######)[ \t]/' "$1" \
+    | perl -CS -pe '$_ = lc' \
     | jq -nRr 'reduce (inputs
         | sub("^#+[ \t]+"; "") | sub("[ \t]+#*[ \t]*$"; "")
         | gsub("\\[(?<text>[^]]*)\\]\\([^)]*\\)"; "\(.text)")
-        | ascii_downcase | gsub("[^\\p{L}\\p{M}\\p{N}\\p{Pc} -]"; "") | gsub(" "; "-")) as $id
+        | gsub("[^\\p{L}\\p{M}\\p{N}\\p{Pc} -]"; "") | gsub(" "; "-")) as $id
         ({seen: {}, ids: []};
           (.seen[$id] // 0) as $n
           | .ids += [if $n == 0 then $id else "\($id)-\($n)" end] | .seen[$id] = $n + 1)

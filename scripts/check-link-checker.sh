@@ -96,6 +96,16 @@ check "a repeated heading's second id ends in -1" pass '## Notes
 ## Notes
 [second](#notes-1)'
 
+# 3b. A heading's capitals are lowercased whatever their alphabet, as GitHub does.
+check "a heading with a non-ASCII capital" pass '## Über das Projekt
+[about](#über-das-projekt)'
+check "the anchor that keeps the capital" "README.md: no heading or id #Über-das-projekt in README.md" '## Über das Projekt
+[about](#Über-das-projekt)'
+
+# 3c. A path that starts with / is read from the repository's root, not from the file system's.
+check "a root-relative link that resolves" pass '[guide](/docs/guide.md) and <img src="/img/team.png" alt="team">'
+check "a root-relative link that does not" "README.md: no such file: /docs/missing.md" '[x](/docs/missing.md)'
+
 # 4. Several broken links are all reported, not only the first.
 printf '%s\n' '[a](a.md) [b](b.md)' > "$repo/README.md"
 git -C "$repo" add -A >/dev/null
