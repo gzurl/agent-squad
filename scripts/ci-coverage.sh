@@ -13,18 +13,28 @@
 # nowhere is left out, and the summary says how many were. An empty case branch, which kcov can
 # never record, counts only if it ran.
 #
-# Usage: ci-coverage.sh <output directory>
+# Usage: ci-coverage.sh [--summary-only] <output directory>
 # It writes there summary.md, which CI adds to the job's summary: the total, one line per script,
 # thinnest first, and the lines no test ran in each. Also report/, kcov's HTML report of every test
-# merged into one, and runs/, each test's own report and output. No figure fails it, and a test
-# that fails under kcov is named in the summary.
-# Exit: 0 measured; 1 kcov is missing or recorded nothing.
+# merged into one, and runs/, each test's records, output and exit status, and the root it ran
+# in. No figure fails it, and a test that fails under kcov is named in the summary.
+# --summary-only rewrites summary.md from runs/, without kcov: from CI's artifact, in a checkout of
+# the commit it measured.
+# Exit: 0 measured; 1 kcov is missing, or recorded nothing; 2 bad usage.
 set -u
-out="${1:?usage: ci-coverage.sh <output directory>}"
-command -v kcov >/dev/null 2>&1 || { echo "ci-coverage: kcov is not installed" >&2; exit 1; }
+summary_only=false
+[ "${1:-}" != --summary-only ] || { summary_only=true; shift; }
+[ $# -eq 1 ] || { echo "usage: ci-coverage.sh [--summary-only] <output directory>" >&2; exit 2; }
+out="$1"
+$summary_only || command -v kcov >/dev/null 2>&1 || { echo "ci-coverage: kcov is not installed" >&2; exit 1; }
 root="$(git rev-parse --show-toplevel)" || exit 1
 cd "$root" || exit 1
-mkdir -p "$out/runs" || exit 1
+# --summary-only reads a run's records and creates nothing.
+if $summary_only; then
+  [ -d "$out/runs" ] || { echo "ci-coverage: $out/runs holds no run of this script" >&2; exit 1; }
+else
+  mkdir -p "$out/runs" || exit 1
+fi
 out="$(cd "$out" && pwd -P)"
 
 # The scripts measured: what the playbook runs, and the one-line installer.
@@ -32,12 +42,23 @@ measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
 
 # 1. Each test under kcov, which keeps the bash files whose path contains /<name> of a measured
 #    script: the scripts, their copies, and other files of those names, which step 2 tells apart.
-patterns="$(printf '/%s,' "${measured[@]##*/}")"
+#    Each test's exit status goes to runs/<test>.status, and the root it ran in to runs/root, so
+#    that --summary-only can work from them elsewhere.
+if ! $summary_only; then
+  patterns="$(printf '/%s,' "${measured[@]##*/}")"
+  printf '%s\n' "$root" > "$out/runs/root"
+  for test in scripts/check-*.sh; do
+    name="$(basename "$test" .sh)"
+    kcov --include-pattern="${patterns%,}" "$out/runs/$name" "$test" >"$out/runs/$name.log" 2>&1 </dev/null
+    echo "$?" > "$out/runs/$name.status"
+  done
+fi
+run_root="$(cat "$out/runs/root" 2>/dev/null)" \
+  || { echo "ci-coverage: $out/runs holds no run of this script" >&2; exit 1; }
 failed=()
-for test in scripts/check-*.sh; do
-  name="$(basename "$test" .sh)"
-  kcov --include-pattern="${patterns%,}" "$out/runs/$name" "$test" \
-    >"$out/runs/$name.log" 2>&1 </dev/null || failed+=("$name")
+for status in "$out"/runs/*.status; do
+  [ -f "$status" ] || continue
+  [ "$(cat "$status")" = 0 ] || failed+=("$(basename "$status" .status)")
 done
 # kcov writes a codecov.json per script it ran and, for some tests, a merged one too: reading
 # every one is safe, since a line counts as run when any record says so.
@@ -57,8 +78,8 @@ with_source() {
   jq -c --arg source "$source" '{source: $source, coverage}' "$1"
 }
 # `continued <script>` prints, one per line, "c <n>" for each line after which the statement goes
-# on (inside a quote or a $( ), before a heredoc's end, after a trailing \, | or &&), and
-# "e <n>" for each empty case branch.
+# on (inside a quote or a $( ), from a heredoc's first line to its end, after a trailing \, | or
+# &&), and "e <n>" for each empty case branch.
 continued() {
   perl - "$1" <<'PERL'
 use strict; use warnings;
@@ -68,7 +89,8 @@ while (my $line = <>) {
   if ($heredoc) {
     my ($term, $strip) = @$heredoc;
     my $text = $strip ? ($line =~ s/^\t+//r) : $line;
-    if ($text eq $term) { $heredoc = shift @pending; } else { print "c $.\n"; }
+    if ($text eq $term) { print "c $.\n" if @stack || @pending; $heredoc = shift @pending; }
+    else { print "c $.\n"; }
     next;
   }
   my @c = split //, $line;
@@ -89,13 +111,15 @@ while (my $line = <>) {
     elsif ($ch eq '$' && ($c[$i + 1] // '') eq '(') { push @stack, 'C'; $i++; }
     elsif ($ctx eq 'C' && $ch eq '(') { push @stack, 'C'; }
     elsif ($ctx eq 'C' && $ch eq ')') { pop @stack; }
-    elsif ($ch eq '<' && join('', @c[$i .. $#c]) =~ /^<<(-?)\s*(['"]?)(\w+)\2/) {
+    elsif ($ch eq '<' && ($i == 0 || $c[$i - 1] ne '<') && ($c[$i + 2] // '') ne '<'
+           && join('', @c[$i .. $#c]) =~ /^<<(-?)\s*(['"]?)(\w+)\2/) {
       push @pending, [$3, $1 eq '-'];
       $i += length($&) - 1;
     }
   }
   (my $code = $line) =~ s/\s+$//;
-  my $continues = @stack || $last eq '\\' || (!@stack && $code =~ /(\||&&)$/ && $code !~ /^\s*#/);
+  my $continues = @stack || @pending || $last eq '\\'
+    || (!@stack && $code =~ /(\||&&)$/ && $code !~ /^\s*#/);
   my $empty_branch = $code =~ /^\s*[^\s#][^#]*\)\s*;;$/ && $code !~ /\)\s*\S.*;;$/;
   print "c $.\n" if $continues;
   print "e $.\n" if $empty_branch && !$continues;
@@ -110,7 +134,7 @@ shape="$(for script in "${measured[@]}"; do
               empty: [$marks[] | select(.[0] == "e") | .[1] | tonumber]}}'
 done | jq -s 'add')"
 for record in "${recorded[@]}"; do with_source "$record"; done \
-  | jq -s -r --arg root "$root" --arg failed "${failed[*]}" --argjson shape "$shape" '
+  | jq -s -r --arg root "$run_root" --arg failed "${failed[*]}" --argjson shape "$shape" '
   def hits: if type == "number" then . else tostring | split("/")[0] | tonumber end;
   def basename: split("/") | last;
   def pct($r; $m): if $m == 0 then "not run" else "\($r * 1000 / $m | round / 10) %" end;
@@ -145,7 +169,7 @@ for record in "${recorded[@]}"; do with_source "$record"; done \
   | ($rows | map(.left_out // 0) | add) as $left_out
   | "## Test coverage of the scripts",
   "",
-  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end)",
+  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end) The HTML report that kcov writes, in the `coverage` artifact, counts every line it measures and leaves the copies out, so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back from the records in that artifact.",
   "",
   "| Script | Lines run | Lines measured | Coverage |",
   "|---|--:|--:|--:|",
@@ -161,5 +185,6 @@ for record in "${recorded[@]}"; do with_source "$record"; done \
 ' --args "${measured[@]}" >"$out/summary.md" || exit 1
 
 # 3. kcov's own report, every test merged into one.
-kcov --merge "$out/report" "$out"/runs/*/ >/dev/null 2>&1 || echo "ci-coverage: kcov could not merge the reports" >&2
+$summary_only || kcov --merge "$out/report" "$out"/runs/*/ >/dev/null 2>&1 \
+  || echo "ci-coverage: kcov could not merge the reports" >&2
 cat "$out/summary.md"

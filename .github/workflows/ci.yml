@@ -41,8 +41,9 @@ jobs:
         run: scripts/check-coverage.sh
 
   # How much of the scripts the tests run (agent-squad #180): every scripts/check-*.sh under kcov,
-  # the total and one line per script in the job's summary, kcov's report as an artifact. It is a
-  # report: no figure fails the build, and nothing is sent outside GitHub.
+  # the total and one line per script in the job's summary, and as an artifact kcov's report and
+  # the records that `scripts/ci-coverage.sh --summary-only` makes the summary from. It is a report:
+  # no figure fails the build, and nothing is sent outside GitHub.
   coverage:
     runs-on: ubuntu-latest
     steps:
@@ -68,7 +69,7 @@ jobs:
         run: |
           PATH="$HOME/kcov/bin:$PATH" scripts/ci-coverage.sh "$RUNNER_TEMP/coverage"
           cat "$RUNNER_TEMP/coverage/summary.md" >> "$GITHUB_STEP_SUMMARY"
-      - name: kcov's report
+      - name: kcov's report, and the records the summary comes from
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -76,5 +77,9 @@ jobs:
           path: |
             ${{ runner.temp }}/coverage/summary.md
             ${{ runner.temp }}/coverage/report
+            ${{ runner.temp }}/coverage/runs/root
+            ${{ runner.temp }}/coverage/runs/*.status
             ${{ runner.temp }}/coverage/runs/*.log
+            ${{ runner.temp }}/coverage/runs/**/codecov.json
+            ${{ runner.temp }}/coverage/runs/**/cobertura.xml
           if-no-files-found: warn
