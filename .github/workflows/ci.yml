@@ -37,3 +37,49 @@ jobs:
         run: scripts/check-tokens.sh
       - name: CI runs every test the pre-push gate runs
         run: scripts/check-ci.sh
+      - name: The coverage summary counts copies and lines as it says
+        run: scripts/check-coverage.sh
+
+  # How much of the scripts the tests run (agent-squad #180): every scripts/check-*.sh under kcov,
+  # the total and one line per script in the job's summary, and as an artifact kcov's report and
+  # the records that `scripts/ci-coverage.sh --summary-only` makes the summary from. It is a report:
+  # no figure fails the build, and nothing is sent outside GitHub.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: kcov's build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binutils-dev cmake libcurl4-openssl-dev libdw-dev libelf-dev libiberty-dev libssl-dev zlib1g-dev >/dev/null
+      - name: kcov v43, built once and cached
+        id: kcov
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/kcov
+          key: kcov-a39874f938ce13f7a65f253120d1ec946b349ffe-${{ runner.os }}
+      - name: Build kcov v43
+        if: steps.kcov.outputs.cache-hit != 'true'
+        run: |
+          git clone -q https://github.com/SimonKagstrom/kcov "$RUNNER_TEMP/kcov"
+          git -C "$RUNNER_TEMP/kcov" checkout -q a39874f938ce13f7a65f253120d1ec946b349ffe
+          cmake -S "$RUNNER_TEMP/kcov" -B "$RUNNER_TEMP/kcov/build" -DCMAKE_INSTALL_PREFIX="$HOME/kcov" >/dev/null
+          make -s -C "$RUNNER_TEMP/kcov/build" -j"$(nproc)" install >/dev/null
+      - name: Coverage of the scripts while the checks run
+        run: |
+          PATH="$HOME/kcov/bin:$PATH" scripts/ci-coverage.sh "$RUNNER_TEMP/coverage"
+          cat "$RUNNER_TEMP/coverage/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: kcov's report, and the records the summary comes from
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: |
+            ${{ runner.temp }}/coverage/summary.md
+            ${{ runner.temp }}/coverage/report
+            ${{ runner.temp }}/coverage/runs/root
+            ${{ runner.temp }}/coverage/runs/*.status
+            ${{ runner.temp }}/coverage/runs/*.log
+            ${{ runner.temp }}/coverage/runs/**/codecov.json
+            ${{ runner.temp }}/coverage/runs/**/cobertura.xml
+          if-no-files-found: warn
