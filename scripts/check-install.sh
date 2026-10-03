@@ -924,19 +924,28 @@ check "an upgrade that cannot move its playbook in place exits 2, saying the ins
   bash -c '[ "$1" -eq 2 ] && grep -qF "cannot move the new playbook in place; the installed one is unchanged" <<<"$2"' _ "$code" "$out"
 check "and the installed playbook is the one it had" [ "$before" = "$(tree_state "$squad/playbook")" ]
 check "with nothing left behind" no_leftovers "$squad"
-# A .gitignore whose last line has no newline gets one before the squad's lines; one that is a
-# symbolic link, which git does not read, is reported as still not ignoring them.
+# A .gitignore whose last line has no newline gets one before the squad's lines.
 target="$(new_project no-newline)" || exit 2
 printf 'build' > "$target/.gitignore"
 "$install" "$target" "$tag_a" >/dev/null 2>&1
 check "a .gitignore without a final newline keeps its last line whole" has_lines "$target/.gitignore" build .agent-squad/
+# A .gitignore that is a symbolic link, which git does not read, gets nothing written through it
+# (#186): its target may be outside the project, and shared. The step says what to do and needs a
+# decision; the rest of the install goes on.
 target="$(new_project linked-gitignore)" || exit 2
-: > "$lab/linked-gitignore.target" && ln -s "$lab/linked-gitignore.target" "$target/.gitignore"
+echo "shared" > "$lab/linked-gitignore.target" && ln -s "$lab/linked-gitignore.target" "$target/.gitignore"
 out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
-check "a .gitignore git does not read makes the installer exit 1" [ "$code" -eq 1 ]
-check "and say that the line it added is still not applied" \
-  contains "$out" "NOT IGNORED: .agent-squad/ was added, and still git does not ignore it"
+check "a symbolic link for .gitignore makes the installer exit 1" [ "$code" -eq 1 ]
+check "and say that the squad's paths are not ignored, and what to do" \
+  contains "$out" "NOT IGNORED: .agent-squad/, because .gitignore is a symbolic link, which git does not read and the installer does not write through; replace it with a file of its own, then run again"
+check "and write nothing through the link" [ "$(cat "$lab/linked-gitignore.target")" = shared ]
+check "which stays a link" [ -L "$target/.gitignore" ]
+check "and add nothing it says it added" lacks "$out" ".gitignore added"
+check "while the rest of the install goes on" detached_at "$target" "$target/.agent-squad/worktrees/dev" main
+project="$target"
+check "and --check says why its .gitignore item fails" \
+  check_reason "$item_ignore" ".gitignore is a symbolic link, which git does not read; replace it with a file of its own"
 # Commands it cannot write, a worktree it cannot make, and a branch the remote does not have yet.
 target="$(new_project no-commands)" || exit 2
 mkdir -p "$target/.claude" && echo "not a directory" > "$target/.claude/commands"
