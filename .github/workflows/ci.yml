@@ -68,6 +68,11 @@ jobs:
         run: |
           PATH="$HOME/kcov/bin:$PATH" scripts/ci-coverage.sh "$RUNNER_TEMP/coverage"
           cat "$RUNNER_TEMP/coverage/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: DEBUG kcov's records
+        if: always()
+        run: |
+          find "$RUNNER_TEMP/coverage/runs" -name codecov.json | head -8
+          for f in $(find "$RUNNER_TEMP/coverage/runs" -name codecov.json | head -4); do echo "== $f"; jq -c '.coverage | to_entries[] | {key, n: (.value | length), sample: (.value | to_entries[0:3])}' "$f" | head -12; done
       - name: kcov's report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
