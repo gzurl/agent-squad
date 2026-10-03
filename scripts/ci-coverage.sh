@@ -25,11 +25,16 @@ cd "$root" || exit 1
 mkdir -p "$out/runs" || exit 1
 out="$(cd "$out" && pwd -P)"
 
-# 1. Each test under kcov, which keeps the bash files whose path contains one of these names.
+# The scripts measured: what the playbook runs, and the one-line installer.
+measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
+
+# 1. Each test under kcov, which keeps the bash files whose path contains /<name> of a measured
+#    script: the scripts, their copies, and other files of those names, which step 2 tells apart.
+patterns="$(printf '/%s,' "${measured[@]##*/}")"
 failed=()
 for test in scripts/check-*.sh; do
   name="$(basename "$test" .sh)"
-  kcov --include-pattern=squad-,pre-push,install.sh "$out/runs/$name" "$test" \
+  kcov --include-pattern="${patterns%,}" "$out/runs/$name" "$test" \
     >"$out/runs/$name.log" 2>&1 </dev/null || failed+=("$name")
 done
 # kcov writes a codecov.json per script it ran and, for some tests, a merged one too: reading
@@ -96,7 +101,6 @@ while (my $line = <>) {
 }
 PERL
 }
-measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
 shape="$(for script in "${measured[@]}"; do
   continued "$script" | jq -Rs --arg s "$script" '
     split("\n") | map(select(. != "") | split(" ")) as $marks
