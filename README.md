@@ -435,8 +435,21 @@ so that you are not dragged into them.
 **How many tokens does it use?** Three Claude Code sessions per project. `/squad-usage` shows each
 agent's tokens; most of the input is read from the cache, which costs far less.
 
-**Does it work with Cursor, Codex or other tools?** No. It is built on Claude Code (its sessions,
-hooks, commands and `/loop`) and on GitHub.
+**Does it work with Codex, Cursor or other tools?** Not today. agent-squad relies on these Claude
+Code features, and another tool would need an equivalent of each:
+
+- sessions that message each other, and a list of the sessions open on the machine, with whether
+  each is busy, idle or waiting;
+- named sessions, so that each agent knows its role;
+- hooks that run before a compaction and when a session starts or resumes;
+- custom slash commands (`.claude/commands/`);
+- a memory shared by the sessions launched from the same folder;
+- compaction that follows the project's instructions on what to keep;
+- session transcripts kept on the machine, which `/squad-usage` reads;
+- `/loop`, which runs a command again on a schedule, as the CTO runs `/squad-watch` every half
+  hour while you are away.
+
+It also relies on GitHub, through the `gh` command line.
 
 **Do I have to watch three terminals?** No: you talk only to the CTO. The others work on their own
 and report through it, and the CTO tells you when one of them is waiting for you in its own
