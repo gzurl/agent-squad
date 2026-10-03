@@ -15,8 +15,10 @@ jobs:
           for f in scripts/*.sh .githooks/* install.sh; do bash -n "$f"; done
           sudo apt-get install -y -qq shellcheck >/dev/null
           shellcheck scripts/*.sh .githooks/* install.sh
-      - name: Relative Markdown links resolve
+      - name: Relative links, images and anchors resolve
         run: scripts/check-links.sh
+      - name: The link check catches broken links, images and anchors
+        run: scripts/check-link-checker.sh
       - name: Charter version matches the changelog
         run: scripts/check-version.sh
       - name: The pre-push gate behaves as the charter says
@@ -31,3 +33,7 @@ jobs:
         run: scripts/check-one-line-install.sh
       - name: No squad script filters gh by label
         run: scripts/check-gh-filters.sh
+      - name: The token report counts each response once and keeps its history
+        run: scripts/check-tokens.sh
+      - name: CI runs every test the pre-push gate runs
+        run: scripts/check-ci.sh

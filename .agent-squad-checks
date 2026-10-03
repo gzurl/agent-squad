@@ -2,6 +2,7 @@
 for f in scripts/*.sh .githooks/* install.sh; do bash -n "$f" || exit 1; done
 uvx --from shellcheck-py shellcheck scripts/*.sh .githooks/* install.sh
 scripts/check-links.sh
+scripts/check-link-checker.sh
 scripts/check-version.sh
 scripts/check-gate.sh
 scripts/check-merge-gate.sh
@@ -10,3 +11,4 @@ scripts/check-install.sh
 scripts/check-one-line-install.sh
 scripts/check-gh-filters.sh
 scripts/check-tokens.sh
+scripts/check-ci.sh
