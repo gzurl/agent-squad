@@ -369,10 +369,14 @@ check_installation() {
 
   # 3. The squad's paths are ignored, by a rule of the project's own .gitignore: its directory, the
   #    local settings, and each command the playbook has.
-  why="$({ printf '%s\n' .agent-squad .claude/settings.local.json; squad_commands | sed 's|^|.claude/commands/|'; } \
-    | while IFS= read -r path; do
-      ignored_by_project "$path" || echo "$path is not ignored by .gitignore"
-    done | join)"
+  if [ -L "$project/.gitignore" ]; then
+    why=".gitignore is a symbolic link, which git 2.32 and later do not read; replace it with a file of its own"
+  else
+    why="$({ printf '%s\n' .agent-squad .claude/settings.local.json; squad_commands | sed 's|^|.claude/commands/|'; } \
+      | while IFS= read -r path; do
+        ignored_by_project "$path" || echo "$path is not ignored by .gitignore"
+      done | join)"
+  fi
   verdict ".gitignore ignores .agent-squad/, .claude/settings.local.json and $commands_rule" "$why"
 
   # 4. The shim is the installer's, where git runs it.
@@ -521,15 +525,22 @@ say log "appended '$previous -> $tag' to .agent-squad/install.log"
 # 2. .gitignore: the squad's directory, Claude Code's local settings and the commands stay out of
 #    git. A line is added unless the project's own .gitignore already ignores the path. A rule in a
 #    nested .gitignore outranks the root one, so when such a rule (a negation) decides, appending
-#    cannot help: the step appends nothing, says so, and needs a decision. The commands take one
-#    rule, checked as its own literal name: a .gitignore with only the line v24 added for
-#    /squad-save-state gets the rule once, and keeps that line (agent-squad #101).
+#    cannot help: the step appends nothing, says so, and needs a decision. A .gitignore that is a
+#    symbolic link gets nothing either: git 2.32 and later do not read one, and its target may be
+#    outside the project, and shared (agent-squad #186). The commands take one rule, checked as its own literal
+#    name: a .gitignore with only the line v24 added for /squad-save-state gets the rule once, and
+#    keeps that line (agent-squad #101).
 gitignore="$project/.gitignore"
 for path in "${ignored_paths[@]}"; do
   line="$path"
   [ "$path" = .agent-squad ] && line=".agent-squad/"
   if ignored_by_project "$path"; then
     say .gitignore "$line is already ignored"
+    continue
+  fi
+  if [ -L "$gitignore" ]; then
+    say .gitignore "NOT IGNORED: $line, because .gitignore is a symbolic link, which git 2.32 and later do not read and the installer does not write through; replace it with a file of its own, then run again"
+    needs_decision=1
     continue
   fi
   # The rule that decides today, as source:line:pattern; its source is absolute for this machine's
