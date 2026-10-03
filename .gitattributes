@@ -8,6 +8,7 @@
 /install.sh export-ignore
 /CONTRIBUTING.md export-ignore
 /.github/ISSUE_TEMPLATE/outside-report.md export-ignore
+/docs/images export-ignore
 # Nothing is tracked under .claude/ today; the line guards against a settings file added later.
 /.claude export-ignore
 /.gitignore export-ignore
