@@ -929,23 +929,23 @@ target="$(new_project no-newline)" || exit 2
 printf 'build' > "$target/.gitignore"
 "$install" "$target" "$tag_a" >/dev/null 2>&1
 check "a .gitignore without a final newline keeps its last line whole" has_lines "$target/.gitignore" build .agent-squad/
-# A .gitignore that is a symbolic link, which git does not read, gets nothing written through it
-# (#186): its target may be outside the project, and shared. The step says what to do and needs a
-# decision; the rest of the install goes on.
+# A .gitignore that is a symbolic link, which git 2.32 and later do not read, gets nothing written
+# through it (#186): its target may be outside the project, and shared. The step says what to do
+# and needs a decision; the rest of the install goes on.
 target="$(new_project linked-gitignore)" || exit 2
 echo "shared" > "$lab/linked-gitignore.target" && ln -s "$lab/linked-gitignore.target" "$target/.gitignore"
 out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
 check "a symbolic link for .gitignore makes the installer exit 1" [ "$code" -eq 1 ]
 check "and say that the squad's paths are not ignored, and what to do" \
-  contains "$out" "NOT IGNORED: .agent-squad/, because .gitignore is a symbolic link, which git does not read and the installer does not write through; replace it with a file of its own, then run again"
+  contains "$out" "NOT IGNORED: .agent-squad/, because .gitignore is a symbolic link, which git 2.32 and later do not read and the installer does not write through; replace it with a file of its own, then run again"
 check "and write nothing through the link" [ "$(cat "$lab/linked-gitignore.target")" = shared ]
 check "which stays a link" [ -L "$target/.gitignore" ]
 check "and add nothing it says it added" lacks "$out" ".gitignore added"
 check "while the rest of the install goes on" detached_at "$target" "$target/.agent-squad/worktrees/dev" main
 project="$target"
 check "and --check says why its .gitignore item fails" \
-  check_reason "$item_ignore" ".gitignore is a symbolic link, which git does not read; replace it with a file of its own"
+  check_reason "$item_ignore" ".gitignore is a symbolic link, which git 2.32 and later do not read; replace it with a file of its own"
 # Commands it cannot write, a worktree it cannot make, and a branch the remote does not have yet.
 target="$(new_project no-commands)" || exit 2
 mkdir -p "$target/.claude" && echo "not a directory" > "$target/.claude/commands"
