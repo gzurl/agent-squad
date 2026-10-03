@@ -25,7 +25,8 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # squad-checks.sh with line 5 run; a copy of it with the same four lines, 3 and 4 run, one written
 # as "hits/total"; a different squad-checks.sh with other lines, all run; and .githooks/pre-push.
 # For check-handoff.sh, which runs after it, it records line 9 of squad-checks.sh as run and line 5
-# as not, and fails. KCOV_RECORDS=none makes
+# as not, under the path relative to the repository, as kcov writes the files below the directory
+# it runs in, and fails. KCOV_RECORDS=none makes
 # it record nothing. --merge writes an index.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/kcov" <<'KCOV'
@@ -40,7 +41,7 @@ case "$test" in
       "/tmp/lab/playbook/scripts/squad-checks.sh": {"3": 1, "4": "2/2", "5": 0, "9": 0},
       "/tmp/lab/stub/squad-checks.sh": {"1": 5, "2": 5},
       ($r + "/.githooks/pre-push"): {"2": 1, "7": 0}}}' ;;
-  *check-handoff.sh) jq -n --arg r "$root" '{coverage: {($r + "/scripts/squad-checks.sh"): {"3": 0, "5": 0, "9": "1/1"}}}'
+  *check-handoff.sh) jq -n '{coverage: {"scripts/squad-checks.sh": {"3": 0, "5": 0, "9": "1/1"}}}'
     exit 1 ;;
   *) exit 0 ;;
 esac > "$out/kcov-merged/codecov.json"

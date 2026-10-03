@@ -34,14 +34,15 @@ while IFS= read -r file; do recorded+=("$file"); done < <(find "$out/runs" -name
 [ ${#recorded[@]} -gt 0 ] || { echo "ci-coverage: kcov recorded nothing in $out/runs" >&2; exit 1; }
 
 # 2. Per script, across every test and every copy with the same lines: the lines kcov measures,
-#    and those that ran at least once. kcov writes a line's hits as a number, or as "hits/total".
+#    and those that ran at least once. kcov writes a line's hits as a number, or as "hits/total",
+#    and a file under the directory it ran in by its path relative to it.
 measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
 cat "${recorded[@]}" | jq -s -r --arg root "$root" --arg failed "${failed[*]}" '
   def hits: if type == "number" then . else tostring | split("/")[0] | tonumber end;
   def basename: split("/") | last;
   def pct($r; $m): if $m == 0 then "not run" else "\($r * 1000 / $m | round / 10) %" end;
   # path -> {line: ran?}, every test merged.
-  (map(.coverage | to_entries[]) | group_by(.key)
+  (map(.coverage | to_entries[] | .key |= if startswith("/") then . else $root + "/" + . end) | group_by(.key)
    | map({key: .[0].key, value: (map(.value | with_entries(.value |= (hits > 0))) | reduce .[] as $m ({};
        reduce ($m | to_entries[]) as $l (.; .[$l.key] = ((.[$l.key] // false) or $l.value))))})
    | from_entries) as $files
