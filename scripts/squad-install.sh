@@ -488,8 +488,8 @@ fi
 # (v14 and older) has no scripts/squad-install.sh, and would install without working.
 for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh \
   scripts/squad-install.sh templates/AGENTS.md commands/squad-save-state.md commands/squad-pause.md \
-  commands/squad-away.md commands/squad-resume.md commands/squad-upgrade.md \
-  commands/squad-pause-all.md commands/squad-away-all.md commands/squad-resume-all.md \
+  commands/squad-autopilot.md commands/squad-resume.md commands/squad-upgrade.md \
+  commands/squad-pause-all.md commands/squad-autopilot-all.md commands/squad-resume-all.md \
   commands/squad-usage.md commands/squad-usage-all.md; do
   [ -f "$staging/$required" ] \
     || die "the tree of $tag has no $required, so this installer cannot install it (a tag older than this installer?); the installed playbook is unchanged"
@@ -602,7 +602,18 @@ fi
 # 3b. The squad's commands (agent-squad #100, #101), which the installer owns as it owns the hooks:
 #     each written into .claude/commands/ from the playbook on every install, and git-ignored. A
 #     file the project tracks at one of their paths is the project's: it is left as it is, and the
-#     step needs a decision (agent-squad #104).
+#     step needs a decision (agent-squad #104). A squad command that the playbook no longer has, as
+#     after a rename (agent-squad #188), is removed, unless the project tracks it.
+for file in "$project"/.claude/commands/squad-*.md; do
+  name="$(basename "$file")"
+  [ -f "$file" ] || continue
+  [ ! -f "$playbook/commands/$name" ] || continue
+  if tracked_by_project ".claude/commands/$name"; then
+    say command "/${name%.md} is the project's own file, tracked by git, and not the squad's: left as it is"
+  elif rm -f "$file"; then
+    say command "removed /${name%.md}, which this release does not have"
+  fi
+done
 while IFS= read -r name; do
   path=".claude/commands/$name"
   if tracked_by_project "$path"; then

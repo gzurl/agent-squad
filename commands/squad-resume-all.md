@@ -10,7 +10,8 @@ would.
 
 ## If you are the CTO
 1. **Your own squad:** do what `/squad-resume` has the CTO do (`squad-resume.md`, its CTO part),
-   which stops the `caffeinate` you started for `/squad-away-all`, if it still runs, and gathers
+   which stops the `caffeinate` you started for `/squad-autopilot-all` and the stall watch, if they
+   still run, and gathers
    your squad's summary. Hold that summary for step 3.
 2. **The other squads:** list the sessions open on this machine (`ListAgents`), grouped by
    project, leaving yours out. Send each other squad's CTO one message: "The CEO is back

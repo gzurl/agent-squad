@@ -261,7 +261,7 @@ agent alone.
 | Type&nbsp;in&nbsp;the&nbsp;CTO's&nbsp;session | When | What happens |
 |---|---|---|
 | ⏸️&nbsp;`/squad-pause` | You need everything stopped at a safe point: to close the laptop, to use the machine for something else, or for any other reason | Each agent finishes what it is doing, saves where it is on GitHub, and stops. The CTO tells you when it is safe. |
-| ⏩&nbsp;`/squad-away` | You leave, and the machine stays on | The agents carry on with whatever needs no decision from you, and leave those decisions on GitHub for when you are back. |
+| ⏩&nbsp;`/squad-autopilot` | You leave, and the machine stays on | The squad holds the course you set: the agents carry on with whatever needs no decision from you, and leave those decisions on GitHub for when you are back. Every half hour, the CTO checks that no work has stalled. |
 | ▶️&nbsp;`/squad-resume` | You are back | The CTO sums up what was done, what waits for you, and the plan ahead. Paused agents pick up where they stopped. |
 
 Nothing notifies you while you are away: `/squad-resume` tells you what happened, and the issues
@@ -272,7 +272,7 @@ each agent gets a line of its own, always in the order CTO, DEV, QA, with an emo
 working, paused, free, waiting for you, or no answer. The same lines come back in every update, so
 you see at a glance who is still busy.
 
-**Several squads on the machine?** Add `-all`: `/squad-pause-all`, `/squad-away-all` and
+**Several squads on the machine?** Add `-all`: `/squad-pause-all`, `/squad-autopilot-all` and
 `/squad-resume-all`, typed in any squad's CTO session, do the same for every squad, and you get one
 answer, grouped by squad, that names any squad that did not answer.
 
@@ -329,7 +329,7 @@ To upgrade later, see [Upgrade](#-upgrade).
 The installer can run as often as you like, and it never overwrites or deletes a file your project
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
 `.claude/settings.local.json`, writes the squad's commands (`/squad-save-state`, `/squad-pause`,
-`/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-usage`, and the four `-all` ones) into
+`/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-usage`, and the four `-all` ones) into
 `.claude/commands/`, adds three lines to `.gitignore`, installs a small pre-push hook, creates the
 DEV and QA worktrees, and adds GitHub issue and pull request templates if the project has none. It
 prints every step, and ends with a *By hand* list of what it leaves to the CTO, who takes care of it
@@ -472,7 +472,7 @@ The squad turns accepted issues into its own pull requests.
 |---|---|---|
 | `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
 | `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and this guide | Yes |
-| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-away`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-away-all`, `/squad-resume-all`, `/squad-usage`, `/squad-usage-all` | Yes; the installer copies them into `.claude/commands/` |
+| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-autopilot-all`, `/squad-resume-all`, `/squad-usage`, `/squad-usage-all` | Yes; the installer copies them into `.claude/commands/` |
 | `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the session hooks, the merge gate, the checks runner, the token report and the pre-push gate | Yes |
 | `.github/ISSUE_TEMPLATE/task.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |

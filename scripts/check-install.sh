@@ -644,7 +644,7 @@ check "a missing ignore rule for the commands fails the .gitignore item" check_r
 mended "$project/.gitignore"
 
 broken "$project/.gitignore"
-echo '!.claude/commands/squad-away.md' >> "$project/.gitignore"
+echo '!.claude/commands/squad-autopilot.md' >> "$project/.gitignore"
 check "a negation of one command fails the .gitignore item" check_reports "$item_ignore"
 mended "$project/.gitignore"
 
@@ -975,5 +975,21 @@ check "a tree without the issue template skips it, saying so" \
   contains "$out" "templates  .github/ISSUE_TEMPLATE/task.md is not in the playbook, skipped"
 check "and a template of AGENTS.md without a Squad section is named, not printed" \
   contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md"
+
+# 18. A squad command the playbook no longer has, as after a rename (#188), is removed on the next
+#     install, saying so; one the project tracks is its own, and stays.
+target="$(new_project leftover-commands)" || exit 2
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+echo "an older release's command" > "$target/.claude/commands/squad-retired.md"
+echo "the project's own command" > "$target/.claude/commands/squad-own.md"
+git -C "$target" add -f .claude/commands/squad-own.md && git -C "$target" commit -qm "a command of the project's own"
+out="$("$install" "$target" "$tag_a" 2>&1)"
+code=$?
+check "an install with a leftover squad command exits 0" [ "$code" -eq 0 ]
+check "and removes it, saying so" \
+  bash -c '[ ! -e "$1/.claude/commands/squad-retired.md" ] && grep -qF "removed /squad-retired, which this release does not have" <<<"$2"' _ "$target" "$out"
+check "but keeps a squad-named command the project tracks, saying so" \
+  bash -c '[ "$(cat "$1/.claude/commands/squad-own.md")" = "the project'"'"'s own command" ] && grep -qF "/squad-own is the project'"'"'s own file, tracked by git, and not the squad'"'"'s: left as it is" <<<"$2"' _ "$target" "$out"
+check "and every command of the playbook is still there" same_commands "$target"
 
 exit "$status"
