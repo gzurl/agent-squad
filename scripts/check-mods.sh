@@ -47,6 +47,21 @@ else
   fail "mods/ does not validate as a marketplace: $out"
 fi
 
+# 1b. The plugins the installer enables by default (mods/default-plugins, agent-squad #206) are
+#     plugins of the marketplace.
+defaults="$(grep -vE '^[[:space:]]*(#|$)' "$mods/default-plugins" 2>/dev/null | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+unknown="$(while IFS= read -r name; do
+  [ -z "$name" ] || jq -e --arg name "$name" '.plugins | any(.name == $name)' "$mods/.claude-plugin/marketplace.json" >/dev/null 2>&1 \
+    || echo "$name"
+done <<<"$defaults" | tr '\n' ' ')"
+if [ -z "$defaults" ]; then
+  fail "mods/default-plugins lists no plugin"
+elif [ -n "$unknown" ]; then
+  fail "mods/default-plugins names what the marketplace does not list: $unknown"
+else
+  pass "mods/default-plugins names plugins of the marketplace: $(tr '\n' ' ' <<<"$defaults")"
+fi
+
 # 2. Each plugin it lists, from the marketplace itself; a marketplace that lists none fails.
 sources="$(jq -r '.plugins[].source' "$mods/.claude-plugin/marketplace.json" 2>/dev/null)"
 [ -n "$sources" ] || fail "mods/.claude-plugin/marketplace.json lists no plugin"

@@ -29,6 +29,8 @@ each goal is. **agent-squad** needs both.
 - 🌳 **Each agent works in its own git worktree,** so nobody steps on anyone's files.
 - 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main`, no merge
   without QA's approval.
+- 🧭 **A live board in the CTO's session:** each agent's state, how full its context is, and the
+  issue or PR it works on, with a notice when an agent waits for you.
 - ☕ **Step away and come back:** pause the squad, or put it on autopilot, which checks every half
   hour that no work has stalled, and get a summary when you return. Sessions keep the thread across
   compactions and restarts.
@@ -118,6 +120,7 @@ details).
   - [When a session's context fills up](#when-a-sessions-context-fills-up)
   - [When you step away](#when-you-step-away)
   - [How many tokens the agents use](#how-many-tokens-the-agents-use)
+  - [The squad board](#the-squad-board)
 - [📋 Requirements](#-requirements)
 - [🛠️ Install](#️-install)
 - [🔄 Upgrade](#-upgrade)
@@ -305,10 +308,28 @@ days after a session was last used. Each report also adds them to a history in
 `.agent-squad/tokens.tsv`, so they outlive the transcripts. Nothing leaves the machine. Tokens are
 not cost: most of the input is read from the cache, which is billed far below fresh input.
 
+### The squad board
+
+The CTO's session shows a pane with one line per agent of the project, in the order CTO, DEV, QA:
+whether it is working, waiting for you, idle, or silent for a few minutes, how full its context is,
+and a link to the issue or pull request it works on, which the CTO's session reads from GitHub every
+three minutes. When DEV or QA starts to wait for you, on a permission or a question, a notice pops
+up in the CTO's session, once per wait.
+
+The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
+Code 2.1.287 or later; with an older one, the squad works without it. It only reads: it never
+answers a prompt for you, and it sends nothing outside GitHub's own read calls. A session picks it
+up when it starts, so sessions already running when you upgrade show it after a restart.
+`/squad-board` opens the pane again if you closed it, and on a terminal narrower than 144 columns
+Claude Code waits for that command before it shows the pane. To turn the board off, run the
+`claude plugin disable` line the installer printed, in the main checkout; it stays off after
+upgrades.
+
 
 ## 📋 Requirements
 
-- **Claude Code**, with the three sessions on the same machine.
+- **Claude Code**, with the three sessions on the same machine; 2.1.287 or later for the
+  [squad board](#the-squad-board), which an older one goes without.
 - **A GitHub repository** for your project.
 - **The GitHub CLI, `gh`**, logged in with the `repo` and `workflow` scopes and with access to
   `gzurl/agent-squad`, which is private for now.
@@ -341,8 +362,8 @@ The installer can run as often as you like, and it never overwrites or deletes a
 owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
 `.claude/settings.local.json`, writes the squad's commands (`/squad-save-state`, `/squad-pause`,
 `/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-usage`, `/squad-watch`, and the
-four `-all` ones) into `.claude/commands/`, adds three lines to `.gitignore`, installs a small
-pre-push hook, creates the DEV and QA worktrees, and adds GitHub issue and pull request templates
+four `-all` ones) into `.claude/commands/`, enables the [squad board](#the-squad-board) for this
+project in the same settings file, adds three lines to `.gitignore`, installs a small pre-push hook, creates the DEV and QA worktrees, and adds GitHub issue and pull request templates
 if the project has none. It prints every step, and ends with a *By hand* list of what it leaves to
 the CTO, who takes care of it while following `BOOTSTRAP.md`:
 
@@ -373,7 +394,8 @@ When a new release is out, type `/squad-upgrade` in the CTO's session. The CTO t
 release the project runs, what the new one changes and whether you need to do anything, and
 installs it only when you say yes. The agents then re-read the rules that changed, so there is
 nothing else for you to do; the CTO asks you to compact the sessions only after a release that
-rewrites much of the charter. The release notes are in [CHANGELOG.md](CHANGELOG.md).
+rewrites much of the charter. The upgrade also moves the squad board to the new release, and keeps it
+off if you turned it off. The release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 
 ## 🗂️ What goes where
@@ -387,11 +409,12 @@ the installer touches only the files listed before it:
 ├── .agent-squad-checks                   in git    the checks the pre-push gate runs
 ├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
-├── .claude/settings.local.json           ignored   the squad's five hooks, next to your settings
+├── .claude/settings.local.json           ignored   the squad's five hooks and its board, next to your settings
 ├── .claude/commands/squad-*.md           ignored   the squad's eleven commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored
-    ├── playbook/          the installed release: charter, scripts, templates
+    ├── playbook/          the installed release: charter, scripts, templates, mods
+    ├── .claude-plugin/    the project's marketplace for the squad's mods, which are playbook/mods/
     ├── worktrees/         dev/ and qa/, plus one cto-<topic>/ per pull request of the CTO
     ├── handoff/           the snapshot saved before each compaction
     ├── evidence/          the files QA's reviews rely on
@@ -402,9 +425,10 @@ the installer touches only the files listed before it:
 ```
 
 An upgrade replaces `playbook/`, only once the new one is complete, and rewrites the hooks, the
-pre-push hook and `playbook.manifest`. It removes from `.claude/commands/` any `squad-*.md` the new
-release no longer has, as after a command is renamed, unless your project tracks that file. It
-leaves the rest alone. `SQUAD.md` §2.4 says who cleans up what, and when.
+pre-push hook, `playbook.manifest` and the mods' marketplace, which takes the new release's name.
+It removes from `.claude/commands/` any `squad-*.md` the new release no longer has, as after a
+command is renamed, unless your project tracks that file. It leaves the rest alone. `SQUAD.md` §2.4
+says who cleans up what, and when.
 
 
 ## ⚠️ Things to know

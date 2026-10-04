@@ -91,6 +91,7 @@ item_worktrees=".agent-squad/worktrees/dev and qa are worktrees of this reposito
 item_import="CLAUDE.md links to AGENTS.md, which imports the charter"
 item_branch="git knows the remote's default branch, the one the gate protects"
 item_lfs="Git LFS's pre-push runs from hooks/pre-push.local"
+item_mods="the squad's mods are enabled from the playbook"
 # `check_reports [<item>...]` runs --check on the project and passes when the items that fail are
 # exactly those given, with exit 1; with none given, when every item passes, with exit 0.
 check_reports() {
@@ -99,7 +100,7 @@ check_reports() {
   code=$?
   failed="$(sed -n 's/^check: FAILED  \([^:]*\):.*/\1/p' <<<"$out" | LC_ALL=C sort)"
   if [ $# -eq 0 ]; then
-    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 11 ]
+    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 12 ]
   else
     [ "$code" -eq 1 ] && [ "$failed" = "$(printf '%s\n' "$@" | LC_ALL=C sort)" ]
   fi
@@ -164,6 +165,16 @@ fi
 exit 1
 GH
 chmod +x "$lab/bin/gh"
+# Claude Code, as far as the installer is concerned: `claude --version` answers CLAUDE_STUB_VERSION,
+# 2.1.289 when it is unset, and nothing when it is "none"; every call is recorded in
+# claude-calls.txt.
+cat > "$lab/bin/claude" <<'CLAUDE'
+#!/usr/bin/env bash
+echo "$*" >> "$(dirname "$0")/../claude-calls.txt"
+[ "${CLAUDE_STUB_VERSION:-}" != none ] || exit 1
+echo "${CLAUDE_STUB_VERSION:-2.1.289} (Claude Code)"
+CLAUDE
+chmod +x "$lab/bin/claude"
 export PATH="$lab/bin:$PATH"
 
 # The upstream: this checkout's files, committed in a repository of their own, with a template of
@@ -611,7 +622,7 @@ check "and creates none" absent "$target" .agent-squad/worktrees/dev .agent-squa
 printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$project/AGENTS.md"
 ln -s AGENTS.md "$project/CLAUDE.md"
 before="$(project_state "$project")$(cat "$squad/install.log")"
-check "--check passes on a complete installation, eleven items ok" check_reports
+check "--check passes on a complete installation, twelve items ok" check_reports
 check "and changes nothing, the install log included" \
   [ "$before" = "$(project_state "$project")$(cat "$squad/install.log")" ]
 # `broken <file>` keeps a copy of a file about to be broken; `mended <file>` puts it back.
@@ -819,7 +830,7 @@ reports_on() {
   shift
   check_reports "$@"
 }
-check "and --check passes its eleven items" reports_on "$lab/on-trunk"
+check "and --check passes its twelve items" reports_on "$lab/on-trunk"
 echo "a change" >> "$lab/on-trunk/.agent-squad/worktrees/dev/.agent-squad-checks"
 git -C "$lab/on-trunk/.agent-squad/worktrees/dev" commit -qam "a change"
 errors="$(git -C "$lab/on-trunk/.agent-squad/worktrees/dev" push -q origin HEAD:refs/heads/trunk 2>&1)"
@@ -991,5 +1002,109 @@ check "and removes it, saying so" \
 check "but keeps a squad-named command the project tracks, saying so" \
   bash -c '[ "$(cat "$1/.claude/commands/squad-own.md")" = "the project'"'"'s own command" ] && grep -qF "/squad-own is the project'"'"'s own file, tracked by git, and not the squad'"'"'s: left as it is" <<<"$2"' _ "$target" "$out"
 check "and every command of the playbook is still there" same_commands "$target"
+
+# 19. The squad's mods (#206): enabled for the project alone, from the playbook, through a
+#     marketplace of the project's own in .agent-squad/, named after the project, a hash of its path
+#     and the release, written into .claude/settings.local.json with nothing fetched and nothing
+#     written outside the project; a plugin the person turned off stays off; an upgrade moves to the
+#     new release and leaves nothing of the old one; a Claude Code without mods, or a release
+#     without them, gets none, and the install still succeeds.
+target="$(new_project mods)" || exit 2
+tsquad="$(cd "$target" && pwd -P)/.agent-squad"
+tsettings="$target/.claude/settings.local.json"
+# `mods_items <project>` prints --check's lines about the mods.
+mods_items() { "$install" --check "$1" 2>&1 | grep "the squad's mods"; }
+# `release_marketplace <tree> <name>` prints what the project's marketplace must be for that tree.
+release_marketplace() {
+  jq -S --arg name "$2" '.name = $name | .plugins |= map(.source |= "./playbook/mods/" + ltrimstr("./"))' \
+    "$1/mods/.claude-plugin/marketplace.json"
+}
+mkdir -p "$lab/home" && rm -f "$lab/claude-calls.txt"
+out="$(HOME="$lab/home" "$install" "$target" "$tag_a" 2>&1)"
+code=$?
+name_a="$(jq -r '.extraKnownMarketplaces // {} | keys[0] // ""' "$tsettings")"
+check "an install with Claude Code 2.1.289 exits 0" [ "$code" -eq 0 ]
+check "and names the project's marketplace after the project, a hash of its path and the release" \
+  bash -c '[[ "$1" =~ ^agent-squad-mods-[0-9a-f]{6}-v$2$ ]]' _ "$name_a" "$version_a"
+check "declares it at .agent-squad/ and enables the default plugin under it, and nothing else of the squad's" \
+  jq_holds ".extraKnownMarketplaces == {\"$name_a\": {source: {source: \"directory\", path: \"$tsquad\"}}}
+    and .enabledPlugins == {\"squad-board@$name_a\": true}" "$tsettings"
+check "and keeps the five hooks" jq_holds "$five_hooks" "$tsettings"
+check "the marketplace in .agent-squad/ is the release's, renamed, its plugins the playbook's" \
+  [ "$(jq -S . "$tsquad/.claude-plugin/marketplace.json")" = "$(release_marketplace "$lab/va" "$name_a")" ]
+check "and the plugin it names is in the playbook" present "$tsquad/playbook/mods" squad-board/.claude-plugin/plugin.json
+check "the install says what it enabled, and how to turn it off" \
+  contains "$out" "mods       enabled for this project: squad-board (marketplace $name_a, in .agent-squad/; claude plugin disable <plugin>@$name_a --scope local turns one off)"
+check "it asked Claude Code its version, nothing else" [ "$(sort -u "$lab/claude-calls.txt")" = "--version" ]
+check "and wrote nothing in the user's home" [ -z "$(ls -A "$lab/home")" ]
+check "--check reports the mods enabled" has_line "$(mods_items "$target")" "check: ok      $item_mods"
+cp -p "$tsettings" "$lab/mods-before"
+"$install" "$target" "$tag_a" >/dev/null 2>&1
+check "a second install changes nothing in the settings" cmp -s "$lab/mods-before" "$tsettings"
+
+#     Turned off, as claude plugin disable leaves it: it stays off, on reinstall and on upgrade.
+jq --arg key "squad-board@$name_a" '.enabledPlugins[$key] = false' "$lab/mods-before" > "$tsettings"
+out="$("$install" "$target" "$tag_a" 2>&1)"
+check "a plugin turned off stays off on reinstall" jq_holds ".enabledPlugins == {\"squad-board@$name_a\": false}" "$tsettings"
+check "and the install says so" contains "$out" "enabled for this project: none; turned off, as you left them: squad-board"
+check "and --check passes, naming it" has_line "$(mods_items "$target")" "check: ok      $item_mods (squad-board turned off)"
+out="$("$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" 2>&1)"
+code=$?
+name_b="${name_a%-v*}-v${tag_b#v}"
+check "an upgrade exits 0" [ "$code" -eq 0 ]
+check "and moves to the new release's marketplace, the plugin still off, nothing of the old one left" \
+  jq_holds ".extraKnownMarketplaces == {\"$name_b\": {source: {source: \"directory\", path: \"$tsquad\"}}}
+    and .enabledPlugins == {\"squad-board@$name_b\": false}" "$tsettings"
+check "with the new release's marketplace in .agent-squad/" \
+  [ "$(jq -S . "$tsquad/.claude-plugin/marketplace.json")" = "$(release_marketplace "$lab/vb" "$name_b")" ]
+jq --arg key "squad-board@$name_b" '.enabledPlugins[$key] = true' "$tsettings" > "$lab/mods-on" && cp "$lab/mods-on" "$tsettings"
+check "turned on again, --check passes" has_line "$(mods_items "$target")" "check: ok      $item_mods"
+
+#     What --check catches, and an install mends: another release's entries, and the marketplace
+#     missing. The project's own marketplace and plugin are left as they are.
+jq '.extraKnownMarketplaces["agent-squad-other-abcdef-v1"] = {source: {source: "directory", path: "/elsewhere"}}
+  | .enabledPlugins["squad-board@agent-squad-other-abcdef-v1"] = true
+  | .extraKnownMarketplaces["team-tools"] = {source: {source: "directory", path: "/tools"}}
+  | .enabledPlugins["lint@team-tools"] = true' "$lab/mods-on" > "$tsettings"
+check "an earlier release's entries fail the mods item, named" \
+  contains "$(mods_items "$target")" "check: FAILED  $item_mods: missing: none; unexpected: agent-squad-other-abcdef-v1, squad-board@agent-squad-other-abcdef-v1; install again"
+"$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" >/dev/null 2>&1
+check "an install removes them and keeps the project's own marketplace and plugin" \
+  jq_holds "(.extraKnownMarketplaces | keys) == [\"$name_b\", \"team-tools\"]
+    and .enabledPlugins == {\"squad-board@$name_b\": true, \"lint@team-tools\": true}" "$tsettings"
+rm "$tsquad/.claude-plugin/marketplace.json"
+check "a missing marketplace fails the mods item" \
+  contains "$(mods_items "$target")" "check: FAILED  $item_mods: .agent-squad/.claude-plugin/marketplace.json is missing or not this release's"
+"$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" >/dev/null 2>&1
+check "and an install writes it again" present "$tsquad" .claude-plugin/marketplace.json
+
+#     A Claude Code without mods, or none: no mod, nothing of the squad's left in the settings,
+#     the install still a success, and --check content with it.
+for stub in 2.1.200 none; do
+  if [ "$stub" = none ]; then
+    reason="Claude Code (claude) is not installed, or its version cannot be read"
+  else
+    reason="Claude Code 2.1.200 has no mods, which need 2.1.287 or later"
+  fi
+  out="$(CLAUDE_STUB_VERSION="$stub" "$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" 2>&1)"
+  code=$?
+  check "with Claude Code '$stub', the install exits 0" [ "$code" -eq 0 ]
+  check "and says why no mod is enabled" contains "$out" "mods       SKIPPED: $reason; no mod of the squad is enabled"
+  check "and leaves none of the squad's entries, and no marketplace" \
+    bash -c 'jq -e "(.extraKnownMarketplaces | keys) == [\"team-tools\"] and .enabledPlugins == {\"lint@team-tools\": true}" "$1" >/dev/null && [ ! -e "$2" ]' \
+    _ "$tsettings" "$tsquad/.claude-plugin/marketplace.json"
+  check "and --check reports the mods skipped, as no failure" \
+    has_line "$(CLAUDE_STUB_VERSION="$stub" "$install" --check "$target" 2>&1 | grep "the squad's mods")" \
+    "check: ok      the squad's mods are skipped, since $reason"
+done
+
+#     A release with no mods (an older tag's tree): none enabled, and the entries of a release that
+#     had them removed.
+mkdir -p "$lab/vnomods" && cp -pR "$lab/vb/." "$lab/vnomods/" && rm -r "$lab/vnomods/mods"
+"$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" >/dev/null 2>&1
+out="$("$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vnomods" "$target" "$tag_b" 2>&1)"
+check "a release with no mods says so" contains "$out" "mods       SKIPPED: this release has no mods; no mod of the squad is enabled"
+check "and removes the entries of the release before it" \
+  jq_holds '(.extraKnownMarketplaces | keys) == ["team-tools"] and .enabledPlugins == {"lint@team-tools": true}' "$tsettings"
 
 exit "$status"

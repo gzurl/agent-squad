@@ -1,5 +1,34 @@
 # Changelog
 
+## v37 — 2026-10-04
+- **The squad board** (#172, #205, #206), the squad's first Claude Code mod, shown in the CTO's
+  session.
+  - One line per agent of the project, in the order CTO, DEV, QA: its state (working, waiting for
+    the CEO on a permission or a question, idle, or silent for a few minutes), its context use, and
+    a link to the issue or PR it works on, read from GitHub every three minutes.
+  - A notice in the CTO's session when DEV or QA starts to wait for the CEO, once per wait.
+  - It reads GitHub with `gh` and answers no prompt; each session publishes only its own state.
+- **This release enables the board in every project that installs it.**
+  - The installer writes a marketplace of the project's own in `.agent-squad/`, named after the
+    project and the release, whose plugin is the playbook's, and enables it in
+    `.claude/settings.local.json`, for this project alone. It fetches nothing and leaves
+    `~/.claude/settings.json` alone.
+  - The mod runs agent-squad's code inside every squad session, under the same trust as the
+    squad's hooks. The CEO's yes to `/squad-upgrade` is the consent for it, project by project.
+  - `claude plugin disable squad-board@<marketplace> --scope local`, the line the installer prints,
+    turns it off, and it stays off on later upgrades.
+  - It needs Claude Code 2.1.287 or later. With an older one, the installer skips it, says why,
+    and installs the rest.
+  - Sessions already running load it at their next start.
+- **`--check` has a twelfth item:** the board enabled from the playbook, with nothing of an earlier
+  release left; or skipped, with the reason.
+- **`scripts/squad-stalls.sh --current`** prints the issue or PR each role works on, by the rules
+  the stall watch applies, for the board.
+- **Smaller changes:**
+  - the README names agent-squad in bold and links the tools it mentions (#204), and describes the
+    board;
+  - `/squad-autopilot` and `/squad-autopilot-all` have shorter descriptions (#207).
+
 ## v36 — 2026-10-04
 - **The stall watch** (#174): `scripts/squad-stalls.sh` and `/squad-watch`, one pass in the CTO's
   session.
