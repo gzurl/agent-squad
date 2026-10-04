@@ -43,12 +43,14 @@ const ELLIPSIS = ' \u2026'
 const RULE = '\u2500'
 const RULE_COLOR = '#0A84FF'
 // Each role's name in the colour its session gets with /color (agent-squad #222): the theme key
-// Claude Code paints that colour with, in every theme. A mod cannot read a session's /color, so the
-// colours are fixed here, and the README says which /color each session takes.
-const ROLE_COLOR: Record<BoardRole, string> = {
-  CTO: 'yellow_FOR_SUBAGENTS_ONLY',
-  DEV: 'blue_FOR_SUBAGENTS_ONLY',
-  QA: 'green_FOR_SUBAGENTS_ONLY',
+// Claude Code paints that colour with, in every theme, inside the plain colour of the same name. The
+// keys are undocumented and may change in any release; a key Claude Code does not know paints
+// nothing, so the plain colour around it shows instead. A mod cannot read a session's /color, so
+// the colours are fixed here, and the README says which /color each session takes.
+const ROLE_COLOR: Record<BoardRole, { key: string; plain: string }> = {
+  CTO: { key: 'yellow_FOR_SUBAGENTS_ONLY', plain: 'yellow' },
+  DEV: { key: 'blue_FOR_SUBAGENTS_ONLY', plain: 'blue' },
+  QA: { key: 'green_FOR_SUBAGENTS_ONLY', plain: 'green' },
 }
 // The CTO's context shows from this share of its window, as the CEO decided (agent-squad #217).
 const CONTEXT_FROM = 90
@@ -404,7 +406,9 @@ export const register: Register = on => {
             <Box key={part.key}>
               {index > 0 && <Text dimColor wrap="truncate-end">{SEPARATOR}</Text>}
               <Text wrap="truncate-end">{SIGNATURE[part.key]}</Text>
-              <Text color={ROLE_COLOR[part.key]} wrap="truncate-end">{part.key}</Text>
+              <Text color={ROLE_COLOR[part.key].plain} wrap="truncate-end">
+                <Text color={ROLE_COLOR[part.key].key}>{part.key}</Text>
+              </Text>
               <Text wrap="truncate-end">{part.text.slice(SIGNATURE[part.key].length + part.key.length)}</Text>
               {part.item && <Text> </Text>}
               {part.item && (part.item.url?.startsWith('https://') ? <Link href={part.item.url}>{part.item.item}</Link> : <Text>{part.item.item}</Text>)}

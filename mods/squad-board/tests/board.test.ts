@@ -53,16 +53,18 @@ async function band($: Engine, columns = 120, hasSurvey = false) {
   const rule = (await ui.find({ key: 'rule' }))?.text ?? ''
   const ruleBelow = (await ui.find({ key: 'rule-below' }))?.text ?? ''
   const links = await ui.findAll({ type: 'Link' })
-  // The texts drawn, and the colour of the first that reads `text`.
+  // The texts drawn, the colour of the first that reads `text`, and the colours of all that do,
+  // outermost first.
   const texts = await ui.findAll({ type: 'Text' })
   const colorOf = (text: string) => texts.find(found => found.text === text)?.props.color
+  const colorsOf = (text: string) => texts.filter(found => found.text === text).map(found => found.props.color)
   // The colours of the texts that draw the rules.
   const ruleColors = rule === '' ? [] : texts.filter(found => found.text === rule).map(found => found.props.color)
   // The whole line as the person reads it, the engine's own when the board drew none; a Link's text
   // holds its href before its label.
   const whole = line?.text ?? (await ui.findAll({ type: 'Text' })).map(found => found.text).join('')
   const drawn = links.reduce((text, link) => text.replace(String(link.props.href), ''), whole)
-  return { ui, keys, part, rule, ruleBelow, ruleColors, colorOf, links, drawn }
+  return { ui, keys, part, rule, ruleBelow, ruleColors, colorOf, colorsOf, links, drawn }
 }
 
 describe('where the board is', () => {
@@ -175,14 +177,16 @@ describe('the line', () => {
     }
   })
 
-  test("each role's name in the colour its session gets with /color: the CTO yellow, DEV blue, QA green", async ($, on) => {
+  // The theme keys are undocumented: a key Claude Code does not know paints nothing, so the plain
+  // colour of the text around it shows (agent-squad #222, the live probe in its evidence).
+  test("each role's name in the colour its session gets with /color: the CTO yellow, DEV blue, QA green, the plain colour around the theme's", async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', { state: 'working' }) })
     await start($, 'CTO:proj')
     await w.clock.settle()
-    const { colorOf, drawn } = await band($)
-    expect(colorOf('CTO')).toBe('yellow_FOR_SUBAGENTS_ONLY')
-    expect(colorOf('DEV')).toBe('blue_FOR_SUBAGENTS_ONLY')
-    expect(colorOf('QA')).toBe('green_FOR_SUBAGENTS_ONLY')
+    const { colorOf, colorsOf, drawn } = await band($)
+    expect(colorsOf('CTO')).toEqual(['yellow', 'yellow_FOR_SUBAGENTS_ONLY'])
+    expect(colorsOf('DEV')).toEqual(['blue', 'blue_FOR_SUBAGENTS_ONLY'])
+    expect(colorsOf('QA')).toEqual(['green', 'green_FOR_SUBAGENTS_ONLY'])
     // The signature, the mark and the item keep the terminal's own colour.
     expect(colorOf(SIGN.DEV)).toBeUndefined()
     expect(colorOf(` ${MARK.idle}`)).toBeUndefined()
