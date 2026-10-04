@@ -253,7 +253,7 @@ it had promised another agent. **agent-squad** guards against that in three ways
    was only in the agent's head may not.
 
 **What you can do:** `/context` shows how full a session's context is. When a session passes about
-80%, type `/squad-save-state` in it: its agent writes its state on its issue and tells you when it
+90%, type `/squad-save-state` in it: its agent writes its state on its issue and tells you when it
 is ready. Then type `/compact`. If you type `/compact` without `/squad-save-state` right before it,
 a hook stops the compaction and reminds you; a second `/compact` within ten minutes goes ahead
 anyway. A compaction you choose, at a quiet moment, loses less than one that Claude Code triggers
