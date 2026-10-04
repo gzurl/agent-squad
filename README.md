@@ -8,13 +8,14 @@
   <a href="https://github.com/gzurl/agent-squad/pulls?q=is%3Apr+is%3Amerged"><img alt="PRs reviewed and merged by AI" src="https://img.shields.io/github/issues-search/gzurl/agent-squad?query=is%3Apr%20is%3Amerged&label=PRs%20reviewed%20%26%20merged%20by%20AI&color=2EA44F&style=for-the-badge&labelColor=000"></a>
 </p>
 
-**You, the human, are the CEO of a small software team of Claude Code agents.** You decide what to
-build; a CTO plans it, a developer builds it, and QA checks every change before it is merged. The
-team comes to you when a decision is yours.
+**You, the human, are the CEO of a small software team of
+[Claude Code](https://claude.com/claude-code) agents.** You decide what to build; a CTO plans it, a
+developer builds it, and QA checks every change before it is merged. The team comes to you when a
+decision is yours.
 
-The agents run on **Claude Code** and coordinate on **GitHub**: issues hold the work to do, pull
-requests carry each change and its review, and milestones show how far along each goal is.
-agent-squad needs both.
+The agents run on **Claude Code** and coordinate on **[GitHub](https://github.com)**: issues hold
+the work to do, pull requests carry each change and its review, and milestones show how far along
+each goal is. **agent-squad** needs both.
 
 
 <p align="center"><img src="docs/images/team.jpg" alt="The CEO behind the squad's three agents: the CTO, the developer and the QA" width="800"></p>
@@ -52,8 +53,8 @@ agent-squad needs both.
 
 ### 💬 What you see as the CEO
 
-Each agent works in a session of its own; here, in cmux, the CTO's on the left and DEV's and QA's on
-the right. You talk only to the CTO.
+Each agent works in a session of its own; here, in [cmux](https://cmux.com), the CTO's on the left
+and DEV's and QA's on the right. You talk only to the CTO.
 
 <p align="center"><img src="docs/images/squad-in-cmux.png" alt="The squad in cmux: the CTO's session on the left, DEV's and QA's on the right" width="900"></p>
 
@@ -72,7 +73,7 @@ Plan: now v34 (DEV finishes #119, then the version PR); next, publishing.
 
 ### 🏗️ Built by its own squad
 
-agent-squad is built by its own squad. In the 16 days up to release v36, it merged 92 pull
+**agent-squad** is built by its own squad. In the 16 days up to release v36, it merged 92 pull
 requests, every one with a QA verdict, 29 of them sent back for changes first, and it shipped 29
 releases. For a review that caught a real bug, see
 [PR #154](https://github.com/gzurl/agent-squad/pull/154), where QA found that a forked session
@@ -81,8 +82,9 @@ counted its tokens twice.
 
 ### ▶️ Quick start
 
-You need Claude Code, a GitHub repository for your project, and the GitHub CLI (`gh`) logged in
-([Requirements](#-requirements) has the details).
+You need Claude Code, a GitHub repository for your project, and the
+[GitHub CLI](https://cli.github.com) (`gh`) logged in ([Requirements](#-requirements) has the
+details).
 
 1. **Install the squad.** In your project's folder, run:
 
@@ -145,11 +147,12 @@ strict with words and grammar than about what to include and what to leave out, 
 where prompt engineering came from.
 
 With Claude Code I went through several stages: a single session in the terminal, then desktop
-interfaces, then back to the terminal (iTerm2, then tmux, Ghostty, and finally cmux, for its agent
-integration). Like almost everyone, I then tried several agents on the same repository, each on its
-own feature, and ran into the conflicts between them and the extra friction of using and managing
-Git worktrees. Several tools appeared to automate that, but I felt I was not getting all the juice
-that coding agents could give me.
+interfaces, then back to the terminal ([iTerm2](https://iterm2.com), then
+[tmux](https://github.com/tmux/tmux), [Ghostty](https://ghostty.org), and finally cmux, for its
+agent integration). Like almost everyone, I then tried several agents on the same repository, each
+on its own feature, and ran into the conflicts between them and the extra friction of using and
+managing Git worktrees. Several tools appeared to automate that, but I felt I was not getting all
+the juice that coding agents could give me.
 
 So, to be more effective, I moved to a two-role layout: a developer and a QA engineer. One builds,
 the other verifies. QA works from a different context, which keeps it from fooling itself, as the
@@ -161,7 +164,7 @@ whether the work was good enough (the famous P2s and P3s of one model reviewing 
 would get stuck in a pointless loop that only burned tokens. That brought the last step up: DEV and
 QA needed a boss, and not me, but an AI-agent CTO.
 
-That is how agent-squad's three-agent model was born. I play the CEO, or product manager, of a
+That is how **agent-squad**'s three-agent model was born. I play the CEO, or product manager, of a
 small team: a CTO, a developer and a QA. I only talk to the CTO, about vision, product, software
 stack, architecture and so on. Together we set the project's direction, and the CTO deals with the
 rest of the team and settles their disagreements. Each member works in its own local worktree, and
@@ -173,7 +176,7 @@ rules that matter most are enforced by scripts, because good intentions alone do
 method keeps changing as it is used: when an agent finds a flaw in it, the fix comes back here as a
 new release, and [CHANGELOG.md](CHANGELOG.md) says what each release changed.
 
-agent-squad is my own, very personal take on how to build software today with Git, GitHub and
+**agent-squad** is my own, very personal take on how to build software today with Git, GitHub and
 Claude Code. I am sure it has plenty of flaws and limits, which is why I am making it public, for
 anyone who wants to lend a hand and contribute.
 
@@ -231,7 +234,7 @@ disagreement between an author and QA. Every rule, with the incident that led to
 A Claude Code session has a limited context. When it fills up, Claude Code compacts it: it replaces
 the conversation with a summary, and whatever the summary leaves out is gone. Left to itself, an
 agent can come back from a compaction without knowing which pull request it was reviewing, or what
-it had promised another agent. agent-squad guards against that in three ways:
+it had promised another agent. **agent-squad** guards against that in three ways:
 
 1. **It steers the summary.** `AGENTS.md` has a *Compact instructions* section that tells Claude
    Code what every summary must keep: the agent's role, the issue and pull request it is working
@@ -408,13 +411,14 @@ leaves the rest alone. `SQUAD.md` §2.4 says who cleans up what, and when.
 
 - **Nothing goes straight to `main`.** The pre-push gate refuses it. When you approve an exception
   on an issue, the agent pushes it with `SQUAD_MAIN_EXCEPTION=#<issue> git push …`.
-- **Some tools walk into `.agent-squad/worktrees/`** from the main checkout, where the other
-  agents' copies of the project live, and pick up their files: Jest and Metro do by default, and
-  so do `grep -r` and some IDE indexers and bundlers. Exclude `.agent-squad/` in each tool's
-  configuration with a pattern anchored at the project root: the worktrees live inside
-  `.agent-squad/`, so an unanchored pattern also excludes a worktree's own files when the tool runs
-  there. `templates/AGENTS.md` has the settings for common tools, and the CTO checks them while
-  setting up. Leave `.agent-squad` out of Watchman's `ignore_dirs`: a worktree's watch reuses the
+- **Some tools walk into `.agent-squad/worktrees/`** from the main checkout, where the other agents'
+  copies of the project live, and pick up their files: [Jest](https://jestjs.io) and
+  [Metro](https://metrobundler.dev) do by default, and so do `grep -r` and some IDE indexers and
+  bundlers. Exclude `.agent-squad/` in each tool's configuration with a pattern anchored at the
+  project root: the worktrees live inside `.agent-squad/`, so an unanchored pattern also excludes a
+  worktree's own files when the tool runs there. `templates/AGENTS.md` has the settings for common
+  tools, and the CTO checks them while setting up. Leave `.agent-squad` out of
+  [Watchman](https://facebook.github.io/watchman/)'s `ignore_dirs`: a worktree's watch reuses the
   main checkout's. TypeScript, pytest and mypy skip hidden folders by default, and `rg` and ruff
   respect `.gitignore`.
 - **`git worktree remove` refuses a worktree with modified or untracked files**, though ignored
@@ -422,13 +426,13 @@ leaves the rest alone. `SQUAD.md` §2.4 says who cleans up what, and when.
   it once you are sure it is not needed, and only then use `--force`.
 - **Never run `git clean -d` with `-x` or `-X` in the main checkout.** It deletes the playbook, the
   snapshots, the evidence and `.claude/settings.local.json`, and with `-ff` the worktrees too.
-- **A project that uses Git LFS runs LFS's pre-push hook from `.git/hooks/pre-push.local`.** The
-  squad's shim owns `.git/hooks/pre-push`, so `git lfs install` cannot add LFS's hook there, and a
-  push would send pointers without their files. Put `git lfs pre-push "$@"` in an executable
-  `.git/hooks/pre-push.local`, which the shim runs first. A project that had LFS's hook before the
-  install already has it there. Files pushed before the hook was in place reached the remote as
-  pointers: `git lfs push --all origin` uploads what the remote lacks. `--check` shows an item for
-  it when a `.gitattributes` of the project has `filter=lfs`.
+- **A project that uses [Git LFS](https://git-lfs.com) runs LFS's pre-push hook from
+  `.git/hooks/pre-push.local`.** The squad's shim owns `.git/hooks/pre-push`, so `git lfs install`
+  cannot add LFS's hook there, and a push would send pointers without their files. Put `git lfs
+  pre-push "$@"` in an executable `.git/hooks/pre-push.local`, which the shim runs first. A project
+  that had LFS's hook before the install already has it there. Files pushed before the hook was in
+  place reached the remote as pointers: `git lfs push --all origin` uploads what the remote lacks.
+  `--check` shows an item for it when a `.gitattributes` of the project has `filter=lfs`.
 - **`gh issue list --label` silently returns nothing** for a label whose emoji is made of several
   characters, as the owner labels and `needs-ceo` are. Filter on GitHub's web page, or with
   `gh issue list --state open --limit 1000 --json number,title,labels` and `jq`; without
@@ -444,8 +448,8 @@ so that you are not dragged into them.
 **How many tokens does it use?** Three Claude Code sessions per project. `/squad-usage` shows each
 agent's tokens; most of the input is read from the cache, which costs far less.
 
-**Does it work with Codex, Cursor or other tools?** Not today. agent-squad relies on these Claude
-Code features, and another tool would need an equivalent of each:
+**Does it work with Codex, Cursor or other tools?** Not today. **agent-squad** relies on these
+Claude Code features, and another tool would need an equivalent of each:
 
 - sessions that message each other, and a list of the sessions open on the machine, with whether
   each is busy, idle or waiting;
@@ -492,6 +496,6 @@ The squad turns accepted issues into its own pull requests.
 
 ## 📄 License
 
-agent-squad is released under the [MIT License](LICENSE): use it, change it and share it freely,
+**agent-squad** is released under the [MIT License](LICENSE): use it, change it and share it freely,
 keeping the copyright notice and the license text with it. If it shapes how your team works, a link
 back is appreciated.
