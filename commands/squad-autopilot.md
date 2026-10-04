@@ -1,5 +1,5 @@
 ---
-description: The CEO is away and the machine stays on; the squad holds the course, parking every decision on GitHub (agent-squad)
+description: The CEO is away, the machine stays on; the squad goes on and parks decisions on GitHub (agent-squad)
 ---
 The CEO is away and leaves the machine on, and the squad flies on autopilot: it holds the course
 the CEO set, carries on with the work that needs no decision from the CEO, and parks every such
