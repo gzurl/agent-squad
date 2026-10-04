@@ -100,7 +100,9 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   project takes the new version.
 
 ## Stack and commands
-- bash, git ≥ 2.31, `jq`, `gh`, and `uv` (the checks run shellcheck through `uvx`).
+- bash, git ≥ 2.31, `jq`, `gh`, `uv` (the checks run shellcheck through `uvx`), and Claude Code
+  2.1.287 or later, the first with mods (`scripts/check-mods.sh` runs `claude plugin validate` and
+  `claude plugin test` on [mods/](mods), with a home of its own; CI pins the version it installs).
 - The checks are exactly the lines of [.agent-squad-checks](.agent-squad-checks); run them all
   with `scripts/squad-checks.sh`, and CI runs the same checks (shellcheck from apt instead of
   `uvx`). The pre-push gate and the compaction hooks are the installed release's, as in any

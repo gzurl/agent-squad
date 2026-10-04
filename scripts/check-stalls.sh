@@ -260,4 +260,34 @@ else
   fail "a checkout without the squad: exit $code, said '$out'"
 fi
 
+# 9. --current prints each role's current item for the squad board (agent-squad #205): the item
+#    whose next step it owns with the latest activity, a declared wait included; failing one, the
+#    PR it authored that waits on someone else. QA owns the reviews of #1, #4 (needs-ceo, the
+#    latest) and #5; DEV owns the merge of #2 and the issue #10, the later; the CTO owns nothing,
+#    and authored #5.
+rm -f "$state"
+github "[$(pr 1 DEV "$head1" 40),$(pr 2 DEV "$head1" 50),$(pr 4 DEV "$head1" 5 | labelled "$needs_ceo"),$(pr 5 CTO "$head1" 60)]" \
+  "[$(issue 10 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 20)]"
+review "$head1" APPROVED > "$lab/gh/reviews-2.json"
+run 0 --current
+finds "--current prints each role's item: its own next step with the latest activity, else its PR that waits" "$(
+  tsv CTO "PR #5" https://github.com/o/r/pull/5 "wait for QA to review its head 1111111"
+  tsv DEV "#10" https://github.com/o/r/issues/10 "carry on with it"
+  tsv QA "PR #4" https://github.com/o/r/pull/4 "review its head 1111111")"
+if [ ! -e "$state" ]; then pass "--current keeps no records"; else fail "--current wrote $(cat "$state")"; fi
+github "[]" "[$(issue 10 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 20)]"
+mkdir "$state"
+run 0 --current
+rmdir "$state"
+finds "a role with no item has no line, and a directory where the records go does not matter" \
+  "$(tsv DEV "#10" https://github.com/o/r/issues/10 "carry on with it")"
+GH_FAIL="prs" run 0 --current
+if [ "$code" -eq 1 ] && [ -z "$out" ] && [[ "$err" == "squad-stalls: cannot read the open pull requests; nothing was checked" ]]; then
+  pass "--current with GitHub unreadable is an error, exit 1"
+else
+  fail "--current with GitHub unreadable: exit $code, printed '$out', said '$err'"
+fi
+run 0 --current --session DEV=idle
+if [ "$code" -eq 2 ]; then pass "--current with --session is bad usage, exit 2"; else fail "--current with --session: exit $code, said '$err'"; fi
+
 exit "$status"
