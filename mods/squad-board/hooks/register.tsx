@@ -125,16 +125,32 @@ function itemAt(text: string): BoardItem | null {
   return { item: `${found[3] === 'pull' ? 'PR' : 'Issue'} #${found[4]}`, url: `https://github.com/${found[1]}/${found[2]}/${found[3]}/${found[4]}` }
 }
 
+// A command without the bodies of its heredocs: each line after a `<<WORD` or `<<-WORD`, the word
+// quoted or not, up to the line that holds the word alone. A here-string (`<<<`) has no body.
+function withoutHeredocs(command: string): string {
+  const kept: string[] = []
+  const ends: string[] = []
+  for (const line of command.split('\n')) {
+    if (ends.length > 0) {
+      if (line.trim() === ends[0]) ends.shift()
+      continue
+    }
+    kept.push(line)
+    for (const found of line.matchAll(/(?<!<)<<(?!<)-?\s*(['"]?)([A-Za-z_]\w*)\1/g)) ends.push(found[2])
+  }
+  return kept.join('\n')
+}
+
 // The issue or PR a gh command acts on (agent-squad #222): the first `gh issue` or `gh pr` the
-// command runs, at its start or after a separator, with its quoted text left out, so that a body or
-// a title is never read as a command or as its target.
+// command runs, at its start or after a separator, with its heredoc bodies and its quoted text left
+// out, so that a body or a title is never read as a command or as its target.
 // - issue edit, comment, view or close, and pr view, checkout, review, comment, merge or edit:
 //   their first number or GitHub address, flags before it or not; `--repo owner/name` names
 //   another repository than the session's;
 // - pr create: the address of the new PR, which gh prints.
 // Null for any other command, and for one that names no number.
 function itemOf(command: string, output: string, home: string | null): BoardItem | null {
-  const bare = command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, "''")
+  const bare = withoutHeredocs(command).replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, "''")
   const call = /(?:^|[\n;&|(]\s*)(?:rtk\s+)?gh\s+(issue|pr)\s+([a-z]+)\b([^\n;&|)]*)/.exec(bare)
   if (!call) return null
   const [, noun, verb, rest] = call
@@ -150,11 +166,12 @@ function itemOf(command: string, output: string, home: string | null): BoardItem
 }
 
 // The step-away commands of SQUAD.md §6 a prompt carries, typed (the prompt starts with the
-// command) or relayed (the relay names it in parentheses, as `(`/squad-pause`)`): a pause sets the
-// session's pause; a resume, or autopilot, clears it. Each command's own file names only itself that
-// way, so an expanded command reads the same. Null for any other prompt.
+// command) or relayed (the relay names it in parentheses, then a colon and its instruction, as
+// `(`/squad-pause`): follow`): a pause sets the session's pause; a resume, or autopilot, clears it.
+// A message that only quotes the form, with no colon after it, is no relay. Each command's own file
+// names only itself that way, so an expanded command reads the same. Null for any other prompt.
 function stepAwayOf(text: string): 'pause' | 'clear' | null {
-  const found = /^\s*\/squad-(pause|resume|autopilot)(?:-all)?\b/.exec(text) ?? /\(`\/squad-(pause|resume|autopilot)(?:-all)?`\)/.exec(text)
+  const found = /^\s*\/squad-(pause|resume|autopilot)(?:-all)?\b/.exec(text) ?? /\(`\/squad-(pause|resume|autopilot)(?:-all)?`\):/.exec(text)
   if (!found) return null
   return found[1] === 'pause' ? 'pause' : 'clear'
 }

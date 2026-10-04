@@ -188,6 +188,49 @@ describe('the item: the issue or PR its session last acted on with gh (agent-squ
     })
   }
 
+  // QA's cases on PR #223: a heredoc body, as the agents write most bodies, is no command and no
+  // quote, whatever its apostrophes or its lines say.
+  const heredocs: [string, string[], { item: string; url: string | null }][] = [
+    ['an apostrophe in a heredoc, then gh pr edit and a single-quoted jq filter (QA-H1)', [
+      'cat > "$S/body.md" <<\'EOF\'',
+      '**QA:** the CTO\'s decline holds by default.',
+      'EOF',
+      'gh pr edit 216 --add-label "x" && gh pr view 216 --json labels --jq \'[.labels[].name]\'',
+    ], pr(216)],
+    ['a heredoc line that starts with gh pr merge, then the real call (QA-H2)', [
+      'cat > notes.md <<\'EOF\'',
+      'gh pr merge 9 is how DEV merges, after the gate',
+      'EOF',
+      'gh pr view 216 --json headRefOid',
+    ], pr(216)],
+    ['a closed single-quoted body, then gh pr comment (QA-H3)', [
+      "printf '%s\\n' '**QA:** waiting since 21:15, the CTO\\'s call' > wait.md && gh pr comment 221 --body-file wait.md",
+    ], pr(221)],
+    ['an unquoted heredoc word, and a gh call in its body', [
+      'cat > a.md <<EOF', 'gh issue view 1', 'EOF', 'gh issue comment 230 --body-file a.md',
+    ], issue(230)],
+    ['a <<- heredoc whose end is indented with a tab', [
+      'cat > a.md <<-"END"', '\tgh pr view 2', '\tEND', 'gh pr review 231 --comment --body-file a.md',
+    ], pr(231)],
+    ['two heredocs on one line, each body left out in turn', [
+      'diff <(cat <<A) <(cat <<B)', 'gh pr view 3', 'A', 'gh pr view 4', 'B', 'gh pr view 232',
+    ], pr(232)],
+    ['a here-string has no body: the next line is a command', [
+      'tr a-z A-Z <<<hello', 'gh pr view 233',
+    ], pr(233)],
+    ['gh pr create from a heredoc body: the PR gh prints', [
+      'gh pr create --title "x" --body-file - <<\'EOF\'', 'Closes #5; gh pr view 6', 'EOF',
+    ], pr(40)],
+  ]
+  for (const [name, lines, item] of heredocs) {
+    test(name, async ($, on) => {
+      const w = world(on)
+      await start($, 'QA:proj')
+      await runs($, w, lines.join('\n'), 'https://github.com/o/r/pull/40\n')
+      expect(w.store.get('proj/QA')).toMatchObject({ item })
+    })
+  }
+
   test('gh pr create: the new PR, from the address gh prints', async ($, on) => {
     const w = world(on)
     await start($, 'DEV:proj')
@@ -313,7 +356,9 @@ describe('the pause (agent-squad #222)', () => {
     await start($, 'DEV:proj')
     for (const text of [
       'set by `/squad-pause` or `-all`, typed or relayed', 'please do not /squad-pause yet', '/squad-pauses',
-      '/squad-save-state', '/squad-watch', '(`/squad-paused`)',
+      '/squad-save-state', '/squad-watch', '(`/squad-paused`):',
+      // QA's case on PR #223 (QA-P1): a message that quotes the relay form, with no colon after it.
+      'DEV: in PR #223 the relay names the command as "(`/squad-pause`)", and check-mods checks it.',
     ]) {
       await says($, text)
       expect(w.store.get('proj/DEV')).toMatchObject({ paused: false })

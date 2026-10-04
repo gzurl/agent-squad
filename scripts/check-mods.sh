@@ -61,17 +61,17 @@ else
 fi
 
 # 1c. The board tells a pause from the step-away command a prompt carries (agent-squad #222): typed,
-#     the prompt starts with it; relayed, the relay names it in parentheses, "(`/squad-pause`)". Each
-#     step-away command's file names itself that way, and no other, so that the relay it sends, and
-#     the command expanded, read as that command alone.
+#     the prompt starts with it; relayed, the relay names it in parentheses, then a colon and its
+#     instruction, "(`/squad-pause`): ". Each step-away command's file names itself that way, and no
+#     other, so that the relay it sends, and the command expanded, read as that command alone.
 for name in pause pause-all resume resume-all autopilot autopilot-all; do
   file="$root/commands/squad-$name.md"
   # shellcheck disable=SC2016 # the backquotes are the relay's own, not a command
-  named="$(grep -oE '\(`/squad-(pause|resume|autopilot)(-all)?`\)' "$file" 2>/dev/null | sort -u | paste -sd ' ' -)"
-  if [ "$named" = "(\`/squad-$name\`)" ]; then
-    pass "commands/squad-$name.md relays itself as (\`/squad-$name\`), and no other step-away command"
+  named="$(grep -oE '\(`/squad-(pause|resume|autopilot)(-all)?`\):' "$file" 2>/dev/null | sort -u | paste -sd ' ' -)"
+  if [ "$named" = "(\`/squad-$name\`):" ]; then
+    pass "commands/squad-$name.md relays itself as (\`/squad-$name\`):, and no other step-away command"
   else
-    fail "commands/squad-$name.md names ${named:-no step-away command} in parentheses, not (\`/squad-$name\`) alone: the board would not tell its pause"
+    fail "commands/squad-$name.md names ${named:-no step-away command} in parentheses with a colon, not (\`/squad-$name\`): alone: the board would not tell its pause"
   fi
 done
 
