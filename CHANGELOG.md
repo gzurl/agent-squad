@@ -1,5 +1,27 @@
 # Changelog
 
+## v38 — 2026-10-04
+- **The squad board is one line above the CTO's prompt,** instead of a side pane (#212). The CEO
+  chose it after seeing v37's pane take a narrow column of the CTO's session.
+  - The line reads `💤 CTO 42% │ ⏳ DEV 68% #205 │ ✋ QA 33% PR #208`, in the order CTO, DEV, QA.
+  - On a narrow terminal it is cut at its end, so the CTO's part always shows first.
+  - An agent with no state, or a state older than three minutes, shows `❓`. When GitHub cannot be
+    read, the line says so, with no links.
+  - The `/squad-board` command, which only reopened the pane, is gone.
+  - The states, the notices and what is read are unchanged. Sessions already running load the new
+    board at their next start.
+- **The installer** (#210):
+  - it leaves alone a project's own marketplace whose name starts with `agent-squad-`, since only
+    the `agent-squad-…-v<N>` ones are the squad's;
+  - when a default plugin is off, it prints how to turn it back on
+    (`claude plugin enable <plugin>@<marketplace> --scope local`).
+- **The README:**
+  - *The squad board* describes the line and how to turn the board off and on;
+  - *Features* names the line, and the FAQ lists mods among the Claude Code features the squad
+    relies on, as one it can do without;
+  - *What comes next?* no longer announces the board;
+  - the squad's record is recomputed up to v38.
+
 ## v37 — 2026-10-04
 - **The squad board** (#172, #205, #206), the squad's first Claude Code mod, shown in the CTO's
   session.
