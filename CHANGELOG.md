@@ -10,13 +10,12 @@
   - The `/squad-board` command, which only reopened the pane, is gone.
   - The states, the notices and what is read are unchanged. Sessions already running load the new
     board at their next start.
-- **The installer** (#210):
-  - it leaves alone a project's own marketplace whose name starts with `agent-squad-`, since only
-    the `agent-squad-…-v<N>` ones are the squad's;
-  - when a default plugin is off, it prints how to turn it back on
-    (`claude plugin enable <plugin>@<marketplace> --scope local`).
+- **The installer** (#210): when a default plugin is off, it prints how to turn it back on
+  (`claude plugin enable <plugin>@<marketplace> --scope local`). A test now pins that it leaves
+  alone a project's own marketplace whose name starts with `agent-squad-`, as v37 already did.
 - **The README:**
-  - *The squad board* describes the line and how to turn the board off and on;
+  - *The squad board* describes the line and how to turn the board off and on, and says that only
+    the marketplaces named `agent-squad-…-v<N>` are the squad's;
   - *Features* names the line, and the FAQ lists mods among the Claude Code features the squad
     relies on, as one it can do without;
   - *What comes next?* no longer announces the board;
