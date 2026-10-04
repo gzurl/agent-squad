@@ -3,9 +3,17 @@ import type { Engine } from 'claude-code/testing'
 
 import { asks, START, start, world } from './world'
 
-// The board in the CTO's session (agent-squad #205): one line per agent of its own project, in
-// the order CTO, DEV, QA, with its state, its context use and a link to its item on GitHub; a toast
-// when an agent turns to wait for the CEO, once per wait.
+// The board in the CTO's session (agent-squad #205, #212): one line above the prompt, with each
+// agent of its own project in the order CTO, DEV, QA, its state, its context use and a link to its
+// item on GitHub, cut at the end where the terminal is narrow; a toast when an agent turns to wait
+// for the CEO, once per wait.
+
+// How many cells a text takes on a terminal: the state marks two, any other character one.
+function cells(text: string): number {
+  let width = 0
+  for (const char of text) width += ['\u23F3', '\u270B', '\u{1F4A4}', '\u2753'].includes(char) ? 2 : 1
+  return width
+}
 
 // A key as another session of the squad writes it.
 function agent(role: string, project: string, fields: Record<string, unknown> = {}) {
@@ -22,56 +30,68 @@ const CURRENT = [
   'CTO\t#1\tjavascript:alert(1)\tnot a link',
 ].join('\n') + '\n'
 
-// The board as the CTO's terminal draws it: each role's line, by its key, and the whole text.
-async function board($: Engine) {
+// The band as a terminal of `columns` cells draws it above the CTO's prompt: each agent's part by
+// its key, the keys in order, the links, and the whole line.
+async function band($: Engine, columns = 120, hasSurvey = false) {
   const ui = await $.ui.mount({
-    plugin: 'squad-board', surface: 'terminal', component: 'Pane', requestId: 'squad-board',
-    props: { title: 'Squad board', isFocused: false, bodyColumns: 100, placement: 'dock' } as any,
+    plugin: 'squad-board', surface: 'terminal', component: 'AbovePrompt',
+    props: { hasSurvey, isWorking: false, maxRows: 10, bodyColumns: columns } as any,
   })
-  const rows = await ui.findAll({ type: 'Box' })
-  const line = async (role: string) => (await ui.find({ key: role }))?.text ?? ''
-  return { ui, keys: rows.map(row => row.key).filter(key => key !== undefined), line, links: await ui.findAll({ type: 'Link' }) }
+  const boxes = await ui.findAll({ type: 'Box' })
+  const part = async (role: string) => (await ui.find({ key: role }))?.text ?? ''
+  const links = await ui.findAll({ type: 'Link' })
+  // The whole line as the person reads it, the engine's own when no Box was drawn; a Link's text
+  // holds its href before its label.
+  const whole = boxes[0]?.text ?? (await ui.findAll({ type: 'Text' })).map(found => found.text).join('')
+  const drawn = links.reduce((text, link) => text.replace(String(link.props.href), ''), whole)
+  return { ui, keys: boxes.map(box => box.key).filter(key => key !== undefined), part, links, drawn }
 }
 
 describe('where the board is', () => {
-  test("the CTO's session opens it, and offers /squad-board to open it again", async ($, on) => {
+  test("above the CTO's prompt, with no pane and no command", async ($, on) => {
     const w = world(on)
     await start($, 'CTO:proj')
-    expect(w.opened).toEqual(['squad-board'])
-    expect(w.commands).toEqual(['squad-board'])
+    expect(w.opened).toEqual([])
+    expect(w.commands).toEqual([])
+    expect((await band($)).keys).toEqual(['CTO', 'DEV', 'QA'])
   })
 
-  test('the sessions of DEV and QA have no board', async ($, on) => {
+  test('the sessions of DEV and QA leave the band to the engine', async ($, on) => {
     const w = world(on)
     await start($, 'DEV:proj')
-    await start($, 'QA:proj')
+    const { keys, drawn } = await band($)
+    expect(keys).toEqual([])
+    expect(drawn).toBe('drawn by the engine')
     expect(w.opened).toEqual([])
     expect(w.commands).toEqual([])
   })
+
+  test('a survey that holds the band goes first', async ($, on) => {
+    world(on)
+    await start($, 'CTO:proj')
+    const { keys, drawn } = await band($, 120, true)
+    expect(keys).toEqual([])
+    expect(drawn).toBe('drawn by the engine')
+  })
 })
 
-describe('the lines', () => {
-  test("one per agent of the project, in the order CTO, DEV, QA; another project's never", async ($, on) => {
+describe('the line', () => {
+  test("each agent of the project, in the order CTO, DEV, QA, between bars; another project's never", async ($, on) => {
     const w = world(on, {
-      'proj/DEV': agent('DEV', 'proj', { state: 'working' }),
-      'proj/QA': agent('QA', 'proj', { state: 'question', context: 61 }),
+      'proj/DEV': agent('DEV', 'proj', { state: 'working', context: 68 }),
+      'proj/QA': agent('QA', 'proj', { state: 'question', context: 33 }),
       'other/DEV': agent('DEV', 'other', { state: 'permission', tool: 'Bash' }),
       'other/CTO': agent('CTO', 'other'),
     })
     w.current = CURRENT
     await start($, 'CTO:proj')
     await w.clock.settle()
-    const { keys, line } = await board($)
+    const { keys, part, drawn } = await band($)
     expect(keys).toEqual(['CTO', 'DEV', 'QA'])
-    expect(await line('CTO')).toContain('idle')
-    expect(await line('CTO')).toContain('ctx 42%')
-    expect(await line('DEV')).toContain('\u23F3')
-    expect(await line('DEV')).toContain('working')
-    expect(await line('DEV')).toContain('ctx 30%')
-    expect(await line('DEV')).not.toContain('permission')
-    expect(await line('QA')).toContain('\u270B')
-    expect(await line('QA')).toContain('waits for you: a question')
-    expect(await line('QA')).toContain('ctx 61%')
+    expect(await part('CTO')).toBe('\u{1F4A4} CTO 42%')
+    expect(await part('DEV')).toBe(' \u2502 \u23F3 DEV 68% https://github.com/o/r/issues/205#205')
+    expect(await part('QA')).toBe(' \u2502 \u270B QA 33% https://github.com/o/r/pull/210PR #210')
+    expect(drawn).toBe('\u{1F4A4} CTO 42% \u2502 \u23F3 DEV 68% #205 \u2502 \u270B QA 33% PR #210')
   })
 
   test('each links the item it works on, from squad-stalls.sh --current; a URL that is not https is no link', async ($, on) => {
@@ -79,12 +99,11 @@ describe('the lines', () => {
     w.current = CURRENT
     await start($, 'CTO:proj')
     await w.clock.settle()
-    const { line, links } = await board($)
+    const { part, links } = await band($)
     // A Link's text is its href, then its label.
     expect(links.map(link => link.props.href)).toEqual(['https://github.com/o/r/issues/205', 'https://github.com/o/r/pull/210'])
     expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['#205', 'PR #210'])
-    expect(await line('DEV')).toContain('carry on with it')
-    expect(await line('CTO')).not.toContain('not a link')
+    expect(await part('CTO')).not.toContain('#1')
     expect(w.runs).toEqual([
       ['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'],
       ['/work/proj/.agent-squad/playbook/scripts/squad-stalls.sh', '--current'],
@@ -95,23 +114,23 @@ describe('the lines', () => {
     const w = world(on)
     await start($, 'CTO:proj')
     await w.clock.settle()
-    await (await board($)).ui.unmount()
-    await board($)
+    await (await band($)).ui.unmount()
+    await band($)
     expect(w.runs).toHaveLength(2)
     await w.clock.advance(180_000)
     expect(w.runs).toHaveLength(4)
   })
 
-  test('GitHub unreadable: the lines stay, without links, and the board says why', async ($, on) => {
+  test('GitHub unreadable: the agents stay, without links, and the line ends with why', async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj') })
     w.currentExit = 1
     await start($, 'CTO:proj')
     await w.clock.settle()
-    const { ui, links, line } = await board($)
+    const { keys, links, part } = await band($, 200)
     expect(links).toEqual([])
-    expect(await line('DEV')).toContain('idle')
-    expect((await ui.findAll({ type: 'Text', text: 'GitHub not read' })).map(found => found.text))
-      .toEqual(['GitHub not read: squad-stalls: cannot read the open pull requests; nothing was checked'])
+    expect(keys).toEqual(['CTO', 'DEV', 'QA', 'github'])
+    expect(await part('DEV')).toBe(' \u2502 \u{1F4A4} DEV 30%')
+    expect(await part('github')).toBe(' \u2502 GitHub not read: squad-stalls: cannot read the open pull requests; nothing was checked')
   })
 
   // QA's case on PR #208: links read once may no longer hold when the next read fails.
@@ -120,35 +139,73 @@ describe('the lines', () => {
     w.current = CURRENT
     await start($, 'CTO:proj')
     await w.clock.settle()
-    const first = await board($)
+    const first = await band($)
     expect(first.links).toHaveLength(2)
     await first.ui.unmount()
     w.currentExit = 1
     await w.clock.advance(180_000)
-    const { ui, links, line } = await board($)
+    const { links, part, keys } = await band($, 200)
     expect(links).toEqual([])
-    expect(await line('DEV')).toContain('idle')
-    expect(await ui.findAll({ type: 'Text', text: 'GitHub not read' })).toHaveLength(1)
+    expect(await part('DEV')).toContain('DEV 30%')
+    expect(keys).toContain('github')
   })
 
-  test('a key older than three minutes reads unknown, and a role with no key too', async ($, on) => {
+  test('a key older than three minutes shows the unknown mark and the role alone, and so does a role with no key', async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', at: START - 240_000 }) })
     await start($, 'CTO:proj')
     await w.clock.settle()
-    const { line } = await board($)
-    expect(await line('DEV')).toContain('\u2753')
-    expect(await line('DEV')).toContain('no sign for 4 min')
-    expect(await line('QA')).toContain('\u2753')
-    expect(await line('QA')).toContain('no session seen')
+    const { part } = await band($)
+    expect(await part('DEV')).toBe(' \u2502 \u2753 DEV')
+    expect(await part('QA')).toBe(' \u2502 \u2753 QA')
   })
 
-  test('a line follows its key: the board rereads the keys every few seconds', async ($, on) => {
+  test('a part follows its key: the board rereads the keys every few seconds', async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj') })
     await start($, 'CTO:proj')
     w.store.set('proj/DEV', agent('DEV', 'proj', { state: 'permission', tool: 'Bash', at: START + 2_000 }))
     await w.clock.advance(3_000)
-    const { line } = await board($)
-    expect(await line('DEV')).toContain('waits for you: a permission for Bash')
+    const { part } = await band($)
+    expect(await part('DEV')).toBe(' \u2502 \u270B DEV 30%')
+  })
+
+  test('on a narrow terminal the line is cut at its end: the CTO first and whole, then only whole parts', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { context: 68 }), 'proj/QA': agent('QA', 'proj') })
+    w.current = CURRENT
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    // The CTO's part takes 10 cells (its mark two); DEV's 3 more for the bar and 15 for itself, its
+    // link included; QA's 20, its link included; the ellipsis 2. DEV shows from 30 columns, with room
+    // for the ellipsis, and the whole line from 48.
+    const wide = await band($, 30)
+    expect(wide.keys).toEqual(['CTO', 'DEV'])
+    expect(wide.drawn).toBe('\u{1F4A4} CTO 42% \u2502 \u{1F4A4} DEV 68% #205 \u2026')
+    await wide.ui.unmount()
+    const narrow = await band($, 29)
+    expect(narrow.keys).toEqual(['CTO'])
+    expect(narrow.drawn).toBe('\u{1F4A4} CTO 42% \u2026')
+    await narrow.ui.unmount()
+    const whole = await band($, 48)
+    expect(whole.keys).toEqual(['CTO', 'DEV', 'QA'])
+    expect(whole.drawn.endsWith('\u2026')).toBe(false)
+    await whole.ui.unmount()
+    const tiny = await band($, 4)
+    expect(tiny.keys).toEqual(['CTO'])
+    expect(tiny.drawn).toBe('\u{1F4A4} CTO 42%')
+  })
+
+  // QA's case on PR #213: the ellipsis must fit too.
+  test('the line drawn never takes more cells than the band has, once the CTO part fits', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { context: 68 }), 'proj/QA': agent('QA', 'proj') })
+    w.current = CURRENT
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    const over: string[] = []
+    for (let columns = 10; columns <= 60; columns++) {
+      const { ui, drawn } = await band($, columns)
+      if (cells(drawn) > columns) over.push(`${columns}: ${cells(drawn)} cells, ${drawn}`)
+      await ui.unmount()
+    }
+    expect(over).toEqual([])
   })
 })
 

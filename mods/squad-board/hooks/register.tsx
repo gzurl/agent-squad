@@ -3,14 +3,13 @@ import type { Register } from 'claude-code'
 
 import type { BoardAgent, BoardAgents, BoardItem, BoardItems, BoardRole, BoardState } from '../types'
 
-// The squad board (agent-squad #205). Every session of a squad publishes its own state in this
-// mod's store, under `<project>/<role>`, and only that key; the CTO's session reads its project's
-// keys and draws one line per agent, with a link to the item GitHub says it works on, and shows a
-// toast when an agent waits for the CEO. A session whose name is not a squad role's does nothing.
-// The signals are the ones agent-squad #199 measured.
+// The squad board (agent-squad #205, #212). Every session of a squad publishes its own state in
+// this mod's store, under `<project>/<role>`, and only that key; the CTO's session reads its
+// project's keys and draws them on one line above its prompt, each agent with a link to the item
+// GitHub says it works on, and shows a toast when an agent waits for the CEO. A session whose name
+// is not a squad role's does nothing. The signals are the ones agent-squad #199 measured.
 
 const ROLES: readonly BoardRole[] = ['CTO', 'DEV', 'QA']
-const BOARD = 'squad-board'
 // How often a session rewrites its key, and how old a key may grow before its line reads unknown.
 const HEARTBEAT_MS = 60_000
 const STALE_MS = 180_000
@@ -22,6 +21,11 @@ const GITHUB_MS = 180_000
 const MARK: Record<BoardState | 'unknown', string> = {
   working: '\u23F3', permission: '\u270B', question: '\u270B', idle: '\u{1F4A4}', unknown: '\u2753',
 }
+// The marks take two cells of a terminal, every other character of the band one. Between two
+// agents, a light vertical bar; where the band is cut, an ellipsis.
+const WIDE = new Set(Object.values(MARK))
+const SEPARATOR = ' \u2502 '
+const ELLIPSIS = ' \u2026'
 
 const agents = atom({ plugin: 'squad-board', key: 'agents' } as const, { byRole: {}, now: 0 } as BoardAgents)
 const items = atom({ plugin: 'squad-board', key: 'items' } as const, { byRole: {}, readAt: null, error: null } as BoardItems)
@@ -76,15 +80,38 @@ function waitText(agent: BoardAgent): string {
   return agent.state === 'question' ? 'a question' : `a permission for ${agent.tool ?? 'a tool'}`
 }
 
-// One agent's line on the board: its mark, what it does, and its context use.
-function lineOf(agent: BoardAgent | undefined, now: number): { mark: string; text: string; context: string } {
-  if (!agent) return { mark: MARK.unknown, text: 'no session seen', context: '' }
-  const context = agent.context === null ? '  ctx -' : `  ctx ${agent.context}%`
-  if (now - agent.at > STALE_MS) {
-    return { mark: MARK.unknown, text: `no sign for ${Math.floor((now - agent.at) / 60_000)} min`, context }
+// One part of the band: an agent, or the reason GitHub was not read.
+type Part = { key: string; text: string; item?: BoardItem; isDim?: boolean }
+
+// An agent's part: its mark, its role and its context use; with no key, or one gone stale, the
+// unknown mark and its role alone.
+function partOf(role: BoardRole, agent: BoardAgent | undefined, item: BoardItem | undefined, now: number): Part {
+  if (!agent || now - agent.at > STALE_MS) return { key: role, text: `${MARK.unknown} ${role}`, item }
+  return { key: role, text: `${MARK[agent.state]} ${role} ${agent.context === null ? '-' : `${agent.context}%`}`, item }
+}
+
+// How many cells a text takes on a terminal.
+function widthOf(text: string): number {
+  let width = 0
+  for (const char of text) width += WIDE.has(char) ? 2 : 1
+  return width
+}
+
+// The parts that fit in `columns`, in order, and whether the ellipsis that marks a cut is drawn.
+// The first part always shows, and the surface cuts it at the edge if even it is too wide. Each
+// later one shows only whole, and only if it leaves room for the ellipsis, unless it is the last,
+// after which nothing can be cut. The ellipsis is drawn where it fits.
+function fit(parts: Part[], columns: number): { shown: Part[]; hasEllipsis: boolean } {
+  const shown: Part[] = []
+  let used = 0
+  for (const [index, part] of parts.entries()) {
+    const width = (shown.length === 0 ? 0 : widthOf(SEPARATOR)) + widthOf(part.text) + (part.item ? 1 + widthOf(part.item.item) : 0)
+    const room = index === parts.length - 1 ? 0 : widthOf(ELLIPSIS)
+    if (shown.length > 0 && used + width + room > columns) return { shown, hasEllipsis: used + widthOf(ELLIPSIS) <= columns }
+    shown.push(part)
+    used += width
   }
-  const text = { working: 'working', permission: '', question: '', idle: 'idle' }[agent.state]
-  return { mark: MARK[agent.state], text: isWaiting(agent.state) ? `waits for you: ${waitText(agent)}` : text, context }
+  return { shown, hasEllipsis: false }
 }
 
 // Writes this session's key: its state, its context use, and the time.
@@ -200,7 +227,7 @@ async function readGitHub($: any) {
 }
 
 // Starts the session's work once it is known to be a squad's: its heartbeat and, in the CTO's
-// session, the board.
+// session, what the band shows.
 async function activate($: any) {
   if (!me || !isStarted || isActive) return
   isActive = true
@@ -208,8 +235,6 @@ async function activate($: any) {
   await publish($)
   $.clock.every(HEARTBEAT_MS, () => void publish($))
   if (me.role !== 'CTO') return
-  await $.command.register({ name: BOARD, description: "Open the squad board: each agent's state, context and current issue or PR" })
-  void $.ui.open({ id: BOARD, title: 'Squad board' })
   await readAgents($)
   $.clock.every(TICK_MS, () => void readAgents($))
   $.clock.after(0, () => void readGitHub($))
@@ -268,33 +293,27 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The board, in the CTO's session: its command, and its pane.
-  on('command.run', { command: BOARD }, async $ => {
-    await $.ui.open({ id: BOARD, title: 'Squad board' })
-    return { text: 'The squad board is open.' }
-  })
-  on('ui.render', { component: 'Pane', requestId: BOARD }, async ($, e, next) => {
-    if (me?.role !== 'CTO') return next(e)
+  // The board, in the CTO's session: one line above the prompt, cut at its end on a narrow
+  // terminal, so that the CTO's part stays whole. A survey that holds the band goes first.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
     const seen = await read($, agents)
     const github = await read($, items)
+    const parts = ROLES.map(role => partOf(role, seen.byRole[role], github.byRole[role], seen.now))
+    if (github.error !== null) parts.push({ key: 'github', text: `GitHub not read: ${github.error}`, isDim: true })
+    const { shown, hasEllipsis } = fit(parts, e.props.bodyColumns)
     return (
-      <Box flexDirection="column">
-        {ROLES.map(role => {
-          const line = lineOf(seen.byRole[role], seen.now)
-          const found = github.byRole[role]
-          return (
-            <Box key={role}>
-              <Text>{line.mark} </Text>
-              <Text bold>{role.padEnd(4)}</Text>
-              <Text>{line.text}</Text>
-              <Text dimColor>{line.context}  </Text>
-              {found && <Link href={found.url}>{found.item}</Link>}
-              {found && <Text dimColor> {found.step}</Text>}
-            </Box>
-          )
-        })}
-        {github.error !== null && <Text dimColor>GitHub not read: {github.error}</Text>}
+      <Box flexDirection="row" overflow="hidden">
+        {shown.map((part, index) => (
+          <Box key={part.key}>
+            {index > 0 && <Text dimColor wrap="truncate-end">{SEPARATOR}</Text>}
+            <Text dimColor={part.isDim === true} wrap="truncate-end">{part.text}</Text>
+            {part.item && <Text> </Text>}
+            {part.item && <Link href={part.item.url}>{part.item.item}</Link>}
+          </Box>
+        ))}
+        {hasEllipsis && <Text dimColor>{ELLIPSIS}</Text>}
       </Box>
     )
   })
