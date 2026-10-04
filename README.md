@@ -333,10 +333,11 @@ suits you; until then, each keeps the board it loaded. To turn the board off, ru
 upgrades, and the same line with `enable` in place of `disable` turns it back on.
 
 The squad's marketplace in `.claude/settings.local.json` is named `agent-squad-<project>-<hash>`,
-and keeps that name from one release to the next, so the board keeps its store. An install replaces
-the squad's other names there, from a release before v39 or a checkout since moved, and leaves
-every other marketplace alone. Releases before v39 put the version in the name, so each left a
-store file of its own in `~/.claude/plugins/store/`, named
+and keeps that name from one release to the next, so the board keeps its store. The squad's
+marketplaces are those whose name starts with `agent-squad-` and that point at a `.agent-squad`
+folder: an install replaces the others of them, from a release before v39 or a checkout since
+moved, and leaves every other marketplace alone. Releases before v39 put the version in the name,
+so each left a store file of its own in `~/.claude/plugins/store/`, named
 `squad-board_agent-squad-<project>-<hash>-v<N>-<…>.json`: a few hundred bytes each, which you can
 delete once every session has restarted on v39 or later.
 

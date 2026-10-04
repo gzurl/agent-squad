@@ -339,9 +339,16 @@ mods_name() {
   hash="$(printf '%s' "$project" | git hash-object --stdin | cut -c1-6)"
   echo "agent-squad-${base:-project}-$hash"
 }
-# The names the squad gives its marketplaces, today's (agent-squad-<directory>-<hash>) and those of
-# the releases before v39 (the same, then -v<version>): what an install replaces, and nothing else.
-mods_pattern='^agent-squad-.+-[0-9a-f]{6}(-v[0-9]+)?$'
+# `ours` (a jq definition) lists the squad's own marketplaces in a settings file, which an install
+# replaces, and nothing else: a name that starts with agent-squad-, declared as a directory that is
+# a .agent-squad/ folder, as the installer has declared every one since v37, here or where a
+# checkout was before it moved. A name alone would also take a project's own marketplace, such as
+# agent-squad-ui-facade (PR #216). The plugins of those marketplaces are the squad's too.
+# shellcheck disable=SC2016 # the $ names are jq's
+mods_ours='def ours: [(.extraKnownMarketplaces // {}) | to_entries[]
+  | select((.key | startswith("agent-squad-")) and .value.source.source? == "directory"
+      and ((.value.source.path? // "") | tostring | endswith("/.agent-squad")))
+  | .key];'
 # `mods_marketplace_json` prints the project's marketplace: the release's, under the project's
 # name, each plugin's source moved under playbook/mods/.
 mods_marketplace_json() {
@@ -354,22 +361,23 @@ mods_defaults() {
   grep -vE '^[[:space:]]*(#|$)' "$playbook/mods/default-plugins" 2>/dev/null \
     | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | jq -R . | jq -sc .
 }
-# `mods_settings <enable>` reads settings on stdin and prints them with every marketplace and
-# plugin the squad named removed, then, when <enable> is true, this release's added: its marketplace
-# at .agent-squad/, and each default plugin enabled, unless the person turned it off under the same
-# name or an earlier one. An object left empty goes.
+# `mods_settings <enable>` reads settings on stdin and prints them with the squad's marketplaces and
+# their plugins removed (`ours`, and this project's name), then, when <enable> is true, this
+# release's added: its marketplace at .agent-squad/, and each default plugin enabled, unless the
+# person turned it off under the same name or an earlier one. An object left empty goes.
 # shellcheck disable=SC2016 # the $ names are jq's
 mods_settings() {
   jq --argjson enable "$1" --arg name "$(mods_name)" --arg path "$squad" --argjson defaults "$(mods_defaults)" \
-    --arg pattern "$mods_pattern" '
-    def squad_market: test($pattern);
-    (.enabledPlugins // {}) as $before
-    | .extraKnownMarketplaces = ((.extraKnownMarketplaces // {}) | with_entries(select(.key | squad_market | not)))
-    | .enabledPlugins = ($before | with_entries(select(.key | split("@") | length == 2 and (.[1] | squad_market) | not)))
+    "$mods_ours"'
+    def squad_market($names): split("@") | length == 2 and (.[1] | IN($names[]));
+    (ours + [$name]) as $squad
+    | (.enabledPlugins // {}) as $before
+    | .extraKnownMarketplaces = ((.extraKnownMarketplaces // {}) | with_entries(select(.key | IN($squad[]) | not)))
+    | .enabledPlugins = ($before | with_entries(select(.key | squad_market($squad) | not)))
     | if $enable then
         .extraKnownMarketplaces[$name] = {source: {source: "directory", path: $path}}
         | reduce $defaults[] as $plugin (.; .enabledPlugins["\($plugin)@\($name)"] =
-            ([$before | to_entries[] | select((.key | startswith($plugin + "@")) and (.key | split("@")[1] | squad_market))
+            ([$before | to_entries[] | select((.key | startswith($plugin + "@")) and (.key | squad_market($squad)))
               | .value] | all))
       else . end
     | if .extraKnownMarketplaces == {} then del(.extraKnownMarketplaces) else . end
@@ -530,8 +538,9 @@ check_installation() {
   reason="$(mods_skip_reason)"
   if [ -n "$reason" ]; then
     item="the squad's mods are skipped, since $reason"
-    why="$(jq -r --arg pattern "$mods_pattern" '[(.extraKnownMarketplaces // {} | keys[]), (.enabledPlugins // {} | keys[] | split("@")[1] // "")]
-      | map(select(test($pattern))) | unique | join(", ")' "$settings" 2>/dev/null)"
+    why="$(jq -r "$mods_ours"' ours as $ours
+      | [$ours[], (.enabledPlugins // {} | keys[] | select((split("@")[1] // "") | IN($ours[])))] | unique | join(", ")' \
+      "$settings" 2>/dev/null)"
     [ -z "$why" ] || why=".claude/settings.local.json still names $why; install again, which removes it"
   else
     item="the squad's mods are enabled from the playbook"
