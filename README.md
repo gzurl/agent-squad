@@ -323,7 +323,9 @@ up when it starts, so sessions already running when you upgrade show it after a 
 `/squad-board` opens the pane again if you closed it, and on a terminal narrower than 144 columns
 Claude Code waits for that command before it shows the pane. To turn the board off, run the
 `claude plugin disable` line the installer printed, in the main checkout; it stays off after
-upgrades.
+upgrades, and the same line with `enable` in place of `disable` turns it back on. The marketplaces
+named `agent-squad-…-v<N>` in `.claude/settings.local.json` are the squad's: each install replaces
+them with its own release's, and leaves every other marketplace alone.
 
 
 ## 📋 Requirements
@@ -363,9 +365,10 @@ owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
 `.claude/settings.local.json`, writes the squad's commands (`/squad-save-state`, `/squad-pause`,
 `/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-usage`, `/squad-watch`, and the
 four `-all` ones) into `.claude/commands/`, enables the [squad board](#the-squad-board) for this
-project in the same settings file, adds three lines to `.gitignore`, installs a small pre-push hook, creates the DEV and QA worktrees, and adds GitHub issue and pull request templates
-if the project has none. It prints every step, and ends with a *By hand* list of what it leaves to
-the CTO, who takes care of it while following `BOOTSTRAP.md`:
+project in the same settings file, adds three lines to `.gitignore`, installs a small pre-push
+hook, creates the DEV and QA worktrees, and adds GitHub issue and pull request templates if the
+project has none. It prints every step, and ends with a *By hand* list of what it leaves to the
+CTO, who takes care of it while following `BOOTSTRAP.md`:
 
 - the *Squad* section of `AGENTS.md`, which loads the charter into every session (the installer
   prints it);
@@ -394,8 +397,8 @@ When a new release is out, type `/squad-upgrade` in the CTO's session. The CTO t
 release the project runs, what the new one changes and whether you need to do anything, and
 installs it only when you say yes. The agents then re-read the rules that changed, so there is
 nothing else for you to do; the CTO asks you to compact the sessions only after a release that
-rewrites much of the charter. The upgrade also moves the squad board to the new release, and keeps it
-off if you turned it off. The release notes are in [CHANGELOG.md](CHANGELOG.md).
+rewrites much of the charter. The upgrade also moves the squad board to the new release, and
+keeps it off if you turned it off. The release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 
 ## 🗂️ What goes where

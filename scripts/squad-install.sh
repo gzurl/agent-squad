@@ -761,7 +761,7 @@ else
   if ! $enable; then
     say mods "SKIPPED: $reason; no mod of the squad is enabled"
   elif [ -n "$on" ] || [ -n "$off" ]; then
-    say mods "enabled for this project: ${on:-none}${off:+; turned off, as you left them: $off} (marketplace $(mods_name), in .agent-squad/; claude plugin disable <plugin>@$(mods_name) --scope local turns one off)"
+    say mods "enabled for this project: ${on:-none}${off:+; turned off, as you left them: $off} (marketplace $(mods_name), in .agent-squad/; claude plugin disable <plugin>@$(mods_name) --scope local turns one off${off:+, and claude plugin enable <plugin>@$(mods_name) --scope local turns one back on})"
   fi
 fi
 
