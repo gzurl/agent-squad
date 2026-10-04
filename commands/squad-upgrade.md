@@ -59,4 +59,6 @@ Work from the main checkout. The upstream repository is the one named on the `up
    installer's PR, and what DEV and QA were told. Say that nothing else is needed from the CEO: the
    agents have re-read the rules that changed, and each session loads the full text at its next
    compaction. Only when the release rewrites much of the charter, recommend that the CEO type
-   `/squad-save-state` and then `/compact` in each session, the CTO's included, and say why.
+   `/squad-save-state` and then `/compact` in each session, the CTO's included, and say why. Say
+   also that each session loads the new release of the squad board at its next start, so the CEO
+   restarts the three sessions when it suits, the CTO's included.
