@@ -1,5 +1,26 @@
 # Changelog
 
+## v39 — 2026-10-04
+- **The squad board's final line** (#217), as the CEO asked after seeing v38's band:
+  `👷🏼‍♂️CTO 💤 │ 👨🏼‍💻DEV ⏳ Issue #123 │ 👩🏼‍🔬QA 🔍 PR #235`, under a rule of `─`.
+  - Each agent shows its signature emoji and role, then its state: ⏳ working for the CTO and DEV,
+    🔍 for QA, who reviews, and ✋, 💤 and ❓ for all three.
+  - The item names its kind, `Issue #N` or `PR #N`.
+  - Context shows only for the CTO, and only from 90%, as `(ctx: 96%)`.
+  - The cut at the end measures each emoji as two cells, so the CTO's part stays whole first.
+- **The board keeps its store across upgrades** (#215). The squad's marketplace is now named
+  `agent-squad-<project>-<hash>`, with no release, so an upgrade no longer moves the board to a
+  new, empty store, where it showed DEV and QA as `❓` until every session had restarted.
+  - The install moves the `…-v<N>` names of v37 and v38 to the new one, and keeps a plugin off
+    where it was off.
+  - The old store files stay in `~/.claude/plugins/store/`. The README says where, and that they
+    can be deleted once every session runs v39 or later.
+  - A session still loads a new release of the board at its next start: the README and
+    `/squad-upgrade` say to restart the three sessions after an upgrade.
+- **§7: the CEO saves state and compacts at about 90%,** not 80% (#218). On a 1M-token session,
+  automatic compaction starts near 96.7%; the README says the same.
+- The squad's record is recomputed up to v39.
+
 ## v38 — 2026-10-04
 - **The squad board is one line above the CTO's prompt,** instead of a side pane (#212). The CEO
   chose it after seeing v37's pane take a narrow column of the CTO's session.
