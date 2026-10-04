@@ -1046,7 +1046,7 @@ check "a second install changes nothing in the settings" cmp -s "$lab/mods-befor
 jq --arg key "squad-board@$name_a" '.enabledPlugins[$key] = false' "$lab/mods-before" > "$tsettings"
 out="$("$install" "$target" "$tag_a" 2>&1)"
 check "a plugin turned off stays off on reinstall" jq_holds ".enabledPlugins == {\"squad-board@$name_a\": false}" "$tsettings"
-check "and the install says so" contains "$out" "enabled for this project: none; turned off, as you left them: squad-board"
+check "and the install says so, and how to turn it back on" contains "$out" "enabled for this project: none; turned off, as you left them: squad-board (marketplace $name_a, in .agent-squad/; claude plugin disable <plugin>@$name_a --scope local turns one off, and claude plugin enable <plugin>@$name_a --scope local turns one back on)"
 check "and --check passes, naming it" has_line "$(mods_items "$target")" "check: ok      $item_mods (squad-board turned off)"
 out="$("$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" 2>&1)"
 code=$?
@@ -1061,17 +1061,20 @@ jq --arg key "squad-board@$name_b" '.enabledPlugins[$key] = true' "$tsettings" >
 check "turned on again, --check passes" has_line "$(mods_items "$target")" "check: ok      $item_mods"
 
 #     What --check catches, and an install mends: another release's entries, and the marketplace
-#     missing. The project's own marketplace and plugin are left as they are.
+#     missing. The project's own marketplaces and plugins are left as they are, agent-squad-tools
+#     too, although its name starts like the squad's (#210).
 jq '.extraKnownMarketplaces["agent-squad-other-abcdef-v1"] = {source: {source: "directory", path: "/elsewhere"}}
   | .enabledPlugins["squad-board@agent-squad-other-abcdef-v1"] = true
   | .extraKnownMarketplaces["team-tools"] = {source: {source: "directory", path: "/tools"}}
-  | .enabledPlugins["lint@team-tools"] = true' "$lab/mods-on" > "$tsettings"
+  | .enabledPlugins["lint@team-tools"] = true
+  | .extraKnownMarketplaces["agent-squad-tools"] = {source: {source: "directory", path: "/more-tools"}}
+  | .enabledPlugins["format@agent-squad-tools"] = true' "$lab/mods-on" > "$tsettings"
 check "an earlier release's entries fail the mods item, named" \
   contains "$(mods_items "$target")" "check: FAILED  $item_mods: missing: none; unexpected: agent-squad-other-abcdef-v1, squad-board@agent-squad-other-abcdef-v1; install again"
 "$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" >/dev/null 2>&1
-check "an install removes them and keeps the project's own marketplace and plugin" \
-  jq_holds "(.extraKnownMarketplaces | keys) == [\"$name_b\", \"team-tools\"]
-    and .enabledPlugins == {\"squad-board@$name_b\": true, \"lint@team-tools\": true}" "$tsettings"
+check "an install removes them and keeps the project's own marketplaces and plugins" \
+  jq_holds "(.extraKnownMarketplaces | keys) == [\"$name_b\", \"agent-squad-tools\", \"team-tools\"]
+    and .enabledPlugins == {\"squad-board@$name_b\": true, \"lint@team-tools\": true, \"format@agent-squad-tools\": true}" "$tsettings"
 rm "$tsquad/.claude-plugin/marketplace.json"
 check "a missing marketplace fails the mods item" \
   contains "$(mods_items "$target")" "check: FAILED  $item_mods: .agent-squad/.claude-plugin/marketplace.json is missing or not this release's"
@@ -1091,7 +1094,7 @@ for stub in 2.1.200 none; do
   check "with Claude Code '$stub', the install exits 0" [ "$code" -eq 0 ]
   check "and says why no mod is enabled" contains "$out" "mods       SKIPPED: $reason; no mod of the squad is enabled"
   check "and leaves none of the squad's entries, and no marketplace" \
-    bash -c 'jq -e "(.extraKnownMarketplaces | keys) == [\"team-tools\"] and .enabledPlugins == {\"lint@team-tools\": true}" "$1" >/dev/null && [ ! -e "$2" ]' \
+    bash -c 'jq -e "(.extraKnownMarketplaces | keys) == [\"agent-squad-tools\", \"team-tools\"] and .enabledPlugins == {\"lint@team-tools\": true, \"format@agent-squad-tools\": true}" "$1" >/dev/null && [ ! -e "$2" ]' \
     _ "$tsettings" "$tsquad/.claude-plugin/marketplace.json"
   check "and --check reports the mods skipped, as no failure" \
     has_line "$(CLAUDE_STUB_VERSION="$stub" "$install" --check "$target" 2>&1 | grep "the squad's mods")" \
@@ -1105,6 +1108,7 @@ mkdir -p "$lab/vnomods" && cp -pR "$lab/vb/." "$lab/vnomods/" && rm -r "$lab/vno
 out="$("$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vnomods" "$target" "$tag_b" 2>&1)"
 check "a release with no mods says so" contains "$out" "mods       SKIPPED: this release has no mods; no mod of the squad is enabled"
 check "and removes the entries of the release before it" \
-  jq_holds '(.extraKnownMarketplaces | keys) == ["team-tools"] and .enabledPlugins == {"lint@team-tools": true}' "$tsettings"
+  jq_holds '(.extraKnownMarketplaces | keys) == ["agent-squad-tools", "team-tools"]
+    and .enabledPlugins == {"lint@team-tools": true, "format@agent-squad-tools": true}' "$tsettings"
 
 exit "$status"
