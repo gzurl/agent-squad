@@ -1,16 +1,17 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { asks, START, start, world } from './world'
+import { asks, says, START, start, world } from './world'
 
-// The board in the CTO's session (agent-squad #205, #212, #217): a rule, then one line above the
-// prompt, with each agent of its own project in the order CTO, DEV, QA: its signature and role, its
-// state, the CTO's context from 90%, and a link to its issue or PR, cut at the end where the
-// terminal is narrow; a toast when an agent turns to wait for the CEO, once per wait.
+// The board in the CTO's session (agent-squad #205, #212, #217, #222): a blue rule, then one line
+// above the prompt, with each agent of its own project in the order CTO, DEV, QA: its signature and
+// role, its state, the CTO's context from 90%, and a link to the issue or PR its session last acted
+// on, cut at the end where the terminal is narrow; a toast when an agent turns to wait for the CEO,
+// once per wait. Everything comes from the sessions' keys, nothing from GitHub.
 
 // The signatures and the state marks, as the band draws them.
 const SIGN = { CTO: '\u{1F477}\u{1F3FC}‍♂️', DEV: '\u{1F468}\u{1F3FC}‍\u{1F4BB}', QA: '\u{1F469}\u{1F3FC}‍\u{1F52C}' }
-const MARK = { working: '⏳', reviewing: '\u{1F50D}', waits: '✋', idle: '\u{1F4A4}', unknown: '❓' }
+const MARK = { working: '\u23F3', reviewing: '\u{1F440}', paused: '\u23F8\uFE0F', waits: '\u270B', idle: '\u{1F4A4}', unknown: '\u2753' }
 
 // How many cells a text takes on a terminal: each emoji two, however many code points it has, and
 // any other character one.
@@ -33,12 +34,9 @@ function agent(role: string, project: string, fields: Record<string, unknown> = 
   }
 }
 
-// What squad-stalls.sh --current prints for the project.
-const CURRENT = [
-  'DEV\t#205\thttps://github.com/o/r/issues/205\tcarry on with it',
-  'QA\tPR #210\thttps://github.com/o/r/pull/210\treview its head abc1234',
-  'CTO\t#1\tjavascript:alert(1)\tnot a link',
-].join('\n') + '\n'
+// The items the sessions of DEV and QA last acted on, as their keys hold them.
+const ISSUE = { item: { item: 'Issue #205', url: 'https://github.com/o/r/issues/205' } }
+const PR = { item: { item: 'PR #210', url: 'https://github.com/o/r/pull/210' } }
 
 // The band as a terminal of `columns` cells draws it above the CTO's prompt: the rule, each agent's
 // part by its key, the keys in order, the links, and the whole line.
@@ -53,11 +51,13 @@ async function band($: Engine, columns = 120, hasSurvey = false) {
   const part = async (role: string) => (await ui.find({ key: role }))?.text ?? ''
   const rule = (await ui.find({ key: 'rule' }))?.text ?? ''
   const links = await ui.findAll({ type: 'Link' })
+  // The rule's colour, from the text that draws it.
+  const ruleColor = (await ui.findAll({ type: 'Text' })).find(found => found.text === rule && rule !== '')?.props.color
   // The whole line as the person reads it, the engine's own when the board drew none; a Link's text
   // holds its href before its label.
   const whole = line?.text ?? (await ui.findAll({ type: 'Text' })).map(found => found.text).join('')
   const drawn = links.reduce((text, link) => text.replace(String(link.props.href), ''), whole)
-  return { ui, keys, part, rule, links, drawn }
+  return { ui, keys, part, rule, ruleColor, links, drawn }
 }
 
 describe('where the board is', () => {
@@ -91,12 +91,11 @@ describe('where the board is', () => {
 describe('the line', () => {
   test("each agent of the project, its signature, role and state, then its item; another project's never", async ($, on) => {
     const w = world(on, {
-      'proj/DEV': agent('DEV', 'proj', { state: 'working', context: 68 }),
-      'proj/QA': agent('QA', 'proj', { state: 'question', context: 33 }),
-      'other/DEV': agent('DEV', 'other', { state: 'permission', tool: 'Bash' }),
+      'proj/DEV': agent('DEV', 'proj', { state: 'working', context: 68, ...ISSUE }),
+      'proj/QA': agent('QA', 'proj', { state: 'question', context: 33, ...PR }),
+      'other/DEV': agent('DEV', 'other', { state: 'permission', tool: 'Bash', item: { item: 'PR #1', url: 'https://github.com/x/y/pull/1' } }),
       'other/CTO': agent('CTO', 'other'),
     })
-    w.current = CURRENT
     await start($, 'CTO:proj')
     await w.clock.settle()
     const { keys, part, drawn } = await band($)
@@ -107,7 +106,7 @@ describe('the line', () => {
     expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} │ ${SIGN.DEV}DEV ${MARK.working} Issue #205 │ ${SIGN.QA}QA ${MARK.waits} PR #210`)
   })
 
-  test('working is an hourglass for the CTO and DEV, and a magnifying glass for QA, who reviews', async ($, on) => {
+  test('working is an hourglass for the CTO and DEV, and eyes for QA, who reviews', async ($, on) => {
     const w = world(on, {
       'proj/DEV': agent('DEV', 'proj', { state: 'working' }),
       'proj/QA': agent('QA', 'proj', { state: 'working' }),
@@ -140,78 +139,76 @@ describe('the line', () => {
     }
   })
 
-  test('a rule of light horizontal lines across the band, above the line', async ($, on) => {
+  test('paused is its own mark while the agent is idle; working and waiting show over it', async ($, on) => {
+    const w = world(on, {
+      'proj/DEV': agent('DEV', 'proj', { paused: true, ...ISSUE }),
+      'proj/QA': agent('QA', 'proj', { state: 'working', paused: true }),
+    })
+    await start($, 'CTO:proj')
+    await says($, '/squad-pause')
+    await w.clock.advance(3_000)
+    const first = await band($)
+    expect(first.drawn).toBe(`${SIGN.CTO}CTO ${MARK.paused} │ ${SIGN.DEV}DEV ${MARK.paused} Issue #205 │ ${SIGN.QA}QA ${MARK.reviewing}`)
+    await first.ui.unmount()
+    w.store.set('proj/DEV', agent('DEV', 'proj', { paused: true, state: 'permission', tool: 'Bash', at: START + 3_000 }))
+    w.store.set('proj/QA', agent('QA', 'proj', { paused: true, at: START + 3_000 }))
+    await says($, '/squad-resume')
+    await w.clock.advance(3_000)
+    const { drawn } = await band($)
+    expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} │ ${SIGN.DEV}DEV ${MARK.waits} │ ${SIGN.QA}QA ${MARK.paused}`)
+  })
+
+  test('a blue rule of light horizontal lines across the band, above the line', async ($, on) => {
     world(on)
     await start($, 'CTO:proj')
     for (const columns of [10, 66, 120]) {
-      const { ui, rule } = await band($, columns)
+      const { ui, rule, ruleColor } = await band($, columns)
       expect(rule).toBe('─'.repeat(columns))
+      expect(ruleColor).toBe('#0A84FF')
       await ui.unmount()
     }
   })
 
-  test('each links the item it works on, from squad-stalls.sh --current, named an issue or a PR; a URL that is not https is no link', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj'), 'proj/QA': agent('QA', 'proj') })
-    w.current = CURRENT
-    await start($, 'CTO:proj')
-    await w.clock.settle()
-    const { part, links } = await band($)
+  test('each links the item its session last acted on, named an issue or a PR; one with no address, or not https, is no link', async ($, on) => {
+    const w = world(on, {
+      'proj/CTO': agent('CTO', 'proj', { sessionId: 'sid-1', item: { item: 'Issue #1', url: 'javascript:alert(1)' } }),
+      'proj/DEV': agent('DEV', 'proj', ISSUE),
+      'proj/QA': agent('QA', 'proj', { item: { item: 'PR #3', url: null } }),
+    })
+    // The CTO's session comes back from its key after a reload, its item with it.
+    await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
+    const { links, drawn } = await band($)
     // A Link's text is its href, then its label.
-    expect(links.map(link => link.props.href)).toEqual(['https://github.com/o/r/issues/205', 'https://github.com/o/r/pull/210'])
-    expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['Issue #205', 'PR #210'])
-    expect(await part('CTO')).not.toContain('#1')
-    expect(w.runs).toEqual([
-      ['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'],
-      ['/work/proj/.agent-squad/playbook/scripts/squad-stalls.sh', '--current'],
-    ])
+    expect(links.map(link => link.props.href)).toEqual(['https://github.com/o/r/issues/205'])
+    expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['Issue #205'])
+    expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} Issue #1 │ ${SIGN.DEV}DEV ${MARK.idle} Issue #205 │ ${SIGN.QA}QA ${MARK.idle} PR #3`)
   })
 
-  test('GitHub is read again every three minutes, not on every redraw', async ($, on) => {
+  test("the CTO's own gh call names its item on the band", async ($, on) => {
     const w = world(on)
     await start($, 'CTO:proj')
-    await w.clock.settle()
-    await (await band($)).ui.unmount()
-    await band($)
-    expect(w.runs).toHaveLength(2)
-    await w.clock.advance(180_000)
-    expect(w.runs).toHaveLength(4)
+    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh issue edit 222 --add-label "x"' } as any)
+    await w.clock.advance(3_000)
+    const { links } = await band($)
+    expect(links.map(link => link.props.href)).toEqual(['https://github.com/o/r/issues/222'])
   })
 
-  test('GitHub unreadable: the agents stay, without links, and the line ends with why', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj') })
-    w.currentExit = 1
+  test('nothing is read from GitHub, and no host command runs, however long the board is drawn', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE) })
     await start($, 'CTO:proj')
-    await w.clock.settle()
-    const { keys, links, part } = await band($, 200)
-    expect(links).toEqual([])
-    expect(keys).toEqual(['CTO', 'DEV', 'QA', 'github'])
-    expect(await part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.idle}`)
-    expect(await part('github')).toBe(' │ GitHub not read: squad-stalls: cannot read the open pull requests; nothing was checked')
+    for (let minute = 0; minute < 10; minute++) {
+      await (await band($)).ui.unmount()
+      await w.clock.advance(60_000)
+    }
+    expect(w.runs).toEqual([])
   })
 
-  // QA's case on PR #208: links read once may no longer hold when the next read fails.
-  test('GitHub unreadable after a read that succeeded: the earlier links go too', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj') })
-    w.current = CURRENT
-    await start($, 'CTO:proj')
-    await w.clock.settle()
-    const first = await band($)
-    expect(first.links).toHaveLength(2)
-    await first.ui.unmount()
-    w.currentExit = 1
-    await w.clock.advance(180_000)
-    const { links, part, keys } = await band($, 200)
-    expect(links).toEqual([])
-    expect(await part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.idle}`)
-    expect(keys).toContain('github')
-  })
-
-  test('a key older than three minutes shows the unknown mark, and so does a role with no key', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', at: START - 240_000 }) })
+  test('a key older than three minutes shows the unknown mark, with the item it last held; a role with no key, the mark alone', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', at: START - 240_000, ...ISSUE }) })
     await start($, 'CTO:proj')
     await w.clock.settle()
     const { part } = await band($)
-    expect(await part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.unknown}`)
+    expect(await part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.unknown} https://github.com/o/r/issues/205Issue #205`)
     expect(await part('QA')).toBe(` │ ${SIGN.QA}QA ${MARK.unknown}`)
   })
 
@@ -225,8 +222,7 @@ describe('the line', () => {
   })
 
   test('on a narrow terminal the line is cut at its end: the CTO first and whole, then only whole parts', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj'), 'proj/QA': agent('QA', 'proj') })
-    w.current = CURRENT
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', PR) })
     await start($, 'CTO:proj')
     await w.clock.settle()
     // Each emoji takes two cells: the CTO's part takes 8; DEV's 3 more for the bar and 19 for
@@ -251,8 +247,10 @@ describe('the line', () => {
 
   // QA's case on PR #213, now with the signatures: the ellipsis must fit too.
   test('the line drawn never takes more cells than the band has, once the CTO part fits', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj'), 'proj/QA': agent('QA', 'proj', { state: 'working' }) })
-    w.current = CURRENT
+    const w = world(on, {
+      'proj/DEV': agent('DEV', 'proj', { paused: true, ...ISSUE }),
+      'proj/QA': agent('QA', 'proj', { state: 'working', ...PR }),
+    })
     w.percent = 96
     await start($, 'CTO:proj')
     await w.clock.settle()

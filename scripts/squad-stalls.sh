@@ -23,18 +23,11 @@
 # the main checkout, which git ignores, so that each finding is reported once; an item with new
 # activity starts afresh.
 #
-# With --current it reports no stalls and keeps no records: it prints, for each role, the item it
-# works on now (agent-squad #205, for the squad board). That is the item whose next step the role
-# owns, by the same rules, and with the most recent activity; failing one, the PR it authored that
-# waits on someone else. Declared waits count here, since the role still works on them.
-#
-# Usage: squad-stalls.sh [--session <role>=<state>]... | squad-stalls.sh --current
+# Usage: squad-stalls.sh [--session <role>=<state>]...
 #   <role> is CTO, DEV or QA, and <state> idle, busy or waiting; a role not given has no session.
 # Output: one line per finding, tab-separated: what to do ("ping" the role, or tell the "ceo"),
 #   the role, the item ("PR #12" or "#34"), its URL, the next step, since when it has been quiet
 #   (local time), and, for the CEO, why. Nothing when there is nothing to report.
-#   With --current, one line per role that has an item, in the order CTO, DEV, QA, tab-separated:
-#   the role, the item, its URL, and its next step.
 # Exit: 0 checked; 1 GitHub could not be read, so nothing was checked; 2 bad usage, or not run from
 #   a checkout of a project the squad is installed in.
 set -u
@@ -42,9 +35,8 @@ set -u
 usage() { sed -n 's/^# Usage: /usage: /p' "$0" >&2; exit 2; }
 die() { echo "squad-stalls: $*; nothing was checked" >&2; exit 1; }
 
-# The options: each role's session state, as ListAgents shows it; or the current items alone.
+# The options: each role's session state, as ListAgents shows it.
 sessions='{}'
-current=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --session)
@@ -52,12 +44,9 @@ while [ $# -gt 0 ]; do
       [[ "$2" =~ ^(CTO|DEV|QA)=(idle|busy|waiting)$ ]] || usage
       sessions="$(jq -c --arg role "${2%%=*}" --arg state "${2#*=}" '.[$role] = $state' <<<"$sessions")"
       shift 2 ;;
-    --current) current=true; shift ;;
     *) usage ;;
   esac
 done
-# The current items take no session states: they are not a stall check.
-if $current && [ "$sessions" != '{}' ]; then usage; fi
 
 # The main checkout, reached through the git directory every worktree shares, keeps what was
 # reported.
@@ -68,7 +57,7 @@ squad="$(dirname "$common")/.agent-squad"
 state="$squad/watch.tsv"
 # A record that cannot be kept would report the same findings on every pass: the run fails first.
 cannot_keep() { echo "squad-stalls: cannot keep its records in $state${1:+: $1}" >&2; exit 1; }
-$current || [ ! -e "$state" ] || [ -f "$state" ] || cannot_keep "it is not a file"
+[ ! -e "$state" ] || [ -f "$state" ] || cannot_keep "it is not a file"
 now="${SQUAD_NOW:-$(date +%s)}"
 
 # 1. What GitHub holds: the open PRs, the latest verdict on each by the squad's accounts, and the
@@ -93,9 +82,9 @@ done
 # 2. Who owns each item's next step, which items are quiet, and what to report given the sessions
 #    and what was reported before. The new record replaces the old one: an item no longer stalled,
 #    or with new activity, is forgotten.
-reported="$( ! $current && [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . || echo '[]')"
+reported="$( [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . || echo '[]')"
 result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdicts "$verdicts" \
-  --argjson sessions "$sessions" --argjson reported "$reported" --argjson now "$now" --argjson current "$current" '
+  --argjson sessions "$sessions" --argjson reported "$reported" --argjson now "$now" '
   def local: strflocaltime("%Y-%m-%d %H:%M");
   # A declared wait: needs-ceo or status:blocked on the item, or on the issue a PR closes, as
   # GitHub names it or as the description says ("Closes #N").
@@ -122,22 +111,10 @@ result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdi
   def issue_step:
     ([.labels[].name | capture("owner:(?<role>cto|dev|qa)$").role | ascii_upcase] | first) as $owner
     | if $owner == null then {owner: "CTO", step: "give it an owner"} else {owner: $owner, step: "carry on with it"} end;
-  # The items: every open PR and every issue in progress, but for a stall check those whose wait
-  # is declared.
-  ([$prs | sort_by(.number)[] | select($current or (waits | not))
-     | {item: "PR #\(.number)", url, updatedAt, author: author} + pr_step]
-   + [$issues | sort_by(.number)[] | select($current or (declared | not))
-      | select(any(.labels[].name; endswith("status:in-progress")))
+  ([$prs | sort_by(.number)[] | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step]
+   + [$issues | sort_by(.number)[] | select(declared | not) | select(any(.labels[].name; endswith("status:in-progress")))
       | {item: "#\(.number)", url, updatedAt} + issue_step])
-  # The current items: for each role, the item whose next step it owns with the latest activity;
-  # failing one, the PR it authored that waits on someone else.
-  | if $current then . as $items
-    | {current: [("CTO", "DEV", "QA") as $role
-        | first(($items | map(select(.owner == $role)) | sort_by(.updatedAt) | last | select(. != null)),
-                ($items | map(select(.author == $role)) | sort_by(.updatedAt) | last | select(. != null)
-                 | .step = "wait for \(.owner) to \(.step)"))
-        | [$role, .item, .url, .step] | @tsv]}
-  else map(select($now - (.updatedAt | fromdateiso8601) >= 1800)
+  | map(select($now - (.updatedAt | fromdateiso8601) >= 1800)
         | . + {since: (.updatedAt | fromdateiso8601 | local), key: "\(.item)|\(.owner)|\(.step)|\(.updatedAt)",
                session: ($sessions[.owner] // "none")}
         | select(.session != "busy")
@@ -152,10 +129,9 @@ result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdi
                  why: (if .session == "waiting" then "its session waits on the CEO in its own terminal" else "it has no session open" end)}
           else . + {record: $before} end)
   | {findings: [.[] | select(.action) | [.action, .owner, .item, .url, .step, .since, (.why // "")] | @tsv],
-     records: [.[] | .record | [.key, (.at | tostring), (if .told then "1" else "0" end)] | @tsv]} end')" || exit 1
+     records: [.[] | .record | [.key, (.at | tostring), (if .told then "1" else "0" end)] | @tsv]}')" || exit 1
 
-# 3. The current items are printed as they are; findings after their records are kept.
-if $current; then jq -r '.current[]' <<<"$result"; exit 0; fi
+# 3. Keep the records, then print the findings.
 { jq -r '.records[]' <<<"$result" > "$state.$$" && mv "$state.$$" "$state"; } 2>/dev/null \
   || { rm -f "$state.$$"; cannot_keep; }
 jq -r '.findings[]' <<<"$result"

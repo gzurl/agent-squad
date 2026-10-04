@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { asks, START, start, turnEnd, turnStart, world } from './world'
+import { asks, runs, says, START, start, turnEnd, turnStart, world } from './world'
 
-// What every squad session publishes (agent-squad #205): its own key, `<project>/<role>`, with
-// its state, its context use, its session id and name, and the time; nothing at all in a session
-// that is not a squad's.
+// What every squad session publishes (agent-squad #205, #222): its own key, `<project>/<role>`,
+// with its state, its pause, the issue or PR it last acted on with gh, its context use, its session
+// id and name, and the time; nothing at all in a session that is not a squad's.
 
 describe('a session outside the squad', () => {
   test('does nothing: no key, no command, no pane, no host command', async ($, on) => {
@@ -12,6 +12,8 @@ describe('a session outside the squad', () => {
     await start($, 'modtest-1')
     await turnStart($)
     await asks($, 'Bash')
+    await runs($, w, 'gh pr view 5')
+    await says($, '/squad-pause')
     await turnEnd($)
     await w.clock.advance(120_000)
     expect([...w.store.keys()]).toEqual([])
@@ -22,13 +24,13 @@ describe('a session outside the squad', () => {
 })
 
 describe("a squad session's key", () => {
-  test('names the project and the role, and holds the state, context, id, name and time', async ($, on) => {
+  test('names the project and the role, and holds the state, pause, item, context, id, name and time', async ($, on) => {
     const w = world(on)
     await start($, 'DEV:proj')
     expect([...w.store.keys()]).toEqual(['proj/DEV'])
     expect(w.store.get('proj/DEV')).toEqual({
       project: 'proj', role: 'DEV', name: 'DEV:proj', sessionId: 'sid-1',
-      state: 'idle', tool: null, since: START, at: START, context: 42,
+      state: 'idle', tool: null, since: START, at: START, context: 42, paused: false, item: null,
     })
   })
 
@@ -69,7 +71,18 @@ describe("a squad session's key", () => {
     const w = world(on, { 'proj/DEV': kept, 'other/DEV': { ...kept, project: 'other', name: 'DEV:other', sessionId: 'sid-9' } })
     // A reload runs session.start again, without the SessionStart hook that gave the name.
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
-    expect(w.store.get('proj/DEV')).toEqual({ ...kept, at: START, context: 42 })
+    expect(w.store.get('proj/DEV')).toEqual({ ...kept, at: START, context: 42, paused: false, item: null })
+  })
+
+  test('after a reload, keeps its pause and its item', async ($, on) => {
+    const item = { item: 'PR #7', url: 'https://github.com/o/r/pull/7' }
+    const kept = {
+      project: 'proj', role: 'QA', name: 'QA:proj', sessionId: 'sid-1',
+      state: 'idle', tool: null, since: START - 5_000, at: START - 5_000, context: 30, paused: true, item,
+    }
+    const w = world(on, { 'proj/QA': kept })
+    await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
+    expect(w.store.get('proj/QA')).toEqual({ ...kept, at: START, context: 42 })
   })
 })
 
@@ -135,5 +148,175 @@ describe('what the board leaves alone', () => {
     expect(await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: {} } as any)).toEqual({})
     expect(await $.tool.call({ tool: 'Bash', tool_use_id: 'u4', command: 'ls' } as any))
       .toEqual({ result: { stdout: 'ran', stderr: '', interrupted: false } })
+  })
+})
+
+describe('the item: the issue or PR its session last acted on with gh (agent-squad #222)', () => {
+  // Each form, with what the key holds after it; the session's remote is git@github.com:o/r.git.
+  const issue = (n: number) => ({ item: `Issue #${n}`, url: `https://github.com/o/r/issues/${n}` })
+  const pr = (n: number) => ({ item: `PR #${n}`, url: `https://github.com/o/r/pull/${n}` })
+  const forms: [string, { item: string; url: string | null }][] = [
+    ['gh issue edit 11 --add-label "x" --remove-label "y"', issue(11)],
+    ['gh issue comment 12 --body-file /tmp/body.md', issue(12)],
+    ['gh issue view 13 --json title,body', issue(13)],
+    ['gh issue close 14 --comment "done"', issue(14)],
+    ['gh pr view 21 --json headRefOid', pr(21)],
+    ['gh pr checkout 22 --detach', pr(22)],
+    ['gh pr review 23 --comment --body-file review.md', pr(23)],
+    ['gh pr comment 24 --body "fixed"', pr(24)],
+    ['gh pr merge 25 --squash --match-head-commit "$head"', pr(25)],
+    ['gh pr edit 26 --add-label "x"', pr(26)],
+    ['gh pr view https://github.com/a/b/pull/27', { item: 'PR #27', url: 'https://github.com/a/b/pull/27' }],
+    ['gh issue view https://github.com/a/b/issues/28', { item: 'Issue #28', url: 'https://github.com/a/b/issues/28' }],
+    ['gh issue view 29 --repo a/b', { item: 'Issue #29', url: 'https://github.com/a/b/issues/29' }],
+    ['gh pr view --repo a/b 30', { item: 'PR #30', url: 'https://github.com/a/b/pull/30' }],
+    ['gh issue comment --body-file f 31', issue(31)],
+    ['gh pr merge --squash --match-head-commit "$head" 36', pr(36)],
+    ['gh pr checkout --detach 37', pr(37)],
+    ['rtk gh pr view 32', pr(32)],
+    ['cd /work/proj && gh issue edit 33 --add-label x </dev/null >/dev/null', issue(33)],
+    ['head=$(gh pr view 34 --json headRefOid --jq .headRefOid)', pr(34)],
+    ['gh issue comment 35 --body "see https://github.com/o/r/pull/9; gh pr view 9"', issue(35)],
+    ['gh issue comment --body "see https://github.com/o/r/pull/9" 38', issue(38)],
+  ]
+  for (const [command, item] of forms) {
+    test(`${command}`, async ($, on) => {
+      const w = world(on)
+      await start($, 'DEV:proj')
+      await runs($, w, command)
+      expect(w.store.get('proj/DEV')).toMatchObject({ item })
+    })
+  }
+
+  test('gh pr create: the new PR, from the address gh prints', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, 'gh pr create --title "feat: x (#62)" --body-file pr.md', 'Creating pull request\nhttps://github.com/o/r/pull/40\n')
+    expect(w.store.get('proj/DEV')).toMatchObject({ item: pr(40) })
+  })
+
+  test('a command that names no number, or no gh issue or pr call, leaves the item as it was', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, 'gh issue view 50')
+    for (const command of [
+      'gh pr create --fill', 'gh issue list --label x --limit 1000', 'gh pr view --json number',
+      'gh pr checks 51', 'gh api repos/o/r/pulls/52', 'git log -3', 'echo "gh pr view 53"', 'gh pr diff 54',
+      "printf '%s' 'gh issue edit 55'", 'echo "done; gh pr view 56"', "git commit -m 'x\ngh pr view 57'",
+    ]) {
+      await runs($, w, command, '')
+      expect(w.store.get('proj/DEV')).toMatchObject({ item: issue(50) })
+    }
+  })
+
+  test('a gh call that failed, or another tool, leaves the item as it was', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    w.isError = true
+    await runs($, w, 'gh pr view 60')
+    expect(w.store.get('proj/DEV')).toMatchObject({ item: null })
+    w.isError = false
+    await $.tool.call({ tool: 'mcp__shell__run', tool_use_id: 'u-mcp', command: 'gh pr view 61' } as any)
+    expect(w.store.get('proj/DEV')).toMatchObject({ item: null })
+  })
+
+  test('a repository that is not on GitHub: the item, with no address', async ($, on) => {
+    const w = world(on)
+    w.remote = 'git@gitlab.com:o/r.git'
+    await start($, 'DEV:proj')
+    await runs($, w, 'gh issue view 70')
+    expect(w.store.get('proj/DEV')).toMatchObject({ item: { item: 'Issue #70', url: null } })
+  })
+
+  for (const remote of [null, 'unreadable']) {
+    test(`a session whose repository is ${remote ?? 'none'} keeps its key, and an item with no address`, async ($, on) => {
+      const w = world(on)
+      w.remote = remote
+      await start($, 'DEV:proj')
+      expect(w.store.get('proj/DEV')).toMatchObject({ state: 'idle', item: null, at: START })
+      await w.clock.advance(60_000)
+      expect(w.store.get('proj/DEV')).toMatchObject({ at: START + 60_000 })
+      await runs($, w, 'gh pr view 72')
+      expect(w.store.get('proj/DEV')).toMatchObject({ state: 'idle', item: { item: 'PR #72', url: null } })
+    })
+  }
+
+  test('an https remote gives the same address as an ssh one', async ($, on) => {
+    const w = world(on)
+    w.remote = 'https://github.com/o/r.git'
+    await start($, 'DEV:proj')
+    await runs($, w, 'gh pr view 71')
+    expect(w.store.get('proj/DEV')).toMatchObject({ item: pr(71) })
+  })
+
+  test('the item goes with the key at the session end; after a /clear the session goes on with none', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, 'gh pr view 80')
+    await $.session.end({ reason: 'clear', sessionId: 'sid-1', resume: { id: 'sid-1' } } as any)
+    expect([...w.store.keys()]).toEqual([])
+    w.sessionId = 'sid-2'
+    await w.clock.advance(60_000)
+    expect(w.store.get('proj/DEV')).toMatchObject({ sessionId: 'sid-2', item: null })
+  })
+
+  test('no host command is run, and nothing is read from GitHub', async ($, on) => {
+    const w = world(on)
+    await start($, 'CTO:proj')
+    await runs($, w, 'gh pr view 90')
+    await w.clock.advance(600_000)
+    expect(w.runs).toEqual([])
+  })
+})
+
+describe('the pause (agent-squad #222)', () => {
+  // The step-away commands as the CEO types them, and as /squad-pause.md and the others relay them.
+  const pauses = [
+    '/squad-pause',
+    '/squad-pause-all',
+    'The CEO needs the squad stopped at a safe point (`/squad-pause`): follow the part for every agent',
+    'The CEO needs every squad stopped at a safe point (`/squad-pause-all`): follow the part for every agent',
+  ]
+  const clears = [
+    '/squad-resume', '/squad-resume-all', '/squad-autopilot', '/squad-autopilot-all',
+    'The CEO is back (`/squad-resume`): follow the part for every agent',
+    'The CEO is back (`/squad-resume-all`): follow the part for every agent',
+    'The CEO is away and the machine stays on (`/squad-autopilot`): follow the part for every agent',
+    'The CEO is away and the machine stays on (`/squad-autopilot-all`): follow the part for every agent',
+  ]
+  for (const pause of pauses) {
+    for (const clear of clears) {
+      test(`set by "${pause.slice(0, 50)}", cleared by "${clear.slice(0, 50)}"`, async ($, on) => {
+        const w = world(on)
+        await start($, 'DEV:proj')
+        await says($, pause, 'peer')
+        expect(w.store.get('proj/DEV')).toMatchObject({ paused: true, state: 'idle' })
+        await says($, clear)
+        expect(w.store.get('proj/DEV')).toMatchObject({ paused: false })
+      })
+    }
+  }
+
+  test('a turn while paused works as usual, and the pause holds after it', async ($, on) => {
+    const w = world(on)
+    await start($, 'QA:proj')
+    await says($, '/squad-pause')
+    await turnStart($)
+    expect(w.store.get('proj/QA')).toMatchObject({ paused: true, state: 'working' })
+    await turnEnd($)
+    await says($, 'what is your state?')
+    expect(w.store.get('proj/QA')).toMatchObject({ paused: true, state: 'idle' })
+  })
+
+  test('a prompt that only mentions a command, or a command of another name, changes nothing', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    for (const text of [
+      'set by `/squad-pause` or `-all`, typed or relayed', 'please do not /squad-pause yet', '/squad-pauses',
+      '/squad-save-state', '/squad-watch', '(`/squad-paused`)',
+    ]) {
+      await says($, text)
+      expect(w.store.get('proj/DEV')).toMatchObject({ paused: false })
+    }
   })
 })

@@ -310,25 +310,36 @@ not cost: most of the input is read from the cache, which is billed far below fr
 
 ### The squad board
 
-Above the prompt of the CTO's session, under a thin rule, one line shows every agent of the
+Above the prompt of the CTO's session, under a blue rule, one line shows every agent of the
 project, in the order CTO, DEV, QA: its signature and role, its state, and a link to the issue or
-pull request it works on, which the CTO's session reads from GitHub every three minutes.
+pull request its session last worked on, the last one its agent acted on with `gh` (viewing,
+commenting, editing, reviewing, merging, or opening a pull request). The board shows what each
+session does, not what GitHub says: it reads nothing from GitHub.
 
 ```
 ──────────────────────────────────────────────────────────────────
-👷🏼‍♂️CTO 💤 (ctx: 96%) │ 👨🏼‍💻DEV ⏳ Issue #123 │ 👩🏼‍🔬QA 🔍 PR #235
+👷🏼‍♂️CTO 💤 (ctx: 96%) │ 👨🏼‍💻DEV ⏳ Issue #123 │ 👩🏼‍🔬QA 👀 PR #235
 ```
 
-The states are those of the CTO's reports on the agents: working (a magnifying glass for QA, who
-reviews), waiting for you on a permission or a question, idle, and a question mark for an agent
-with no recent state. The CTO's context shows only once it reaches 90% of its window; the others'
-never shows. When DEV or QA starts to wait for you, a notice pops up in the CTO's session, once per
-wait. On a narrow terminal the line is cut at its end, so the CTO's part always shows, whole unless
+The states:
+- ⏳ working;
+- 👀 working, for QA, who reviews;
+- ✋ waiting for you, on a permission or a question; when DEV or QA starts to wait, a notice pops
+  up in the CTO's session, once per wait;
+- ⏸️ paused: the session received `/squad-pause` or `/squad-pause-all`, typed or relayed, and no
+  `/squad-resume` or `/squad-autopilot` since, nor their `-all`; a turn while paused shows as
+  working, and the pause shows again after it;
+- 💤 idle, free for the next request;
+- ❓ unknown: the session has written no state for three minutes, or has none.
+
+The CTO's context shows only once it reaches 90% of its window; the others' never shows. A command
+that names no issue or pull request leaves the item as it was, and the item goes when its session
+ends. On a narrow terminal the line is cut at its end, so the CTO's part always shows, whole unless
 the terminal is narrower than it.
 
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
-Code 2.1.287 or later; with an older one, the squad works without it. It only reads: it never
-answers a prompt for you, and it sends nothing outside GitHub's own read calls. A session loads a
+Code 2.1.287 or later; with an older one, the squad works without it. It only watches: it never
+answers a prompt for you, runs no command, and makes no network call. A session loads a
 new release of the board when it starts, so after an upgrade, restart the three sessions when it
 suits you; until then, each keeps the board it loaded. To turn the board off, run the
 `claude plugin disable` line the installer printed, in the main checkout; it stays off after

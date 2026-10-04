@@ -1,26 +1,28 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { BoardAgent, BoardAgents, BoardItem, BoardItems, BoardRole, BoardState } from '../types'
+import type { BoardAgent, BoardAgents, BoardItem, BoardRole, BoardState } from '../types'
 
-// The squad board (agent-squad #205, #212). Every session of a squad publishes its own state in
-// this mod's store, under `<project>/<role>`, and only that key; the CTO's session reads its
-// project's keys and draws them on one line above its prompt, each agent with a link to the item
-// GitHub says it works on, and shows a toast when an agent waits for the CEO. A session whose name
-// is not a squad role's does nothing. The signals are the ones agent-squad #199 measured.
+// The squad board (agent-squad #205, #212, #217, #222). Every session of a squad publishes its own
+// state in this mod's store, under `<project>/<role>`, and only that key: what it is doing, whether
+// the CEO paused it, and the last issue or PR its agent acted on with gh. The CTO's session reads
+// its project's keys and draws them on one line above its prompt, and shows a toast when an agent
+// waits for the CEO. The band shows each session's own state, not GitHub's: nothing is read from
+// GitHub, and no command is run. A session whose name is not a squad role's does nothing. The
+// signals are the ones agent-squad #199 measured.
 
 const ROLES: readonly BoardRole[] = ['CTO', 'DEV', 'QA']
-// How often a session rewrites its key, and how old a key may grow before its line reads unknown.
+// How often a session rewrites its key, and how old a key may grow before its part reads unknown.
 const HEARTBEAT_MS = 60_000
 const STALE_MS = 180_000
-// How often the CTO's session reads the keys, and GitHub.
+// How often the CTO's session reads the keys.
 const TICK_MS = 3_000
-const GITHUB_MS = 180_000
 // The state marks of SQUAD.md §6, written as escapes since emojis stay out of code: hourglass
-// (working), magnifying glass (QA working, since it reviews), raised hand (waits for the CEO), zzz
-// (idle), question mark (no recent state).
-const MARK: Record<BoardState | 'reviewing' | 'unknown', string> = {
-  working: '\u23F3', reviewing: '\u{1F50D}', permission: '\u270B', question: '\u270B', idle: '\u{1F4A4}',
+// (working), eyes (QA working, since it reviews), pause (paused by the CEO; a text character made an
+// emoji by its selector), raised hand (waits for the CEO), zzz (idle), question mark (no recent
+// state).
+const MARK = {
+  working: '\u23F3', reviewing: '\u{1F440}', paused: '\u23F8\uFE0F', waits: '\u270B', idle: '\u{1F4A4}',
   unknown: '\u2753',
 }
 // The members' signatures of SQUAD.md §6, as escapes: each a person, a skin tone, a joiner and what
@@ -31,21 +33,23 @@ const SIGNATURE: Record<BoardRole, string> = {
   QA: '\u{1F469}\u{1F3FC}\u200D\u{1F52C}',
 }
 // Every emoji the band draws takes two cells of a terminal, however many code points it has, as
-// Claude Code measures it; every other character one. The longest are matched first.
+// Claude Code measures it; every other character one. The longest are matched first. A terminal
+// that draws the pause in one cell leaves the line one cell shorter, which the cut allows for.
 const WIDE = [...new Set([...Object.values(SIGNATURE), ...Object.values(MARK)])].sort((a, b) => b.length - a.length)
 // Between two agents, a light vertical bar; where the band is cut, an ellipsis; above the agents, a
-// rule of light horizontal lines across the band.
+// rule of light horizontal lines across the band, in the blue of cmux's active pane.
 const SEPARATOR = ' \u2502 '
 const ELLIPSIS = ' \u2026'
 const RULE = '\u2500'
+const RULE_COLOR = '#0A84FF'
 // The CTO's context shows from this share of its window, as the CEO decided (agent-squad #217).
 const CONTEXT_FROM = 90
 
 const agents = atom({ plugin: 'squad-board', key: 'agents' } as const, { byRole: {}, now: 0 } as BoardAgents)
-const items = atom({ plugin: 'squad-board', key: 'items' } as const, { byRole: {}, readAt: null, error: null } as BoardItems)
 
 // This session: the title it started with, who it is once that title names a squad role, whether
-// its work has started, and what it is doing. A reload starts all of it over (recover, below).
+// its work has started, what it is doing, whether the CEO paused it, the last item its agent acted
+// on, and its repository's web address. A reload starts all of it over (recover, below).
 let title: string | null = null
 let me: { project: string; role: BoardRole; name: string } | null = null
 let isStarted = false
@@ -53,6 +57,9 @@ let isActive = false
 let state: BoardState = 'idle'
 let tool: string | null = null
 let since = 0
+let isPaused = false
+let item: BoardItem | null = null
+let repository: string | null = null
 // The CTO's session only: the waits it has already shown a toast for.
 let toasted: string[] = []
 
@@ -89,24 +96,77 @@ function isWaiting(now: BoardState): boolean {
   return now === 'permission' || now === 'question'
 }
 
-// What a wait is, in the words the board and the toast use.
+// What a wait is, in the words the toast uses.
 function waitText(agent: BoardAgent): string {
   return agent.state === 'question' ? 'a question' : `a permission for ${agent.tool ?? 'a tool'}`
 }
 
-// One part of the band: an agent, or the reason GitHub was not read.
-type Part = { key: string; text: string; item?: BoardItem; isDim?: boolean }
+// A GitHub repository's web address from a git remote, https or ssh; null for any other host.
+function webOf(remote: string | null): string | null {
+  const found = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(remote ?? '')
+  return found ? `https://github.com/${found[1]}/${found[2]}` : null
+}
 
-// An agent's part: its signature and role, its state, the CTO's context once it reaches
-// CONTEXT_FROM, and its item, named as an issue or a PR; with no key, or one gone stale, the unknown
+// An issue or PR from its GitHub web address; null for any other text.
+function itemAt(text: string): BoardItem | null {
+  const found = /https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/(issues|pull)\/(\d+)/.exec(text)
+  if (!found) return null
+  return { item: `${found[3] === 'pull' ? 'PR' : 'Issue'} #${found[4]}`, url: `https://github.com/${found[1]}/${found[2]}/${found[3]}/${found[4]}` }
+}
+
+// The issue or PR a gh command acts on (agent-squad #222): the first `gh issue` or `gh pr` the
+// command runs, at its start or after a separator, with its quoted text left out, so that a body or
+// a title is never read as a command or as its target.
+// - issue edit, comment, view or close, and pr view, checkout, review, comment, merge or edit:
+//   their first number or GitHub address, flags before it or not; `--repo owner/name` names
+//   another repository than the session's;
+// - pr create: the address of the new PR, which gh prints.
+// Null for any other command, and for one that names no number.
+function itemOf(command: string, output: string, home: string | null): BoardItem | null {
+  const bare = command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, "''")
+  const call = /(?:^|[\n;&|(]\s*)(?:rtk\s+)?gh\s+(issue|pr)\s+([a-z]+)\b([^\n;&|)]*)/.exec(bare)
+  if (!call) return null
+  const [, noun, verb, rest] = call
+  const verbs = noun === 'issue' ? ['edit', 'comment', 'view', 'close'] : ['create', 'view', 'checkout', 'review', 'comment', 'merge', 'edit']
+  if (!verbs.includes(verb)) return null
+  if (verb === 'create') return itemAt(output)
+  const target = rest.trim().split(/\s+/).find(token => /^(\d+|https:\/\/\S+)$/.test(token))
+  if (!target) return null
+  if (target.startsWith('https://')) return itemAt(target)
+  const other = /(?:^|\s)(?:-R|--repo)[\s=]([^\s/]+\/[^\s/]+)/.exec(rest)
+  const base = other ? `https://github.com/${other[1]}` : home
+  return { item: `${noun === 'pr' ? 'PR' : 'Issue'} #${target}`, url: base ? `${base}/${noun === 'pr' ? 'pull' : 'issues'}/${target}` : null }
+}
+
+// The step-away commands of SQUAD.md §6 a prompt carries, typed (the prompt starts with the
+// command) or relayed (the relay names it in parentheses, as `(`/squad-pause`)`): a pause sets the
+// session's pause; a resume, or autopilot, clears it. Each command's own file names only itself that
+// way, so an expanded command reads the same. Null for any other prompt.
+function stepAwayOf(text: string): 'pause' | 'clear' | null {
+  const found = /^\s*\/squad-(pause|resume|autopilot)(?:-all)?\b/.exec(text) ?? /\(`\/squad-(pause|resume|autopilot)(?:-all)?`\)/.exec(text)
+  if (!found) return null
+  return found[1] === 'pause' ? 'pause' : 'clear'
+}
+
+// One part of the band: an agent, with its item when it has one.
+type Part = { key: string; text: string; item: BoardItem | null }
+
+// An agent's mark: working (eyes for QA, who reviews), paused while it is idle and the CEO has
+// paused it, waiting for the CEO, idle.
+function markOf(role: BoardRole, agent: BoardAgent): string {
+  if (agent.state === 'working') return role === 'QA' ? MARK.reviewing : MARK.working
+  if (isWaiting(agent.state)) return MARK.waits
+  return agent.paused === true ? MARK.paused : MARK.idle
+}
+
+// An agent's part: its signature and role, its mark, the CTO's context once it reaches
+// CONTEXT_FROM, and the item its session last acted on; with no key, or one gone stale, the unknown
 // mark.
-function partOf(role: BoardRole, agent: BoardAgent | undefined, item: BoardItem | undefined, now: number): Part {
-  const named = item && { ...item, item: item.item.startsWith('#') ? `Issue ${item.item}` : item.item }
+function partOf(role: BoardRole, agent: BoardAgent | undefined, now: number): Part {
   const head = `${SIGNATURE[role]}${role}`
-  if (!agent || now - agent.at > STALE_MS) return { key: role, text: `${head} ${MARK.unknown}`, item: named }
-  const mark = role === 'QA' && agent.state === 'working' ? MARK.reviewing : MARK[agent.state]
+  if (!agent || now - agent.at > STALE_MS) return { key: role, text: `${head} ${MARK.unknown}`, item: agent?.item ?? null }
   const isFull = role === 'CTO' && agent.context !== null && agent.context >= CONTEXT_FROM
-  return { key: role, text: `${head} ${mark}${isFull ? ` (ctx: ${agent.context}%)` : ''}`, item: named }
+  return { key: role, text: `${head} ${markOf(role, agent)}${isFull ? ` (ctx: ${agent.context}%)` : ''}`, item: agent.item ?? null }
 }
 
 // How many cells a text takes on a terminal.
@@ -138,7 +198,7 @@ function fit(parts: Part[], columns: number): { shown: Part[]; hasEllipsis: bool
   return { shown, hasEllipsis: false }
 }
 
-// Writes this session's key: its state, its context use, and the time.
+// Writes this session's key: its state, its pause, its item, its context use, and the time.
 async function publish($: any) {
   if (!me) return
   const usage = await $.session.usage()
@@ -152,6 +212,8 @@ async function publish($: any) {
     since,
     at: await $.clock.now(),
     context: usage.context?.percent ?? null,
+    paused: isPaused,
+    item,
   }
   if (me.role === 'CTO') agent.toasted = toasted
   await $.store.set(keyOf(me.project, me.role), agent)
@@ -172,7 +234,7 @@ async function resume($: any) {
 }
 
 // After a reload the module has lost the session's title: its own key, found by the session's
-// id, gives back its name, its state and its toasts.
+// id, gives back its name, its state, its pause, its item and its toasts.
 async function recover($: any) {
   const sessionId = await $.session.id()
   for (const key of await $.store.keys()) {
@@ -182,6 +244,8 @@ async function recover($: any) {
       state = value.state
       tool = value.tool
       since = value.since
+      isPaused = value.paused === true
+      item = value.item ?? null
       toasted = value.toasted ?? []
       return
     }
@@ -189,7 +253,7 @@ async function recover($: any) {
 }
 
 // At the session's end its key goes, unless another session of its role has written it since;
-// after a /clear the session goes on under a new id, idle.
+// after a /clear the session goes on under a new id, idle, with no item.
 async function leave($: any, sessionId: string) {
   if (!me) return
   const key = keyOf(me.project, me.role)
@@ -197,6 +261,7 @@ async function leave($: any, sessionId: string) {
   if (isAgent(value) && value.sessionId === sessionId) await $.store.delete(key)
   state = 'idle'
   tool = null
+  item = null
 }
 
 // The CTO's session: reads its project's keys for the board, and shows a toast for each wait of
@@ -226,43 +291,18 @@ async function readAgents($: any) {
   }
 }
 
-// The CTO's session: reads from GitHub the item each role works on, through the playbook's
-// `squad-stalls.sh --current`, which makes read-only gh calls. A failed read clears the items,
-// which may no longer hold, and says why.
-async function readGitHub($: any) {
-  const now = await $.clock.now()
-  try {
-    const root = await $.session.root()
-    const git = await $.process.run(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root })
-    if (git.exitCode !== 0) throw new Error('the session is not in a git checkout')
-    const main = git.stdout.trim().replace(/\/[^/]+\/?$/, '')
-    const ran = await $.process.run([`${main}/.agent-squad/playbook/scripts/squad-stalls.sh`, '--current'], { cwd: root, timeoutMs: 120_000 })
-    if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().split('\n').pop() || `squad-stalls.sh exited ${ran.exitCode}`)
-    const byRole: Partial<Record<BoardRole, BoardItem>> = {}
-    for (const line of ran.stdout.split('\n')) {
-      const [role, item, url, step] = line.split('\t')
-      if (ROLES.includes(role as BoardRole) && item && /^https:\/\//.test(url ?? '')) byRole[role as BoardRole] = { item, url, step: step ?? '' }
-    }
-    await update($, items, () => ({ byRole, readAt: now, error: null }))
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    await update($, items, old => ({ byRole: {}, readAt: old.readAt, error: reason }))
-  }
-}
-
-// Starts the session's work once it is known to be a squad's: its heartbeat and, in the CTO's
-// session, what the band shows.
+// Starts the session's work once it is known to be a squad's: its repository's address (none
+// outside a git checkout), its heartbeat and, in the CTO's session, what the band shows.
 async function activate($: any) {
   if (!me || !isStarted || isActive) return
   isActive = true
+  repository = webOf((await $.session.repo().catch(() => null))?.remote ?? null)
   if (since === 0) since = await $.clock.now()
   await publish($)
   $.clock.every(HEARTBEAT_MS, () => void publish($))
   if (me.role !== 'CTO') return
   await readAgents($)
   $.clock.every(TICK_MS, () => void readAgents($))
-  $.clock.after(0, () => void readGitHub($))
-  $.clock.every(GITHUB_MS, () => void readGitHub($))
 }
 
 export const register: Register = on => {
@@ -282,6 +322,15 @@ export const register: Register = on => {
     await activate($)
     return next(e)
   })
+  // A prompt, typed or delivered by another session: a pause set or cleared by the CEO.
+  on('prompt.submit', async ($, e, next) => {
+    const step = stepAwayOf(e.text)
+    if (me && step !== null && isPaused !== (step === 'pause')) {
+      isPaused = step === 'pause'
+      await publish($)
+    }
+    return next(e)
+  })
 
   // The states (agent-squad #199): a turn of the main loop runs; a permission or a question waits
   // for the CEO until the call goes on; the turn ends. tool.check is not used: in auto mode it asks
@@ -299,9 +348,18 @@ export const register: Register = on => {
     await become($, isQuestion ? 'question' : 'permission', isQuestion ? null : e.tool_name)
     return next(e)
   })
+  // A tool call ends a wait; a gh call that worked names the item the session acts on.
   on('tool.call', async ($, e, next) => {
-    const ran = await next(e)
+    const ran: any = await next(e)
     await resume($)
+    if (me && e.tool === 'Bash' && !ran?.isError && !ran?.deny) {
+      const input = e as any
+      const found = itemOf(String(input.command ?? ''), String(ran?.result?.stdout ?? ''), repository)
+      if (found && (found.item !== item?.item || found.url !== item?.url)) {
+        item = found
+        await publish($)
+      }
+    }
     return ran
   })
   on('classic.PostToolUse', async ($, e, next) => {
@@ -317,28 +375,26 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The board, in the CTO's session: a rule, then one line above the prompt, cut at its end on a
-  // narrow terminal, so that the CTO's part stays whole. A survey that holds the band goes first.
+  // The board, in the CTO's session: a blue rule, then one line above the prompt, cut at its end on
+  // a narrow terminal, so that the CTO's part stays whole. A survey that holds the band goes first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
     const seen = await read($, agents)
-    const github = await read($, items)
-    const parts = ROLES.map(role => partOf(role, seen.byRole[role], github.byRole[role], seen.now))
-    if (github.error !== null) parts.push({ key: 'github', text: `GitHub not read: ${github.error}`, isDim: true })
+    const parts = ROLES.map(role => partOf(role, seen.byRole[role], seen.now))
     const { shown, hasEllipsis } = fit(parts, e.props.bodyColumns)
     return (
       <Box flexDirection="column">
         <Box key="rule">
-          <Text dimColor wrap="truncate-end">{RULE.repeat(Math.max(1, e.props.bodyColumns))}</Text>
+          <Text color={RULE_COLOR} wrap="truncate-end">{RULE.repeat(Math.max(1, e.props.bodyColumns))}</Text>
         </Box>
         <Box key="line" flexDirection="row" overflow="hidden">
           {shown.map((part, index) => (
             <Box key={part.key}>
               {index > 0 && <Text dimColor wrap="truncate-end">{SEPARATOR}</Text>}
-              <Text dimColor={part.isDim === true} wrap="truncate-end">{part.text}</Text>
+              <Text wrap="truncate-end">{part.text}</Text>
               {part.item && <Text> </Text>}
-              {part.item && <Link href={part.item.url}>{part.item.item}</Link>}
+              {part.item && (part.item.url?.startsWith('https://') ? <Link href={part.item.url}>{part.item.item}</Link> : <Text>{part.item.item}</Text>)}
             </Box>
           ))}
           {hasEllipsis && <Text dimColor>{ELLIPSIS}</Text>}
