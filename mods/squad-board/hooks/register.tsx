@@ -20,7 +20,7 @@ const GITHUB_MS = 180_000
 // The state marks of SQUAD.md §6, written as escapes since emojis stay out of code: hourglass
 // (working), raised hand (waits for the CEO), zzz (idle), question mark (no sign of life).
 const MARK: Record<BoardState | 'unknown', string> = {
-  working: '⏳', permission: '✋', question: '✋', idle: '\u{1F4A4}', unknown: '❓',
+  working: '\u23F3', permission: '\u270B', question: '\u270B', idle: '\u{1F4A4}', unknown: '\u2753',
 }
 
 const agents = atom({ plugin: 'squad-board', key: 'agents' } as const, { byRole: {}, now: 0 } as BoardAgents)
@@ -176,8 +176,8 @@ async function readAgents($: any) {
 }
 
 // The CTO's session: reads from GitHub the item each role works on, through the playbook's
-// `squad-stalls.sh --current`, which makes read-only gh calls. A failed read keeps the last items
-// and says why.
+// `squad-stalls.sh --current`, which makes read-only gh calls. A failed read clears the items,
+// which may no longer hold, and says why.
 async function readGitHub($: any) {
   const now = await $.clock.now()
   try {
@@ -195,7 +195,7 @@ async function readGitHub($: any) {
     await update($, items, () => ({ byRole, readAt: now, error: null }))
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    await update($, items, old => ({ ...old, error: reason }))
+    await update($, items, old => ({ byRole: {}, readAt: old.readAt, error: reason }))
   }
 }
 

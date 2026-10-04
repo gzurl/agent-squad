@@ -65,11 +65,11 @@ describe('the lines', () => {
     expect(keys).toEqual(['CTO', 'DEV', 'QA'])
     expect(await line('CTO')).toContain('idle')
     expect(await line('CTO')).toContain('ctx 42%')
-    expect(await line('DEV')).toContain('⏳')
+    expect(await line('DEV')).toContain('\u23F3')
     expect(await line('DEV')).toContain('working')
     expect(await line('DEV')).toContain('ctx 30%')
     expect(await line('DEV')).not.toContain('permission')
-    expect(await line('QA')).toContain('✋')
+    expect(await line('QA')).toContain('\u270B')
     expect(await line('QA')).toContain('waits for you: a question')
     expect(await line('QA')).toContain('ctx 61%')
   })
@@ -114,14 +114,31 @@ describe('the lines', () => {
       .toEqual(['GitHub not read: squad-stalls: cannot read the open pull requests; nothing was checked'])
   })
 
+  // QA's case on PR #208: links read once may no longer hold when the next read fails.
+  test('GitHub unreadable after a read that succeeded: the earlier links go too', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj') })
+    w.current = CURRENT
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    const first = await board($)
+    expect(first.links).toHaveLength(2)
+    await first.ui.unmount()
+    w.currentExit = 1
+    await w.clock.advance(180_000)
+    const { ui, links, line } = await board($)
+    expect(links).toEqual([])
+    expect(await line('DEV')).toContain('idle')
+    expect(await ui.findAll({ type: 'Text', text: 'GitHub not read' })).toHaveLength(1)
+  })
+
   test('a key older than three minutes reads unknown, and a role with no key too', async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', at: START - 240_000 }) })
     await start($, 'CTO:proj')
     await w.clock.settle()
     const { line } = await board($)
-    expect(await line('DEV')).toContain('❓')
+    expect(await line('DEV')).toContain('\u2753')
     expect(await line('DEV')).toContain('no sign for 4 min')
-    expect(await line('QA')).toContain('❓')
+    expect(await line('QA')).toContain('\u2753')
     expect(await line('QA')).toContain('no session seen')
   })
 
