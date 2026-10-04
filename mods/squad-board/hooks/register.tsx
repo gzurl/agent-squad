@@ -97,18 +97,21 @@ function widthOf(text: string): number {
   return width
 }
 
-// The parts that fit in `columns`, in order, and whether any was left out: the first always, which
-// the surface cuts at the edge if even it is too wide, and each later one only whole.
-function fit(parts: Part[], columns: number): { shown: Part[]; isCut: boolean } {
+// The parts that fit in `columns`, in order, and whether the ellipsis that marks a cut is drawn.
+// The first part always shows, and the surface cuts it at the edge if even it is too wide. Each
+// later one shows only whole, and only if it leaves room for the ellipsis, unless it is the last,
+// after which nothing can be cut. The ellipsis is drawn where it fits.
+function fit(parts: Part[], columns: number): { shown: Part[]; hasEllipsis: boolean } {
   const shown: Part[] = []
   let used = 0
-  for (const part of parts) {
+  for (const [index, part] of parts.entries()) {
     const width = (shown.length === 0 ? 0 : widthOf(SEPARATOR)) + widthOf(part.text) + (part.item ? 1 + widthOf(part.item.item) : 0)
-    if (shown.length > 0 && used + width > columns) return { shown, isCut: true }
+    const room = index === parts.length - 1 ? 0 : widthOf(ELLIPSIS)
+    if (shown.length > 0 && used + width + room > columns) return { shown, hasEllipsis: used + widthOf(ELLIPSIS) <= columns }
     shown.push(part)
     used += width
   }
-  return { shown, isCut: false }
+  return { shown, hasEllipsis: false }
 }
 
 // Writes this session's key: its state, its context use, and the time.
@@ -299,7 +302,7 @@ export const register: Register = on => {
     const github = await read($, items)
     const parts = ROLES.map(role => partOf(role, seen.byRole[role], github.byRole[role], seen.now))
     if (github.error !== null) parts.push({ key: 'github', text: `GitHub not read: ${github.error}`, isDim: true })
-    const { shown, isCut } = fit(parts, e.props.bodyColumns)
+    const { shown, hasEllipsis } = fit(parts, e.props.bodyColumns)
     return (
       <Box flexDirection="row" overflow="hidden">
         {shown.map((part, index) => (
@@ -310,7 +313,7 @@ export const register: Register = on => {
             {part.item && <Link href={part.item.url}>{part.item.item}</Link>}
           </Box>
         ))}
-        {isCut && <Text dimColor>{ELLIPSIS}</Text>}
+        {hasEllipsis && <Text dimColor>{ELLIPSIS}</Text>}
       </Box>
     )
   })

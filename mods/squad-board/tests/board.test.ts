@@ -8,6 +8,13 @@ import { asks, START, start, world } from './world'
 // item on GitHub, cut at the end where the terminal is narrow; a toast when an agent turns to wait
 // for the CEO, once per wait.
 
+// How many cells a text takes on a terminal: the state marks two, any other character one.
+function cells(text: string): number {
+  let width = 0
+  for (const char of text) width += ['\u23F3', '\u270B', '\u{1F4A4}', '\u2753'].includes(char) ? 2 : 1
+  return width
+}
+
 // A key as another session of the squad writes it.
 function agent(role: string, project: string, fields: Record<string, unknown> = {}) {
   return {
@@ -166,19 +173,39 @@ describe('the line', () => {
     w.current = CURRENT
     await start($, 'CTO:proj')
     await w.clock.settle()
-    // The CTO's part takes 10 cells (its mark two), DEV's 3 more for the bar and 15 for itself,
-    // its link included: 28 in all.
-    const wide = await band($, 28)
+    // The CTO's part takes 10 cells (its mark two); DEV's 3 more for the bar and 15 for itself, its
+    // link included; QA's 20, its link included; the ellipsis 2. DEV shows from 30 columns, with room
+    // for the ellipsis, and the whole line from 48.
+    const wide = await band($, 30)
     expect(wide.keys).toEqual(['CTO', 'DEV'])
-    expect(wide.drawn.endsWith(' \u2026')).toBe(true)
+    expect(wide.drawn).toBe('\u{1F4A4} CTO 42% \u2502 \u{1F4A4} DEV 68% #205 \u2026')
     await wide.ui.unmount()
-    const narrow = await band($, 27)
+    const narrow = await band($, 29)
     expect(narrow.keys).toEqual(['CTO'])
-    expect(await narrow.part('CTO')).toBe('\u{1F4A4} CTO 42%')
     expect(narrow.drawn).toBe('\u{1F4A4} CTO 42% \u2026')
     await narrow.ui.unmount()
+    const whole = await band($, 48)
+    expect(whole.keys).toEqual(['CTO', 'DEV', 'QA'])
+    expect(whole.drawn.endsWith('\u2026')).toBe(false)
+    await whole.ui.unmount()
     const tiny = await band($, 4)
     expect(tiny.keys).toEqual(['CTO'])
+    expect(tiny.drawn).toBe('\u{1F4A4} CTO 42%')
+  })
+
+  // QA's case on PR #213: the ellipsis must fit too.
+  test('the line drawn never takes more cells than the band has, once the CTO part fits', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { context: 68 }), 'proj/QA': agent('QA', 'proj') })
+    w.current = CURRENT
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    const over: string[] = []
+    for (let columns = 10; columns <= 60; columns++) {
+      const { ui, drawn } = await band($, columns)
+      if (cells(drawn) > columns) over.push(`${columns}: ${cells(drawn)} cells, ${drawn}`)
+      await ui.unmount()
+    }
+    expect(over).toEqual([])
   })
 })
 

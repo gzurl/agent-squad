@@ -321,7 +321,8 @@ it works on, which the CTO's session reads from GitHub every three minutes.
 The states are those of the CTO's reports on the agents: working, waiting for you on a permission
 or a question, idle, and a question mark for an agent with no sign of life for a few minutes. When
 DEV or QA starts to wait for you, a notice pops up in the CTO's session, once per wait. On a narrow
-terminal the line is cut at its end, so the CTO's part always shows whole.
+terminal the line is cut at its end, so the CTO's part always shows, whole unless the terminal is
+narrower than it.
 
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
 Code 2.1.287 or later; with an older one, the squad works without it. It only reads: it never
@@ -504,8 +505,8 @@ terminal, for a permission or a question.
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
 
-**What comes next?** Whatever the open issues say: the backlog is public, and no date is promised.
-Ideas are welcome as issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
+**What comes next?** Whatever the open issues say, with no date promised. Ideas are welcome as
+issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 
 ## 📦 This repository
