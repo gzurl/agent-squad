@@ -326,12 +326,19 @@ narrower than it.
 
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
 Code 2.1.287 or later; with an older one, the squad works without it. It only reads: it never
-answers a prompt for you, and it sends nothing outside GitHub's own read calls. A session picks it
-up when it starts, so sessions already running when you upgrade show it after a restart. To turn
-the board off, run the `claude plugin disable` line the installer printed, in the main checkout; it
-stays off after upgrades, and the same line with `enable` in place of `disable` turns it back on.
-The marketplaces named `agent-squad-…-v<N>` in `.claude/settings.local.json` are the squad's: each
-install replaces them with its own release's, and leaves every other marketplace alone.
+answers a prompt for you, and it sends nothing outside GitHub's own read calls. A session loads a
+new release of the board when it starts, so after an upgrade, restart the three sessions when it
+suits you; until then, each keeps the board it loaded. To turn the board off, run the
+`claude plugin disable` line the installer printed, in the main checkout; it stays off after
+upgrades, and the same line with `enable` in place of `disable` turns it back on.
+
+The squad's marketplace in `.claude/settings.local.json` is named `agent-squad-<project>-<hash>`,
+and keeps that name from one release to the next, so the board keeps its store. An install replaces
+the squad's other names there, from a release before v39 or a checkout since moved, and leaves
+every other marketplace alone. Releases before v39 put the version in the name, so each left a
+store file of its own in `~/.claude/plugins/store/`, named
+`squad-board_agent-squad-<project>-<hash>-v<N>-<…>.json`: a few hundred bytes each, which you can
+delete once every session has restarted on v39 or later.
 
 
 ## 📋 Requirements
@@ -434,7 +441,7 @@ the installer touches only the files listed before it:
 ```
 
 An upgrade replaces `playbook/`, only once the new one is complete, and rewrites the hooks, the
-pre-push hook, `playbook.manifest` and the mods' marketplace, which takes the new release's name.
+pre-push hook, `playbook.manifest` and the mods' marketplace, which keeps its name.
 It removes from `.claude/commands/` any `squad-*.md` the new release no longer has, as after a
 command is renamed, unless your project tracks that file. It leaves the rest alone. `SQUAD.md` §2.4
 says who cleans up what, and when.

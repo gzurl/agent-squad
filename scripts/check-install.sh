@@ -1003,12 +1003,13 @@ check "but keeps a squad-named command the project tracks, saying so" \
   bash -c '[ "$(cat "$1/.claude/commands/squad-own.md")" = "the project'"'"'s own command" ] && grep -qF "/squad-own is the project'"'"'s own file, tracked by git, and not the squad'"'"'s: left as it is" <<<"$2"' _ "$target" "$out"
 check "and every command of the playbook is still there" same_commands "$target"
 
-# 19. The squad's mods (#206): enabled for the project alone, from the playbook, through a
-#     marketplace of the project's own in .agent-squad/, named after the project, a hash of its path
-#     and the release, written into .claude/settings.local.json with nothing fetched and nothing
-#     written outside the project; a plugin the person turned off stays off; an upgrade moves to the
-#     new release and leaves nothing of the old one; a Claude Code without mods, or a release
-#     without them, gets none, and the install still succeeds.
+# 19. The squad's mods (#206, #215): enabled for the project alone, from the playbook, through a
+#     marketplace of the project's own in .agent-squad/, named after the project and a hash of its
+#     path, written into .claude/settings.local.json with nothing fetched and nothing written
+#     outside the project; a plugin the person turned off stays off; an upgrade keeps the name, so
+#     that the mods keep their store, and moves the names of releases before v39 (-v<N>) to it; a
+#     Claude Code without mods, or a release without them, gets none, and the install still
+#     succeeds.
 target="$(new_project mods)" || exit 2
 tsquad="$(cd "$target" && pwd -P)/.agent-squad"
 tsettings="$target/.claude/settings.local.json"
@@ -1024,8 +1025,8 @@ out="$(HOME="$lab/home" "$install" "$target" "$tag_a" 2>&1)"
 code=$?
 name_a="$(jq -r '.extraKnownMarketplaces // {} | keys[0] // ""' "$tsettings")"
 check "an install with Claude Code 2.1.289 exits 0" [ "$code" -eq 0 ]
-check "and names the project's marketplace after the project, a hash of its path and the release" \
-  bash -c '[[ "$1" =~ ^agent-squad-mods-[0-9a-f]{6}-v$2$ ]]' _ "$name_a" "$version_a"
+check "and names the project's marketplace after the project and a hash of its path, not the release" \
+  bash -c '[[ "$1" =~ ^agent-squad-mods-[0-9a-f]{6}$ ]]' _ "$name_a"
 check "declares it at .agent-squad/ and enables the default plugin under it, and nothing else of the squad's" \
   jq_holds ".extraKnownMarketplaces == {\"$name_a\": {source: {source: \"directory\", path: \"$tsquad\"}}}
     and .enabledPlugins == {\"squad-board@$name_a\": true}" "$tsettings"
@@ -1050,31 +1051,43 @@ check "and the install says so, and how to turn it back on" contains "$out" "ena
 check "and --check passes, naming it" has_line "$(mods_items "$target")" "check: ok      $item_mods (squad-board turned off)"
 out="$("$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" 2>&1)"
 code=$?
-name_b="${name_a%-v*}-v${tag_b#v}"
 check "an upgrade exits 0" [ "$code" -eq 0 ]
-check "and moves to the new release's marketplace, the plugin still off, nothing of the old one left" \
-  jq_holds ".extraKnownMarketplaces == {\"$name_b\": {source: {source: \"directory\", path: \"$tsquad\"}}}
-    and .enabledPlugins == {\"squad-board@$name_b\": false}" "$tsettings"
+check "and keeps the marketplace's name, so the store too, the plugin still off" \
+  jq_holds ".extraKnownMarketplaces == {\"$name_a\": {source: {source: \"directory\", path: \"$tsquad\"}}}
+    and .enabledPlugins == {\"squad-board@$name_a\": false}" "$tsettings"
 check "with the new release's marketplace in .agent-squad/" \
-  [ "$(jq -S . "$tsquad/.claude-plugin/marketplace.json")" = "$(release_marketplace "$lab/vb" "$name_b")" ]
-jq --arg key "squad-board@$name_b" '.enabledPlugins[$key] = true' "$tsettings" > "$lab/mods-on" && cp "$lab/mods-on" "$tsettings"
+  [ "$(jq -S . "$tsquad/.claude-plugin/marketplace.json")" = "$(release_marketplace "$lab/vb" "$name_a")" ]
+
+#     A project that a release before v39 installed has the names with -v<N>: an install moves them
+#     to the stable name, the plugin still off where it was turned off.
+jq --arg name "$name_a" --arg old "$name_a-v37" '.extraKnownMarketplaces = {($old): .extraKnownMarketplaces[$name]}
+  | .enabledPlugins = {("squad-board@" + $old): false}' "$tsettings" > "$lab/mods-old" && cp "$lab/mods-old" "$tsettings"
+check "names with -v<N> fail the mods item, named" \
+  contains "$(mods_items "$target")" "check: FAILED  $item_mods: missing: $name_a, squad-board@$name_a; unexpected: $name_a-v37, squad-board@$name_a-v37; install again"
+"$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" >/dev/null 2>&1
+check "an install moves them to the stable name, the plugin still off" \
+  jq_holds ".extraKnownMarketplaces == {\"$name_a\": {source: {source: \"directory\", path: \"$tsquad\"}}}
+    and .enabledPlugins == {\"squad-board@$name_a\": false}" "$tsettings"
+jq --arg key "squad-board@$name_a" '.enabledPlugins[$key] = true' "$tsettings" > "$lab/mods-on" && cp "$lab/mods-on" "$tsettings"
 check "turned on again, --check passes" has_line "$(mods_items "$target")" "check: ok      $item_mods"
 
-#     What --check catches, and an install mends: another release's entries, and the marketplace
-#     missing. The project's own marketplaces and plugins are left as they are, agent-squad-tools
-#     too, although its name starts like the squad's (#210).
+#     What --check catches, and an install mends: the squad's names that are not this project's,
+#     as a checkout moved elsewhere leaves, and the marketplace missing. The project's own
+#     marketplaces and plugins are left as they are, agent-squad-tools too, although its name starts
+#     like the squad's (#210).
 jq '.extraKnownMarketplaces["agent-squad-other-abcdef-v1"] = {source: {source: "directory", path: "/elsewhere"}}
+  | .extraKnownMarketplaces["agent-squad-moved-123abc"] = {source: {source: "directory", path: "/moved"}}
   | .enabledPlugins["squad-board@agent-squad-other-abcdef-v1"] = true
   | .extraKnownMarketplaces["team-tools"] = {source: {source: "directory", path: "/tools"}}
   | .enabledPlugins["lint@team-tools"] = true
   | .extraKnownMarketplaces["agent-squad-tools"] = {source: {source: "directory", path: "/more-tools"}}
   | .enabledPlugins["format@agent-squad-tools"] = true' "$lab/mods-on" > "$tsettings"
-check "an earlier release's entries fail the mods item, named" \
-  contains "$(mods_items "$target")" "check: FAILED  $item_mods: missing: none; unexpected: agent-squad-other-abcdef-v1, squad-board@agent-squad-other-abcdef-v1; install again"
+check "the squad's names that are not this project's fail the mods item, named" \
+  contains "$(mods_items "$target")" "check: FAILED  $item_mods: missing: none; unexpected: agent-squad-moved-123abc, agent-squad-other-abcdef-v1, squad-board@agent-squad-other-abcdef-v1; install again"
 "$tsquad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$target" "$tag_b" >/dev/null 2>&1
 check "an install removes them and keeps the project's own marketplaces and plugins" \
-  jq_holds "(.extraKnownMarketplaces | keys) == [\"$name_b\", \"agent-squad-tools\", \"team-tools\"]
-    and .enabledPlugins == {\"squad-board@$name_b\": true, \"lint@team-tools\": true, \"format@agent-squad-tools\": true}" "$tsettings"
+  jq_holds "(.extraKnownMarketplaces | keys) == [\"$name_a\", \"agent-squad-tools\", \"team-tools\"]
+    and .enabledPlugins == {\"squad-board@$name_a\": true, \"lint@team-tools\": true, \"format@agent-squad-tools\": true}" "$tsettings"
 rm "$tsquad/.claude-plugin/marketplace.json"
 check "a missing marketplace fails the mods item" \
   contains "$(mods_items "$target")" "check: FAILED  $item_mods: .agent-squad/.claude-plugin/marketplace.json is missing or not this release's"
