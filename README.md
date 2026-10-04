@@ -29,7 +29,7 @@ each goal is. **agent-squad** needs both.
 - 🌳 **Each agent works in its own git worktree,** so nobody steps on anyone's files.
 - 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main`, no merge
   without QA's approval.
-- 🧭 **A live board in the CTO's session:** each agent's state, how full its context is, and the
+- 🧭 **A live line above the CTO's prompt:** each agent's state, how full its context is, and the
   issue or PR it works on, with a notice when an agent waits for you.
 - ☕ **Step away and come back:** pause the squad, or put it on autopilot, which checks every half
   hour that no work has stalled, and get a summary when you return. Sessions keep the thread across
@@ -310,22 +310,27 @@ not cost: most of the input is read from the cache, which is billed far below fr
 
 ### The squad board
 
-The CTO's session shows a pane with one line per agent of the project, in the order CTO, DEV, QA:
-whether it is working, waiting for you, idle, or silent for a few minutes, how full its context is,
-and a link to the issue or pull request it works on, which the CTO's session reads from GitHub every
-three minutes. When DEV or QA starts to wait for you, on a permission or a question, a notice pops
-up in the CTO's session, once per wait.
+Above the prompt of the CTO's session, one line shows every agent of the project, in the order
+CTO, DEV, QA: its state, its role, how full its context is, and a link to the issue or pull request
+it works on, which the CTO's session reads from GitHub every three minutes.
+
+```
+💤 CTO 42% │ ⏳ DEV 68% #205 │ ✋ QA 33% PR #208
+```
+
+The states are those of the CTO's reports on the agents: working, waiting for you on a permission
+or a question, idle, and a question mark for an agent with no sign of life for a few minutes. When
+DEV or QA starts to wait for you, a notice pops up in the CTO's session, once per wait. On a narrow
+terminal the line is cut at its end, so the CTO's part always shows whole.
 
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
 Code 2.1.287 or later; with an older one, the squad works without it. It only reads: it never
 answers a prompt for you, and it sends nothing outside GitHub's own read calls. A session picks it
-up when it starts, so sessions already running when you upgrade show it after a restart.
-`/squad-board` opens the pane again if you closed it, and on a terminal narrower than 144 columns
-Claude Code waits for that command before it shows the pane. To turn the board off, run the
-`claude plugin disable` line the installer printed, in the main checkout; it stays off after
-upgrades, and the same line with `enable` in place of `disable` turns it back on. The marketplaces
-named `agent-squad-…-v<N>` in `.claude/settings.local.json` are the squad's: each install replaces
-them with its own release's, and leaves every other marketplace alone.
+up when it starts, so sessions already running when you upgrade show it after a restart. To turn
+the board off, run the `claude plugin disable` line the installer printed, in the main checkout; it
+stays off after upgrades, and the same line with `enable` in place of `disable` turns it back on.
+The marketplaces named `agent-squad-…-v<N>` in `.claude/settings.local.json` are the squad's: each
+install replaces them with its own release's, and leaves every other marketplace alone.
 
 
 ## 📋 Requirements
@@ -487,7 +492,8 @@ Claude Code features, and another tool would need an equivalent of each:
 - compaction that follows the project's instructions on what to keep;
 - session transcripts kept on the machine, which `/squad-usage` reads;
 - `/loop`, which runs a command again on a schedule, as the CTO runs `/squad-watch` every half
-  hour while you are away.
+  hour while you are away;
+- mods, for the [squad board](#the-squad-board), which the squad can do without.
 
 It also relies on GitHub, through the `gh` command line.
 
@@ -498,9 +504,8 @@ terminal, for a permission or a question.
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
 
-**What comes next?** A squad board inside Claude Code, with each agent's state and current issue
-at a glance ([#172](https://github.com/gzurl/agent-squad/issues/172)), with no date promised. Ideas
-are welcome as issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
+**What comes next?** Whatever the open issues say: the backlog is public, and no date is promised.
+Ideas are welcome as issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 
 ## 📦 This repository
