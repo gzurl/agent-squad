@@ -3,11 +3,12 @@ import type { Engine } from 'claude-code/testing'
 
 import { asks, says, START, start, world } from './world'
 
-// The board in the CTO's session (agent-squad #205, #212, #217, #222): a blue rule, then one line
-// above the prompt, with each agent of its own project in the order CTO, DEV, QA: its signature and
-// role, its state, the CTO's context from 90%, and a link to the issue or PR its session last acted
-// on, cut at the end where the terminal is narrow; a toast when an agent turns to wait for the CEO,
-// once per wait. Everything comes from the sessions' keys, nothing from GitHub.
+// The board in the CTO's session (agent-squad #205, #212, #217, #222): one line above the prompt,
+// between two blue rules, with each agent of its own project in the order CTO, DEV, QA: its
+// signature and role, the role in its colour, its state, the CTO's context from 90%, and a link to
+// the issue or PR its session last acted on, cut at the end where the terminal is narrow; a toast
+// when an agent turns to wait for the CEO, once per wait. Everything comes from the sessions' keys,
+// nothing from GitHub.
 
 // The signatures and the state marks, as the band draws them.
 const SIGN = { CTO: '\u{1F477}\u{1F3FC}‍♂️', DEV: '\u{1F468}\u{1F3FC}‍\u{1F4BB}', QA: '\u{1F469}\u{1F3FC}‍\u{1F52C}' }
@@ -38,8 +39,8 @@ function agent(role: string, project: string, fields: Record<string, unknown> = 
 const ISSUE = { item: { item: 'Issue #205', url: 'https://github.com/o/r/issues/205' } }
 const PR = { item: { item: 'PR #210', url: 'https://github.com/o/r/pull/210' } }
 
-// The band as a terminal of `columns` cells draws it above the CTO's prompt: the rule, each agent's
-// part by its key, the keys in order, the links, and the whole line.
+// The band as a terminal of `columns` cells draws it above the CTO's prompt: the rules above and
+// below, each agent's part by its key, the keys in order, the links, and the whole line.
 async function band($: Engine, columns = 120, hasSurvey = false) {
   const ui = await $.ui.mount({
     plugin: 'squad-board', surface: 'terminal', component: 'AbovePrompt',
@@ -47,17 +48,21 @@ async function band($: Engine, columns = 120, hasSurvey = false) {
   })
   const line = await ui.find({ key: 'line' })
   const keys = (await ui.findAll({ type: 'Box' })).map(box => box.key)
-    .filter(key => key !== undefined && key !== 'line' && key !== 'rule')
+    .filter(key => key !== undefined && key !== 'line' && key !== 'rule' && key !== 'rule-below')
   const part = async (role: string) => (await ui.find({ key: role }))?.text ?? ''
   const rule = (await ui.find({ key: 'rule' }))?.text ?? ''
+  const ruleBelow = (await ui.find({ key: 'rule-below' }))?.text ?? ''
   const links = await ui.findAll({ type: 'Link' })
-  // The rule's colour, from the text that draws it.
-  const ruleColor = (await ui.findAll({ type: 'Text' })).find(found => found.text === rule && rule !== '')?.props.color
+  // The texts drawn, and the colour of the first that reads `text`.
+  const texts = await ui.findAll({ type: 'Text' })
+  const colorOf = (text: string) => texts.find(found => found.text === text)?.props.color
+  // The colours of the texts that draw the rules.
+  const ruleColors = rule === '' ? [] : texts.filter(found => found.text === rule).map(found => found.props.color)
   // The whole line as the person reads it, the engine's own when the board drew none; a Link's text
   // holds its href before its label.
   const whole = line?.text ?? (await ui.findAll({ type: 'Text' })).map(found => found.text).join('')
   const drawn = links.reduce((text, link) => text.replace(String(link.props.href), ''), whole)
-  return { ui, keys, part, rule, ruleColor, links, drawn }
+  return { ui, keys, part, rule, ruleBelow, ruleColors, colorOf, links, drawn }
 }
 
 describe('where the board is', () => {
@@ -158,15 +163,30 @@ describe('the line', () => {
     expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} │ ${SIGN.DEV}DEV ${MARK.waits} │ ${SIGN.QA}QA ${MARK.paused}`)
   })
 
-  test('a blue rule of light horizontal lines across the band, above the line', async ($, on) => {
+  test('a blue rule of light horizontal lines across the band, above the line and below it', async ($, on) => {
     world(on)
     await start($, 'CTO:proj')
     for (const columns of [10, 66, 120]) {
-      const { ui, rule, ruleColor } = await band($, columns)
+      const { ui, rule, ruleBelow, ruleColors } = await band($, columns)
       expect(rule).toBe('─'.repeat(columns))
-      expect(ruleColor).toBe('#0A84FF')
+      expect(ruleBelow).toBe(rule)
+      expect(ruleColors).toEqual(['#0A84FF', '#0A84FF'])
       await ui.unmount()
     }
+  })
+
+  test("each role's name in the colour its session gets with /color: the CTO yellow, DEV blue, QA green", async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', { state: 'working' }) })
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    const { colorOf, drawn } = await band($)
+    expect(colorOf('CTO')).toBe('yellow_FOR_SUBAGENTS_ONLY')
+    expect(colorOf('DEV')).toBe('blue_FOR_SUBAGENTS_ONLY')
+    expect(colorOf('QA')).toBe('green_FOR_SUBAGENTS_ONLY')
+    // The signature, the mark and the item keep the terminal's own colour.
+    expect(colorOf(SIGN.DEV)).toBeUndefined()
+    expect(colorOf(` ${MARK.idle}`)).toBeUndefined()
+    expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} │ ${SIGN.DEV}DEV ${MARK.idle} Issue #205 │ ${SIGN.QA}QA ${MARK.reviewing}`)
   })
 
   test('each links the item its session last acted on, named an issue or a PR; one with no address, or not https, is no link', async ($, on) => {

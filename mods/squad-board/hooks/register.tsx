@@ -36,12 +36,20 @@ const SIGNATURE: Record<BoardRole, string> = {
 // Claude Code measures it; every other character one. The longest are matched first. A terminal
 // that draws the pause in one cell leaves the line one cell shorter, which the cut allows for.
 const WIDE = [...new Set([...Object.values(SIGNATURE), ...Object.values(MARK)])].sort((a, b) => b.length - a.length)
-// Between two agents, a light vertical bar; where the band is cut, an ellipsis; above the agents, a
-// rule of light horizontal lines across the band, in the blue of cmux's active pane.
+// Between two agents, a light vertical bar; where the band is cut, an ellipsis; above the agents and
+// below them, a rule of light horizontal lines across the band, in the blue of cmux's active pane.
 const SEPARATOR = ' \u2502 '
 const ELLIPSIS = ' \u2026'
 const RULE = '\u2500'
 const RULE_COLOR = '#0A84FF'
+// Each role's name in the colour its session gets with /color (agent-squad #222): the theme key
+// Claude Code paints that colour with, in every theme. A mod cannot read a session's /color, so the
+// colours are fixed here, and the README says which /color each session takes.
+const ROLE_COLOR: Record<BoardRole, string> = {
+  CTO: 'yellow_FOR_SUBAGENTS_ONLY',
+  DEV: 'blue_FOR_SUBAGENTS_ONLY',
+  QA: 'green_FOR_SUBAGENTS_ONLY',
+}
 // The CTO's context shows from this share of its window, as the CEO decided (agent-squad #217).
 const CONTEXT_FROM = 90
 
@@ -148,8 +156,9 @@ function stepAwayOf(text: string): 'pause' | 'clear' | null {
   return found[1] === 'pause' ? 'pause' : 'clear'
 }
 
-// One part of the band: an agent, with its item when it has one.
-type Part = { key: string; text: string; item: BoardItem | null }
+// One part of the band: an agent's role, its text whole (signature, role, mark and context), and
+// its item when it has one.
+type Part = { key: BoardRole; text: string; item: BoardItem | null }
 
 // An agent's mark: working (eyes for QA, who reviews), paused while it is idle and the CEO has
 // paused it, waiting for the CEO, idle.
@@ -375,29 +384,36 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The board, in the CTO's session: a blue rule, then one line above the prompt, cut at its end on
-  // a narrow terminal, so that the CTO's part stays whole. A survey that holds the band goes first.
+  // The board, in the CTO's session: one line above the prompt between two blue rules, each role's
+  // name in its colour, cut at its end on a narrow terminal, so that the CTO's part stays whole. A
+  // survey that holds the band goes first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
     const seen = await read($, agents)
     const parts = ROLES.map(role => partOf(role, seen.byRole[role], seen.now))
     const { shown, hasEllipsis } = fit(parts, e.props.bodyColumns)
+    const rule = RULE.repeat(Math.max(1, e.props.bodyColumns))
     return (
       <Box flexDirection="column">
         <Box key="rule">
-          <Text color={RULE_COLOR} wrap="truncate-end">{RULE.repeat(Math.max(1, e.props.bodyColumns))}</Text>
+          <Text color={RULE_COLOR} wrap="truncate-end">{rule}</Text>
         </Box>
         <Box key="line" flexDirection="row" overflow="hidden">
           {shown.map((part, index) => (
             <Box key={part.key}>
               {index > 0 && <Text dimColor wrap="truncate-end">{SEPARATOR}</Text>}
-              <Text wrap="truncate-end">{part.text}</Text>
+              <Text wrap="truncate-end">{SIGNATURE[part.key]}</Text>
+              <Text color={ROLE_COLOR[part.key]} wrap="truncate-end">{part.key}</Text>
+              <Text wrap="truncate-end">{part.text.slice(SIGNATURE[part.key].length + part.key.length)}</Text>
               {part.item && <Text> </Text>}
               {part.item && (part.item.url?.startsWith('https://') ? <Link href={part.item.url}>{part.item.item}</Link> : <Text>{part.item.item}</Text>)}
             </Box>
           ))}
           {hasEllipsis && <Text dimColor>{ELLIPSIS}</Text>}
+        </Box>
+        <Box key="rule-below">
+          <Text color={RULE_COLOR} wrap="truncate-end">{rule}</Text>
         </Box>
       </Box>
     )

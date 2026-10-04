@@ -106,6 +106,9 @@ details).
    claude -n "QA:<project-name>"
    ```
 
+   Then give each session its colour, the one the [squad board](#the-squad-board) gives its role:
+   type `/color yellow` in the CTO's, `/color blue` in DEV's and `/color green` in QA's.
+
 3. **Tell the CTO:** *"Follow `.agent-squad/playbook/BOOTSTRAP.md`."* It asks which language to
    use with you, finishes setting up the repository, asks you what it needs to know, and then asks
    what you want to build.
@@ -310,7 +313,7 @@ not cost: most of the input is read from the cache, which is billed far below fr
 
 ### The squad board
 
-Above the prompt of the CTO's session, under a blue rule, one line shows every agent of the
+Above the prompt of the CTO's session, between two blue rules, one line shows every agent of the
 project, in the order CTO, DEV, QA: its signature and role, its state, and a link to the issue or
 pull request its session last worked on, the last one its agent acted on with `gh` (viewing,
 commenting, editing, reviewing, merging, or opening a pull request). The board shows what each
@@ -319,7 +322,12 @@ session does, not what GitHub says: it reads nothing from GitHub.
 ```
 ──────────────────────────────────────────────────────────────────
 👷🏼‍♂️CTO 💤 (ctx: 96%) │ 👨🏼‍💻DEV ⏳ Issue #123 │ 👩🏼‍🔬QA 👀 PR #235
+──────────────────────────────────────────────────────────────────
 ```
+
+Each role's name is in the colour its session takes with `/color` (*Quick start*, step 2): the CTO
+yellow, DEV blue and QA green, in the shades your Claude Code theme gives them. A mod cannot read a
+session's `/color`, so the board keeps these three whatever colour you give the sessions.
 
 The states:
 - ⏳ working;
