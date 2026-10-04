@@ -305,8 +305,74 @@ gate_refusal() {
   esac
 }
 
+# The squad's mods (agent-squad #172, #206): the Claude Code plugins in the playbook's mods/,
+# enabled for this project alone in .claude/settings.local.json, with nothing fetched. The installer
+# writes, in .agent-squad/, a marketplace of the project's own, named after the project and the
+# release, whose plugins are the playbook's own directories: a plugin's source cannot leave its
+# marketplace's directory, and a name that two projects shared would make one of them load the
+# other's code. Claude Code reads it at each session start. Mods came with Claude Code 2.1.287.
+mods_release="$playbook/mods/.claude-plugin/marketplace.json"
+mods_marketplace="$squad/.claude-plugin/marketplace.json"
+mods_minimum=2.1.287
+# `mods_skip_reason` prints why the mods cannot be enabled here, or nothing when they can.
+mods_skip_reason() {
+  local version
+  if [ ! -f "$mods_release" ]; then
+    echo "this release has no mods"
+    return
+  fi
+  version="$(DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude --version </dev/null 2>/dev/null \
+    | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+  if [ -z "$version" ]; then
+    echo "Claude Code (claude) is not installed, or its version cannot be read"
+  elif [ "$(printf '%s\n' "$mods_minimum" "$version" | sort -V | head -n 1)" != "$mods_minimum" ]; then
+    echo "Claude Code $version has no mods, which need $mods_minimum or later"
+  fi
+}
+# `mods_name` prints the project's marketplace name: agent-squad-<directory>-<hash>-v<version>,
+# where the hash, of the main checkout's physical path, tells apart two checkouts of one name.
+mods_name() {
+  local base hash version
+  base="$(basename "$project" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+  hash="$(printf '%s' "$project" | git hash-object --stdin | cut -c1-6)"
+  version="$(grep -o '^> \*\*Version:\*\* [0-9]*' "$playbook/SQUAD.md" 2>/dev/null | grep -o '[0-9]*$')"
+  echo "agent-squad-${base:-project}-$hash-v${version:-0}"
+}
+# `mods_marketplace_json` prints the project's marketplace: the release's, under the project's
+# name, each plugin's source moved under playbook/mods/.
+mods_marketplace_json() {
+  jq --arg name "$(mods_name)" \
+    '.name = $name | .plugins |= map(.source |= "./playbook/mods/" + ltrimstr("./"))' "$mods_release"
+}
+# `mods_defaults` prints, as a JSON array, the plugins the release enables by default
+# (mods/default-plugins, one name per line, # for a comment).
+mods_defaults() {
+  grep -vE '^[[:space:]]*(#|$)' "$playbook/mods/default-plugins" 2>/dev/null \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | jq -R . | jq -sc .
+}
+# `mods_settings <enable>` reads settings on stdin and prints them with every marketplace and
+# plugin of an earlier squad release removed, then, when <enable> is true, this one's added: its
+# marketplace at .agent-squad/, and each default plugin enabled, unless the person turned it off
+# under an earlier name. An object left empty goes.
+# shellcheck disable=SC2016 # the $ names are jq's
+mods_settings() {
+  jq --argjson enable "$1" --arg name "$(mods_name)" --arg path "$squad" --argjson defaults "$(mods_defaults)" '
+    def squad_market: test("^agent-squad-.*-v[0-9]+$");
+    (.enabledPlugins // {}) as $before
+    | .extraKnownMarketplaces = ((.extraKnownMarketplaces // {}) | with_entries(select(.key | squad_market | not)))
+    | .enabledPlugins = ($before | with_entries(select(.key | split("@") | length == 2 and (.[1] | squad_market) | not)))
+    | if $enable then
+        .extraKnownMarketplaces[$name] = {source: {source: "directory", path: $path}}
+        | reduce $defaults[] as $plugin (.; .enabledPlugins["\($plugin)@\($name)"] =
+            ([$before | to_entries[] | select((.key | startswith($plugin + "@")) and (.key | split("@")[1] | squad_market))
+              | .value] | all))
+      else . end
+    | if .extraKnownMarketplaces == {} then del(.extraKnownMarketplaces) else . end
+    | if .enabledPlugins == {} then del(.enabledPlugins) else . end'
+}
+
 check_installation() {
-  local why version last agent worktree changed expected actual path branch local_hook
+  local why version last agent worktree changed expected actual path branch local_hook reason item off
 
   # 9 first, as the heading of the report: which version is installed, and since when. The last
   #   line of install.log must record that version's tag: an install cut short after the playbook
@@ -451,6 +517,34 @@ check_installation() {
   branch="$(known_default_branch)" \
     || why="origin/HEAD is not set, so the gate protects main; run the installer again, which records it (in an empty repository, once the default branch has a commit)"
   verdict "git knows the remote's default branch${branch:+ ($branch)}, the one the gate protects" "$why"
+
+  # 13. The squad's mods (agent-squad #206): enabled for this project from the playbook, through the
+  #     project's own marketplace in .agent-squad/, with nothing of another release left; or none at
+  #     all where Claude Code has no mods. A default the person turned off is no failure.
+  why=""
+  reason="$(mods_skip_reason)"
+  if [ -n "$reason" ]; then
+    item="the squad's mods are skipped, since $reason"
+    why="$(jq -r '[(.extraKnownMarketplaces // {} | keys[]), (.enabledPlugins // {} | keys[] | split("@")[1] // "")]
+      | map(select(test("^agent-squad-.*-v[0-9]+$"))) | unique | join(", ")' "$settings" 2>/dev/null)"
+    [ -z "$why" ] || why=".claude/settings.local.json still names $why; install again, which removes it"
+  else
+    item="the squad's mods are enabled from the playbook"
+    off="$(jq -r --arg name "$(mods_name)" '.enabledPlugins // {} | to_entries[]
+      | select(.value == false and (.key | endswith("@" + $name))) | .key | split("@")[0]' "$settings" 2>/dev/null | join)"
+    [ -z "$off" ] || item="$item ($off turned off)"
+    if ! cmp -s <(mods_marketplace_json | jq -S .) <(jq -S . "$mods_marketplace" 2>/dev/null); then
+      why=".agent-squad/.claude-plugin/marketplace.json is missing or not this release's; install again"
+    elif ! actual="$(jq -S . "$settings" 2>/dev/null)" || ! expected="$(mods_settings true <"$settings" | jq -S .)"; then
+      why="cannot read .claude/settings.local.json"
+    elif [ "$actual" != "$expected" ]; then
+      why="$(jq -rn --argjson want "$expected" --argjson have "$actual" '
+        def pairs: [(.extraKnownMarketplaces // {} | to_entries[]), (.enabledPlugins // {} | to_entries[])];
+        ($want | pairs) as $w | ($have | pairs) as $h
+        | "missing: \([($w - $h)[] | .key] | join(", ") | if . == "" then "none" else . end); unexpected: \([($h - $w)[] | .key] | join(", ") | if . == "" then "none" else . end); install again"')"
+    fi
+  fi
+  verdict "$item" "$why"
 
   [ "$failed_items" -eq 0 ]
 }
@@ -632,6 +726,44 @@ while IFS= read -r name; do
     fi
   fi
 done < <(squad_commands)
+
+# 3c. The squad's mods (agent-squad #206), enabled for this project alone: the project's own
+#     marketplace in .agent-squad/, and its entries in .claude/settings.local.json, where every
+#     entry of an earlier squad release goes. Where Claude Code has no mods, none is enabled, the
+#     install says why, and it succeeds.
+reason="$(mods_skip_reason)"
+current="{}"
+[ -f "$settings" ] && current="$(cat "$settings")"
+[ -n "${current//[[:space:]]/}" ] || current="{}"
+if [ -z "$reason" ]; then enable=true; else enable=false; fi
+if ! printf '%s' "$current" | one_object \
+  || ! merged="$(printf '%s' "$current" | mods_settings "$enable")" || ! printf '%s' "$merged" | one_object; then
+  say mods "NOT ENABLED: .claude/settings.local.json is not one JSON object; it is left as it is: fix it and run again"
+  needs_decision=1
+else
+  if $enable; then
+    if ! { mkdir -p "$(dirname "$mods_marketplace")" && mods_marketplace_json > "$mods_marketplace.$$" \
+        && mv "$mods_marketplace.$$" "$mods_marketplace"; }; then
+      rm -f "$mods_marketplace.$$"
+      say mods "NOT ENABLED: cannot write $mods_marketplace; fix it and run again"
+      needs_decision=1
+      merged="$(printf '%s' "$current" | mods_settings false)"
+    fi
+  else
+    rm -f "$mods_marketplace"
+  fi
+  if [ "$merged" != "$current" ]; then
+    printf '%s\n' "$merged" > "$settings"
+  fi
+  # What is on now, from the settings as written.
+  on="$(jq -r --arg name "$(mods_name)" '.enabledPlugins // {} | to_entries[] | select(.value and (.key | endswith("@" + $name))) | .key | split("@")[0]' <<<"$merged" | join)"
+  off="$(jq -r --arg name "$(mods_name)" '.enabledPlugins // {} | to_entries[] | select((.value | not) and (.key | endswith("@" + $name))) | .key | split("@")[0]' <<<"$merged" | join)"
+  if ! $enable; then
+    say mods "SKIPPED: $reason; no mod of the squad is enabled"
+  elif [ -n "$on" ] || [ -n "$off" ]; then
+    say mods "enabled for this project: ${on:-none}${off:+; turned off, as you left them: $off} (marketplace $(mods_name), in .agent-squad/; claude plugin disable <plugin>@$(mods_name) --scope local turns one off)"
+  fi
+fi
 
 # 4. Pre-push shim (D8 of agent-squad #23) in the common git directory, so that every worktree runs
 #    it. A project's own pre-push is kept as pre-push.local and run first; other hooks are left

@@ -1,0 +1,3 @@
+# The plugins of this marketplace that the installer enables in every project, one name per line
+# (agent-squad #206). A plugin not listed here ships with the release but stays off.
+squad-board
