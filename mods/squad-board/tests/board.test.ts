@@ -177,6 +177,19 @@ describe('the line', () => {
     }
   })
 
+  test('the bars between the agents are in the blue of the rules; the ellipsis of a cut stays dim', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', PR) })
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    const whole = await band($)
+    expect(whole.colorsOf(' │ ')).toEqual(['#0A84FF', '#0A84FF'])
+    await whole.ui.unmount()
+    const cut = await band($, 32)
+    const ellipsis = (await cut.ui.findAll({ type: 'Text' })).find(found => found.text === ' …')
+    expect(cut.colorsOf(' │ ')).toEqual(['#0A84FF'])
+    expect(ellipsis?.props.dimColor).toBe(true)
+  })
+
   // The theme keys are undocumented: a key Claude Code does not know paints nothing, so the plain
   // colour of the text around it shows (agent-squad #222, the live probe in its evidence).
   test("each role's name in the colour its session gets with /color: the CTO yellow, DEV blue, QA green, the plain colour around the theme's", async ($, on) => {

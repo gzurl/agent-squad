@@ -314,10 +314,10 @@ not cost: most of the input is read from the cache, which is billed far below fr
 ### The squad board
 
 Above the prompt of the CTO's session, between two blue rules, one line shows every agent of the
-project, in the order CTO, DEV, QA: its signature and role, its state, and a link to the issue or
-pull request its session last worked on, the last one its agent acted on with `gh` (viewing,
-commenting, editing, reviewing, merging, or opening a pull request). The board shows what each
-session does, not what GitHub says: it reads nothing from GitHub.
+project, apart by blue bars, in the order CTO, DEV, QA: its signature and role, its state, and a
+link to the issue or pull request its session last worked on, the last one its agent acted on with
+`gh` (viewing, commenting, editing, reviewing, merging, or opening a pull request). The board shows
+what each session does, not what GitHub says: it reads nothing from GitHub.
 
 ```
 ──────────────────────────────────────────────────────────────────

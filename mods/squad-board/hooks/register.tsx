@@ -37,7 +37,8 @@ const SIGNATURE: Record<BoardRole, string> = {
 // that draws the pause in one cell leaves the line one cell shorter, which the cut allows for.
 const WIDE = [...new Set([...Object.values(SIGNATURE), ...Object.values(MARK)])].sort((a, b) => b.length - a.length)
 // Between two agents, a light vertical bar; where the band is cut, an ellipsis; above the agents and
-// below them, a rule of light horizontal lines across the band, in the blue of cmux's active pane.
+// below them, a rule of light horizontal lines across the band. The bars and the rules are in the
+// blue of cmux's active pane.
 const SEPARATOR = ' \u2502 '
 const ELLIPSIS = ' \u2026'
 const RULE = '\u2500'
@@ -386,8 +387,8 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The board, in the CTO's session: one line above the prompt between two blue rules, each role's
-  // name in its colour, cut at its end on a narrow terminal, so that the CTO's part stays whole. A
+  // The board, in the CTO's session: one line above the prompt between two blue rules, the agents
+  // apart by blue bars, each role's name in its colour, cut at its end on a narrow terminal, so that the CTO's part stays whole. A
   // survey that holds the band goes first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
@@ -404,7 +405,7 @@ export const register: Register = on => {
         <Box key="line" flexDirection="row" overflow="hidden">
           {shown.map((part, index) => (
             <Box key={part.key}>
-              {index > 0 && <Text dimColor wrap="truncate-end">{SEPARATOR}</Text>}
+              {index > 0 && <Text color={RULE_COLOR} wrap="truncate-end">{SEPARATOR}</Text>}
               <Text wrap="truncate-end">{SIGNATURE[part.key]}</Text>
               <Text color={ROLE_COLOR[part.key].plain} wrap="truncate-end">
                 <Text color={ROLE_COLOR[part.key].key}>{part.key}</Text>
