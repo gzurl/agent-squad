@@ -1,0 +1,12 @@
+{
+  "name": "agent-squad",
+  "owner": { "name": "agent-squad" },
+  "description": "The squad's mods, shipped with each release of agent-squad and enabled from its playbook",
+  "plugins": [
+    {
+      "name": "squad-board",
+      "source": "./squad-board",
+      "description": "The squad board: each agent's state, context and current issue or PR, in the CTO's session"
+    }
+  ]
+}
