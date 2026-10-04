@@ -310,19 +310,21 @@ not cost: most of the input is read from the cache, which is billed far below fr
 
 ### The squad board
 
-Above the prompt of the CTO's session, one line shows every agent of the project, in the order
-CTO, DEV, QA: its state, its role, how full its context is, and a link to the issue or pull request
-it works on, which the CTO's session reads from GitHub every three minutes.
+Above the prompt of the CTO's session, under a thin rule, one line shows every agent of the
+project, in the order CTO, DEV, QA: its signature and role, its state, and a link to the issue or
+pull request it works on, which the CTO's session reads from GitHub every three minutes.
 
 ```
-💤 CTO 42% │ ⏳ DEV 68% #205 │ ✋ QA 33% PR #208
+──────────────────────────────────────────────────────────────────
+👷🏼‍♂️CTO 💤 (ctx: 96%) │ 👨🏼‍💻DEV ⏳ Issue #123 │ 👩🏼‍🔬QA 🔍 PR #235
 ```
 
-The states are those of the CTO's reports on the agents: working, waiting for you on a permission
-or a question, idle, and a question mark for an agent with no sign of life for a few minutes. When
-DEV or QA starts to wait for you, a notice pops up in the CTO's session, once per wait. On a narrow
-terminal the line is cut at its end, so the CTO's part always shows, whole unless the terminal is
-narrower than it.
+The states are those of the CTO's reports on the agents: working (a magnifying glass for QA, who
+reviews), waiting for you on a permission or a question, idle, and a question mark for an agent
+with no recent state. The CTO's context shows only once it reaches 90% of its window; the others'
+never shows. When DEV or QA starts to wait for you, a notice pops up in the CTO's session, once per
+wait. On a narrow terminal the line is cut at its end, so the CTO's part always shows, whole unless
+the terminal is narrower than it.
 
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
 Code 2.1.287 or later; with an older one, the squad works without it. It only reads: it never

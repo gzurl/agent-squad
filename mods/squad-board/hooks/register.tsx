@@ -17,15 +17,29 @@ const STALE_MS = 180_000
 const TICK_MS = 3_000
 const GITHUB_MS = 180_000
 // The state marks of SQUAD.md §6, written as escapes since emojis stay out of code: hourglass
-// (working), raised hand (waits for the CEO), zzz (idle), question mark (no sign of life).
-const MARK: Record<BoardState | 'unknown', string> = {
-  working: '\u23F3', permission: '\u270B', question: '\u270B', idle: '\u{1F4A4}', unknown: '\u2753',
+// (working), magnifying glass (QA working, since it reviews), raised hand (waits for the CEO), zzz
+// (idle), question mark (no recent state).
+const MARK: Record<BoardState | 'reviewing' | 'unknown', string> = {
+  working: '\u23F3', reviewing: '\u{1F50D}', permission: '\u270B', question: '\u270B', idle: '\u{1F4A4}',
+  unknown: '\u2753',
 }
-// The marks take two cells of a terminal, every other character of the band one. Between two
-// agents, a light vertical bar; where the band is cut, an ellipsis.
-const WIDE = new Set(Object.values(MARK))
+// The members' signatures of SQUAD.md §6, as escapes: each a person, a skin tone, a joiner and what
+// they do (and for the CTO a presentation selector), which a terminal draws as one emoji.
+const SIGNATURE: Record<BoardRole, string> = {
+  CTO: '\u{1F477}\u{1F3FC}\u200D\u2642\uFE0F',
+  DEV: '\u{1F468}\u{1F3FC}\u200D\u{1F4BB}',
+  QA: '\u{1F469}\u{1F3FC}\u200D\u{1F52C}',
+}
+// Every emoji the band draws takes two cells of a terminal, however many code points it has, as
+// Claude Code measures it; every other character one. The longest are matched first.
+const WIDE = [...new Set([...Object.values(SIGNATURE), ...Object.values(MARK)])].sort((a, b) => b.length - a.length)
+// Between two agents, a light vertical bar; where the band is cut, an ellipsis; above the agents, a
+// rule of light horizontal lines across the band.
 const SEPARATOR = ' \u2502 '
 const ELLIPSIS = ' \u2026'
+const RULE = '\u2500'
+// The CTO's context shows from this share of its window, as the CEO decided (agent-squad #217).
+const CONTEXT_FROM = 90
 
 const agents = atom({ plugin: 'squad-board', key: 'agents' } as const, { byRole: {}, now: 0 } as BoardAgents)
 const items = atom({ plugin: 'squad-board', key: 'items' } as const, { byRole: {}, readAt: null, error: null } as BoardItems)
@@ -83,18 +97,28 @@ function waitText(agent: BoardAgent): string {
 // One part of the band: an agent, or the reason GitHub was not read.
 type Part = { key: string; text: string; item?: BoardItem; isDim?: boolean }
 
-// An agent's part: its mark, its role and its context use; with no key, or one gone stale, the
-// unknown mark and its role alone.
+// An agent's part: its signature and role, its state, the CTO's context once it reaches
+// CONTEXT_FROM, and its item, named as an issue or a PR; with no key, or one gone stale, the unknown
+// mark.
 function partOf(role: BoardRole, agent: BoardAgent | undefined, item: BoardItem | undefined, now: number): Part {
-  if (!agent || now - agent.at > STALE_MS) return { key: role, text: `${MARK.unknown} ${role}`, item }
-  return { key: role, text: `${MARK[agent.state]} ${role} ${agent.context === null ? '-' : `${agent.context}%`}`, item }
+  const named = item && { ...item, item: item.item.startsWith('#') ? `Issue ${item.item}` : item.item }
+  const head = `${SIGNATURE[role]}${role}`
+  if (!agent || now - agent.at > STALE_MS) return { key: role, text: `${head} ${MARK.unknown}`, item: named }
+  const mark = role === 'QA' && agent.state === 'working' ? MARK.reviewing : MARK[agent.state]
+  const isFull = role === 'CTO' && agent.context !== null && agent.context >= CONTEXT_FROM
+  return { key: role, text: `${head} ${mark}${isFull ? ` (ctx: ${agent.context}%)` : ''}`, item: named }
 }
 
 // How many cells a text takes on a terminal.
 function widthOf(text: string): number {
   let width = 0
-  for (const char of text) width += WIDE.has(char) ? 2 : 1
-  return width
+  let rest = text
+  for (const emoji of WIDE) {
+    const pieces = rest.split(emoji)
+    width += 2 * (pieces.length - 1)
+    rest = pieces.join('')
+  }
+  return width + [...rest].length
 }
 
 // The parts that fit in `columns`, in order, and whether the ellipsis that marks a cut is drawn.
@@ -293,8 +317,8 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The board, in the CTO's session: one line above the prompt, cut at its end on a narrow
-  // terminal, so that the CTO's part stays whole. A survey that holds the band goes first.
+  // The board, in the CTO's session: a rule, then one line above the prompt, cut at its end on a
+  // narrow terminal, so that the CTO's part stays whole. A survey that holds the band goes first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
@@ -304,16 +328,21 @@ export const register: Register = on => {
     if (github.error !== null) parts.push({ key: 'github', text: `GitHub not read: ${github.error}`, isDim: true })
     const { shown, hasEllipsis } = fit(parts, e.props.bodyColumns)
     return (
-      <Box flexDirection="row" overflow="hidden">
-        {shown.map((part, index) => (
-          <Box key={part.key}>
-            {index > 0 && <Text dimColor wrap="truncate-end">{SEPARATOR}</Text>}
-            <Text dimColor={part.isDim === true} wrap="truncate-end">{part.text}</Text>
-            {part.item && <Text> </Text>}
-            {part.item && <Link href={part.item.url}>{part.item.item}</Link>}
-          </Box>
-        ))}
-        {hasEllipsis && <Text dimColor>{ELLIPSIS}</Text>}
+      <Box flexDirection="column">
+        <Box key="rule">
+          <Text dimColor wrap="truncate-end">{RULE.repeat(Math.max(1, e.props.bodyColumns))}</Text>
+        </Box>
+        <Box key="line" flexDirection="row" overflow="hidden">
+          {shown.map((part, index) => (
+            <Box key={part.key}>
+              {index > 0 && <Text dimColor wrap="truncate-end">{SEPARATOR}</Text>}
+              <Text dimColor={part.isDim === true} wrap="truncate-end">{part.text}</Text>
+              {part.item && <Text> </Text>}
+              {part.item && <Link href={part.item.url}>{part.item.item}</Link>}
+            </Box>
+          ))}
+          {hasEllipsis && <Text dimColor>{ELLIPSIS}</Text>}
+        </Box>
       </Box>
     )
   })
