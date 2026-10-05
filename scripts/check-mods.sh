@@ -3,11 +3,9 @@
 # and every plugin it lists passes `claude plugin validate` and its own `claude plugin test` cases,
 # with at least one test. None calls what a squad mod never calls: the network ($.http), another
 # session ($.session.send, $.prompt.submit), a tool, an agent or the model ($.tool.*, $.agent.*,
-# $.model.*), or a streamed host command ($.process.spawn); none hooks tool.check, whose ask auto
-# mode settles with no dialog (agent-squad #199). A host command can reach the network as well, so
-# each $.process.run in a plugin's code names its command in a literal list that starts with one
-# that may run: git rev-parse, or the playbook's squad-stalls.sh --current, which reads GitHub with
-# read-only gh calls (PR #208).
+# $.model.*), or a host command, which can reach the network as well ($.process.*: since
+# agent-squad #222 the board reads nothing from GitHub); none hooks tool.check, whose ask auto mode
+# settles with no dialog (agent-squad #199).
 # Claude Code runs with a home of its own, so this check touches neither the user's settings nor
 # ~/.claude.json, and with its non-essential traffic off. It needs Claude Code 2.1.287 or later,
 # the first with mods.
@@ -62,16 +60,25 @@ else
   pass "mods/default-plugins names plugins of the marketplace: $(tr '\n' ' ' <<<"$defaults")"
 fi
 
+# 1c. The board tells a pause from the step-away command a prompt carries (agent-squad #222): typed,
+#     the prompt starts with it; relayed, the relay names it in parentheses, then a colon and its
+#     instruction, "(`/squad-pause`): ". Each step-away command's file names itself that way, and no
+#     other, so that the relay it sends, and the command expanded, read as that command alone.
+for name in pause pause-all resume resume-all autopilot autopilot-all; do
+  file="$root/commands/squad-$name.md"
+  # shellcheck disable=SC2016 # the backquotes are the relay's own, not a command
+  named="$(grep -oE '\(`/squad-(pause|resume|autopilot)(-all)?`\):' "$file" 2>/dev/null | sort -u | paste -sd ' ' -)"
+  if [ "$named" = "(\`/squad-$name\`):" ]; then
+    pass "commands/squad-$name.md relays itself as (\`/squad-$name\`):, and no other step-away command"
+  else
+    fail "commands/squad-$name.md names ${named:-no step-away command} in parentheses with a colon, not (\`/squad-$name\`): alone: the board would not tell its pause"
+  fi
+done
+
 # 2. Each plugin it lists, from the marketplace itself; a marketplace that lists none fails.
 sources="$(jq -r '.plugins[].source' "$mods/.claude-plugin/marketplace.json" 2>/dev/null)"
 [ -n "$sources" ] || fail "mods/.claude-plugin/marketplace.json lists no plugin"
-forbidden='\$\.(http|tool|agent|model)\.|\$\.session\.send|\$\.prompt\.submit|\$\.process\.spawn'
-# The host commands a mod may run, each the start of a $.process.run's literal argument list, its
-# spaces as the check below writes them.
-allowed_runs=(
-  "['git', 'rev-parse'"
-  "[\`\${main}/.agent-squad/playbook/scripts/squad-stalls.sh\`, '--current']"
-)
+forbidden='\$\.(http|tool|agent|model|process)\.|\$\.session\.send|\$\.prompt\.submit'
 while IFS= read -r source; do
   [ -n "$source" ] || continue
   plugin="mods/${source#./}"
@@ -90,26 +97,7 @@ while IFS= read -r source; do
   elif grep -qE '(: |, )tool\.check' <<<"$hooks"; then
     fail "$plugin hooks tool.check"
   else
-    pass "$plugin calls no network, session, tool, agent or model, and hooks no tool.check"
-  fi
-  # Each host command its code runs, by the literal list that names it, its spaces made single and
-  # none inside the brackets; one named otherwise, or not in a literal list, may run anything.
-  # shellcheck disable=SC2016 # the $ signs are perl's and the program's, not the shell's
-  runs="$(find "$root/$plugin" -path "$root/$plugin/tests" -prune -o -type f \
-      \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \) -print0 \
-    | xargs -0 perl -0777 -ne 'while (/\$\.process\.run\s*\(\s*(\[[^\]]*\])?/g) {
-        my $l = $1 // "not a literal list"; $l =~ s/\s+/ /g; $l =~ s/^\[ /[/; $l =~ s/ \]$/]/; print "$l\n" }')"
-  others=""
-  while IFS= read -r run; do
-    [ -n "$run" ] || continue
-    ok=false
-    for allowed in "${allowed_runs[@]}"; do [[ "$run" == "$allowed"* ]] && ok=true; done
-    $ok || others="$others$run; "
-  done <<<"$runs"
-  if [ -n "$others" ]; then
-    fail "$plugin runs a host command that is not allowed: $others"
-  else
-    pass "$plugin runs no host command but git rev-parse and squad-stalls.sh --current ($(grep -c . <<<"$runs") calls)"
+    pass "$plugin calls no network, session, tool, agent, model or host command, and hooks no tool.check"
   fi
   # Its own tests: they all pass, and there is at least one.
   out="$(claude_run plugin test "$root/$plugin")"
