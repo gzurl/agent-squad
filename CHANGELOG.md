@@ -1,5 +1,24 @@
 # Changelog
 
+## v41 — 2026-10-05
+- **The README's final review before publishing** (#200), with the CEO's seven changes. It reads
+  for a first-time visitor and goes from 563 lines to 507.
+  - *Features* no longer says the board shows every agent's context.
+  - *The squad board* is shorter.
+  - The example report has no dated versions.
+  - *Install* points to *What goes where* instead of listing every file.
+  - *When you step away* folds the waiting sessions into one sentence.
+  - *Things to know* keeps what can hurt the CEO, and points to `BOOTSTRAP.md` row 9b and
+    `SQUAD.md` for the rest.
+  - The repository's file table moves to `CONTRIBUTING.md`.
+  - `templates/AGENTS.md` gains the tools that need no exclusion.
+- **§2.4, *Cleanup*:** `git worktree remove` refuses a worktree with modified or untracked files.
+  `git -C <worktree> status` shows what is in the way, and `--force` comes only once that is
+  committed or known not to be needed. This used to be in the README.
+- **The board's item parser** (#225, #227): a `<<` inside quotes opens no heredoc, and shell
+  comments are skipped, so neither can be read as a `gh` call.
+- The squad's record is recomputed up to v41.
+
 ## v40 — 2026-10-05
 - **The board shows each session's own state, not GitHub's** (#222), as the CEO asked after
   seeing v39's line live.
