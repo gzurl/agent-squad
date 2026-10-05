@@ -17,13 +17,14 @@ export type World = {
   opened: string[]
   commands: string[]
   runs: (readonly string[])[]
-  // What the engine answers: the session's id, its context use, its repository's remote, and what
-  // a Bash call prints and whether it failed.
+  // What the engine answers: the session's id, its context use, its repository's remote, what a
+  // Bash call prints and whether it failed, and the mod's plugin.json (null: it cannot be read).
   sessionId: string
   percent: number | null
   remote: string | null
   output: string
   isError: boolean
+  manifest: string | null
 }
 
 // Sets the world up on the test's `on`, with the store holding `store` at the start.
@@ -40,6 +41,7 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
     remote: 'git@github.com:o/r.git',
     output: 'ran',
     isError: false,
+    manifest: '{ "name": "squad-board", "version": "42.0.0" }',
   }
   on('store.get', ($, e) => ({ value: w.store.get(e.key) }))
   on('store.set', ($, e) => {
@@ -53,6 +55,10 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
   on('store.keys', () => ({ value: [...w.store.keys()] }))
   on('session.id', () => ({ value: w.sessionId }))
   on('session.root', () => ({ value: '/work/proj' }))
+  on('fs.read', ($, e) => {
+    if (w.manifest === null || !String(e.path).endsWith('/.claude-plugin/plugin.json')) throw new Error(`ENOENT: ${e.path}`)
+    return { value: w.manifest }
+  })
   on('session.repo', () => {
     if (w.remote === 'unreadable') throw new Error('not a git checkout')
     return { value: w.remote === null ? null : { root: '/work/proj', remote: w.remote, internal: false, name: null } }
