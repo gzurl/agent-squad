@@ -1,5 +1,15 @@
 # Changelog
 
+## v43 — 2026-10-05
+- **The band opens with the board's name and release** (#240), as the CEO asked:
+  `agent-squad (v43) │ ⏳ 👷🏼‍♂️CTO: #201 │ 💤 👨🏼‍💻DEV │ 💤 👩🏼‍🔬QA: PR #239`.
+  - `agent` is in the plain text colour; `-squad` and the release are in the rules' blue, as in the
+    README's wordmark.
+  - The release is the one the CTO's session loaded, so a session not restarted since an upgrade
+    shows the previous one.
+  - On a narrow terminal the prefix always shows, and the agents are cut first.
+- The README says so, in *The squad board*. No charter rule changes.
+
 ## v42 — 2026-10-05
 - **The band reads like the CTO's reports** (#235): the state first, then the agent, then the item,
   as `💤 👷🏼‍♂️CTO: PR #231 │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #231`.
