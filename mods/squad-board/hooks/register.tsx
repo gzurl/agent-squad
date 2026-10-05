@@ -122,7 +122,7 @@ function webOf(remote: string | null): string | null {
 function itemAt(text: string): BoardItem | null {
   const found = /https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/(issues|pull)\/(\d+)/.exec(text)
   if (!found) return null
-  return { item: `${found[3] === 'pull' ? 'PR' : 'Issue'} #${found[4]}`, url: `https://github.com/${found[1]}/${found[2]}/${found[3]}/${found[4]}` }
+  return { item: `${found[3] === 'pull' ? 'PR ' : ''}#${found[4]}`, url: `https://github.com/${found[1]}/${found[2]}/${found[3]}/${found[4]}` }
 }
 
 // A command as the parser reads it (agent-squad #225), scanned as the shell does: each quoted string
@@ -196,7 +196,7 @@ function itemOf(command: string, output: string, home: string | null): BoardItem
   if (target.startsWith('https://')) return itemAt(target)
   const other = /(?:^|\s)(?:-R|--repo)[\s=]([^\s/]+\/[^\s/]+)/.exec(rest)
   const base = other ? `https://github.com/${other[1]}` : home
-  return { item: `${noun === 'pr' ? 'PR' : 'Issue'} #${target}`, url: base ? `${base}/${noun === 'pr' ? 'pull' : 'issues'}/${target}` : null }
+  return { item: `${noun === 'pr' ? 'PR ' : ''}#${target}`, url: base ? `${base}/${noun === 'pr' ? 'pull' : 'issues'}/${target}` : null }
 }
 
 // The step-away commands of SQUAD.md §6 a prompt carries, typed (the prompt starts with the
@@ -210,9 +210,22 @@ function stepAwayOf(text: string): 'pause' | 'clear' | null {
   return found[1] === 'pause' ? 'pause' : 'clear'
 }
 
-// One part of the band: an agent's role, its text whole (signature, role, mark and context), and
-// its item when it has one.
-type Part = { key: BoardRole; text: string; item: BoardItem | null }
+// One part of the band (agent-squad #235): an agent's role, its state mark, the CTO's context when
+// it shows, and its item when it has one.
+type Part = { key: BoardRole; mark: string; context: string; item: BoardItem | null }
+
+// An item as the band names it: `#123` for an issue, `PR #124` for a pull request. A key written by
+// a session still on an older board says `Issue #123`, and reads the same.
+function labelOf(item: BoardItem): string {
+  return item.item.replace(/^Issue #/, '#')
+}
+
+// A part's text as the band draws it: the mark, the signature and the role, the context, then a
+// colon and the item when there is one.
+function textOf(part: Part): string {
+  const head = `${part.mark} ${SIGNATURE[part.key]}${part.key}${part.context}`
+  return part.item ? `${head}: ${labelOf(part.item)}` : head
+}
 
 // An agent's mark: working (eyes for QA, who reviews), paused while it is idle and the CEO has
 // paused it, waiting for the CEO, idle.
@@ -222,14 +235,12 @@ function markOf(role: BoardRole, agent: BoardAgent): string {
   return agent.paused === true ? MARK.paused : MARK.idle
 }
 
-// An agent's part: its signature and role, its mark, the CTO's context once it reaches
-// CONTEXT_FROM, and the item its session last acted on; with no key, or one gone stale, the unknown
-// mark.
+// An agent's part: its mark, the CTO's context once it reaches CONTEXT_FROM, and the item its
+// session last acted on; with no key, or one gone stale, the unknown mark.
 function partOf(role: BoardRole, agent: BoardAgent | undefined, now: number): Part {
-  const head = `${SIGNATURE[role]}${role}`
-  if (!agent || now - agent.at > STALE_MS) return { key: role, text: `${head} ${MARK.unknown}`, item: agent?.item ?? null }
+  if (!agent || now - agent.at > STALE_MS) return { key: role, mark: MARK.unknown, context: '', item: agent?.item ?? null }
   const isFull = role === 'CTO' && agent.context !== null && agent.context >= CONTEXT_FROM
-  return { key: role, text: `${head} ${markOf(role, agent)}${isFull ? ` (ctx: ${agent.context}%)` : ''}`, item: agent.item ?? null }
+  return { key: role, mark: markOf(role, agent), context: isFull ? ` (ctx: ${agent.context}%)` : '', item: agent.item ?? null }
 }
 
 // How many cells a text takes on a terminal.
@@ -252,7 +263,7 @@ function fit(parts: Part[], columns: number): { shown: Part[]; hasEllipsis: bool
   const shown: Part[] = []
   let used = 0
   for (const [index, part] of parts.entries()) {
-    const width = (shown.length === 0 ? 0 : widthOf(SEPARATOR)) + widthOf(part.text) + (part.item ? 1 + widthOf(part.item.item) : 0)
+    const width = (shown.length === 0 ? 0 : widthOf(SEPARATOR)) + widthOf(textOf(part))
     const room = index === parts.length - 1 ? 0 : widthOf(ELLIPSIS)
     if (shown.length > 0 && used + width + room > columns) return { shown, hasEllipsis: used + widthOf(ELLIPSIS) <= columns }
     shown.push(part)
@@ -439,8 +450,9 @@ export const register: Register = on => {
   })
 
   // The board, in the CTO's session: one line above the prompt between two blue rules, the agents
-  // apart by blue bars, each role's name in its colour, cut at its end on a narrow terminal, so that the CTO's part stays whole. A
-  // survey that holds the band goes first.
+  // apart by blue bars, each part its state first, as the CTO's reports on the agents read, then
+  // the role's name in its colour, cut at its end on a narrow terminal, so that the CTO's part stays
+  // whole. A survey that holds the band goes first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
@@ -457,13 +469,15 @@ export const register: Register = on => {
           {shown.map((part, index) => (
             <Box key={part.key}>
               {index > 0 && <Text color={RULE_COLOR} wrap="truncate-end">{SEPARATOR}</Text>}
-              <Text wrap="truncate-end">{SIGNATURE[part.key]}</Text>
+              <Text wrap="truncate-end">{`${part.mark} ${SIGNATURE[part.key]}`}</Text>
               <Text color={ROLE_COLOR[part.key].plain} wrap="truncate-end">
                 <Text color={ROLE_COLOR[part.key].key}>{part.key}</Text>
               </Text>
-              <Text wrap="truncate-end">{part.text.slice(SIGNATURE[part.key].length + part.key.length)}</Text>
-              {part.item && <Text> </Text>}
-              {part.item && (part.item.url?.startsWith('https://') ? <Link href={part.item.url}>{part.item.item}</Link> : <Text>{part.item.item}</Text>)}
+              {part.context !== '' && <Text wrap="truncate-end">{part.context}</Text>}
+              {part.item && <Text>: </Text>}
+              {part.item && (part.item.url?.startsWith('https://')
+                ? <Link href={part.item.url}>{labelOf(part.item)}</Link>
+                : <Text>{labelOf(part.item)}</Text>)}
             </Box>
           ))}
           {hasEllipsis && <Text dimColor>{ELLIPSIS}</Text>}

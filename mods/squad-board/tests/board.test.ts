@@ -3,12 +3,12 @@ import type { Engine } from 'claude-code/testing'
 
 import { asks, says, START, start, world } from './world'
 
-// The board in the CTO's session (agent-squad #205, #212, #217, #222): one line above the prompt,
-// between two blue rules, with each agent of its own project in the order CTO, DEV, QA: its
-// signature and role, the role in its colour, its state, the CTO's context from 90%, and a link to
-// the issue or PR its session last acted on, cut at the end where the terminal is narrow; a toast
-// when an agent turns to wait for the CEO, once per wait. Everything comes from the sessions' keys,
-// nothing from GitHub.
+// The board in the CTO's session (agent-squad #205, #212, #217, #222, #235): one line above the
+// prompt, between two blue rules, with each agent of its own project in the order CTO, DEV, QA: its
+// state, its signature and role, the role in its colour, the CTO's context from 90%, then a colon
+// and a link to the issue or PR its session last acted on, `#123` or `PR #124`, cut at the end
+// where the terminal is narrow; a toast when an agent turns to wait for the CEO, once per wait.
+// Everything comes from the sessions' keys, nothing from GitHub.
 
 // The signatures and the state marks, as the band draws them.
 const SIGN = { CTO: '\u{1F477}\u{1F3FC}‍♂️', DEV: '\u{1F468}\u{1F3FC}‍\u{1F4BB}', QA: '\u{1F469}\u{1F3FC}‍\u{1F52C}' }
@@ -36,7 +36,7 @@ function agent(role: string, project: string, fields: Record<string, unknown> = 
 }
 
 // The items the sessions of DEV and QA last acted on, as their keys hold them.
-const ISSUE = { item: { item: 'Issue #205', url: 'https://github.com/o/r/issues/205' } }
+const ISSUE = { item: { item: '#205', url: 'https://github.com/o/r/issues/205' } }
 const PR = { item: { item: 'PR #210', url: 'https://github.com/o/r/pull/210' } }
 
 // The band as a terminal of `columns` cells draws it above the CTO's prompt: the rules above and
@@ -96,7 +96,7 @@ describe('where the board is', () => {
 })
 
 describe('the line', () => {
-  test("each agent of the project, its signature, role and state, then its item; another project's never", async ($, on) => {
+  test("each agent of the project, its state, signature and role, then a colon and its item; another project's never", async ($, on) => {
     const w = world(on, {
       'proj/DEV': agent('DEV', 'proj', { state: 'working', context: 68, ...ISSUE }),
       'proj/QA': agent('QA', 'proj', { state: 'question', context: 33, ...PR }),
@@ -107,10 +107,10 @@ describe('the line', () => {
     await w.clock.settle()
     const { keys, part, drawn } = await band($)
     expect(keys).toEqual(['CTO', 'DEV', 'QA'])
-    expect(await part('CTO')).toBe(`${SIGN.CTO}CTO ${MARK.idle}`)
-    expect(await part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.working} https://github.com/o/r/issues/205Issue #205`)
-    expect(await part('QA')).toBe(` │ ${SIGN.QA}QA ${MARK.waits} https://github.com/o/r/pull/210PR #210`)
-    expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} │ ${SIGN.DEV}DEV ${MARK.working} Issue #205 │ ${SIGN.QA}QA ${MARK.waits} PR #210`)
+    expect(await part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO`)
+    expect(await part('DEV')).toBe(` │ ${MARK.working} ${SIGN.DEV}DEV: https://github.com/o/r/issues/205#205`)
+    expect(await part('QA')).toBe(` │ ${MARK.waits} ${SIGN.QA}QA: https://github.com/o/r/pull/210PR #210`)
+    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.waits} ${SIGN.QA}QA: PR #210`)
   })
 
   test('working is an hourglass for the CTO and DEV, and eyes for QA, who reviews', async ($, on) => {
@@ -122,9 +122,9 @@ describe('the line', () => {
     await $.turn.start({ text: 'go', turnId: 't1' })
     await w.clock.advance(3_000)
     const { part } = await band($)
-    expect(await part('CTO')).toBe(`${SIGN.CTO}CTO ${MARK.working}`)
-    expect(await part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.working}`)
-    expect(await part('QA')).toBe(` │ ${SIGN.QA}QA ${MARK.reviewing}`)
+    expect(await part('CTO')).toBe(`${MARK.working} ${SIGN.CTO}CTO`)
+    expect(await part('DEV')).toBe(` │ ${MARK.working} ${SIGN.DEV}DEV`)
+    expect(await part('QA')).toBe(` │ ${MARK.reviewing} ${SIGN.QA}QA`)
   })
 
   test("the CTO's context shows from 90%, and DEV's and QA's never", async ($, on) => {
@@ -133,15 +133,15 @@ describe('the line', () => {
     await start($, 'CTO:proj')
     await w.clock.settle()
     const below = await band($)
-    expect(await below.part('CTO')).toBe(`${SIGN.CTO}CTO ${MARK.idle}`)
-    expect(await below.part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.idle}`)
-    expect(await below.part('QA')).toBe(` │ ${SIGN.QA}QA ${MARK.idle}`)
+    expect(await below.part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO`)
+    expect(await below.part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV`)
+    expect(await below.part('QA')).toBe(` │ ${MARK.idle} ${SIGN.QA}QA`)
     await below.ui.unmount()
     for (const percent of [90, 96]) {
       w.percent = percent
       await w.clock.advance(60_000)
       const shown = await band($)
-      expect(await shown.part('CTO')).toBe(`${SIGN.CTO}CTO ${MARK.idle} (ctx: ${percent}%)`)
+      expect(await shown.part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO (ctx: ${percent}%)`)
       await shown.ui.unmount()
     }
   })
@@ -155,14 +155,32 @@ describe('the line', () => {
     await says($, '/squad-pause')
     await w.clock.advance(3_000)
     const first = await band($)
-    expect(first.drawn).toBe(`${SIGN.CTO}CTO ${MARK.paused} │ ${SIGN.DEV}DEV ${MARK.paused} Issue #205 │ ${SIGN.QA}QA ${MARK.reviewing}`)
+    expect(first.drawn).toBe(`${MARK.paused} ${SIGN.CTO}CTO │ ${MARK.paused} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
     await first.ui.unmount()
     w.store.set('proj/DEV', agent('DEV', 'proj', { paused: true, state: 'permission', tool: 'Bash', at: START + 3_000 }))
     w.store.set('proj/QA', agent('QA', 'proj', { paused: true, at: START + 3_000 }))
     await says($, '/squad-resume')
     await w.clock.advance(3_000)
     const { drawn } = await band($)
-    expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} │ ${SIGN.DEV}DEV ${MARK.waits} │ ${SIGN.QA}QA ${MARK.paused}`)
+    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.waits} ${SIGN.DEV}DEV │ ${MARK.paused} ${SIGN.QA}QA`)
+  })
+
+  test("the CTO's context sits right after the role, before the colon and the item", async ($, on) => {
+    const w = world(on, { 'proj/CTO': agent('CTO', 'proj', { sessionId: 'sid-1', item: { item: 'PR #231', url: 'https://github.com/o/r/pull/231' } }) })
+    w.percent = 96
+    // The CTO's session comes back from its key after a reload, its item with it.
+    await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
+    const { part } = await band($)
+    expect(await part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO (ctx: 96%): https://github.com/o/r/pull/231PR #231`)
+  })
+
+  test('a key from an older board names an issue `Issue #N`, and the band shows it as #N', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { item: { item: 'Issue #217', url: 'https://github.com/o/r/issues/217' } }) })
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    const { drawn, links } = await band($)
+    expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['#217'])
+    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #217 │ ${MARK.unknown} ${SIGN.QA}QA`)
   })
 
   test('a blue rule of light horizontal lines across the band, above the line and below it', async ($, on) => {
@@ -200,10 +218,9 @@ describe('the line', () => {
     expect(colorsOf('CTO')).toEqual(['yellow', 'yellow_FOR_SUBAGENTS_ONLY'])
     expect(colorsOf('DEV')).toEqual(['blue', 'blue_FOR_SUBAGENTS_ONLY'])
     expect(colorsOf('QA')).toEqual(['green', 'green_FOR_SUBAGENTS_ONLY'])
-    // The signature, the mark and the item keep the terminal's own colour.
-    expect(colorOf(SIGN.DEV)).toBeUndefined()
-    expect(colorOf(` ${MARK.idle}`)).toBeUndefined()
-    expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} │ ${SIGN.DEV}DEV ${MARK.idle} Issue #205 │ ${SIGN.QA}QA ${MARK.reviewing}`)
+    // The mark, the signature and the item keep the terminal's own colour.
+    expect(colorOf(`${MARK.idle} ${SIGN.DEV}`)).toBeUndefined()
+    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
   })
 
   test('each links the item its session last acted on, named an issue or a PR; one with no address, or not https, is no link', async ($, on) => {
@@ -217,8 +234,8 @@ describe('the line', () => {
     const { links, drawn } = await band($)
     // A Link's text is its href, then its label.
     expect(links.map(link => link.props.href)).toEqual(['https://github.com/o/r/issues/205'])
-    expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['Issue #205'])
-    expect(drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} Issue #1 │ ${SIGN.DEV}DEV ${MARK.idle} Issue #205 │ ${SIGN.QA}QA ${MARK.idle} PR #3`)
+    expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['#205'])
+    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO: #1 │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.idle} ${SIGN.QA}QA: PR #3`)
   })
 
   test("the CTO's own gh call names its item on the band", async ($, on) => {
@@ -245,8 +262,8 @@ describe('the line', () => {
     await start($, 'CTO:proj')
     await w.clock.settle()
     const { part } = await band($)
-    expect(await part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.unknown} https://github.com/o/r/issues/205Issue #205`)
-    expect(await part('QA')).toBe(` │ ${SIGN.QA}QA ${MARK.unknown}`)
+    expect(await part('DEV')).toBe(` │ ${MARK.unknown} ${SIGN.DEV}DEV: https://github.com/o/r/issues/205#205`)
+    expect(await part('QA')).toBe(` │ ${MARK.unknown} ${SIGN.QA}QA`)
   })
 
   test('a part follows its key: the board rereads the keys every few seconds', async ($, on) => {
@@ -255,31 +272,35 @@ describe('the line', () => {
     w.store.set('proj/DEV', agent('DEV', 'proj', { state: 'permission', tool: 'Bash', at: START + 2_000 }))
     await w.clock.advance(3_000)
     const { part } = await band($)
-    expect(await part('DEV')).toBe(` │ ${SIGN.DEV}DEV ${MARK.waits}`)
+    expect(await part('DEV')).toBe(` │ ${MARK.waits} ${SIGN.DEV}DEV`)
   })
 
   test('on a narrow terminal the line is cut at its end: the CTO first and whole, then only whole parts', async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', PR) })
     await start($, 'CTO:proj')
     await w.clock.settle()
-    // Each emoji takes two cells: the CTO's part takes 8; DEV's 3 more for the bar and 19 for
-    // itself, its link included; QA's 18; the ellipsis 2. DEV shows from 32 columns, with room for
-    // the ellipsis, and the whole line from 48.
-    const wide = await band($, 32)
+    // Each emoji takes two cells: the CTO's part takes 8 (its mark, a space, its signature and its
+    // role); DEV's 3 more for the bar, 8 for itself and 6 for ': #205'; QA's 19; the ellipsis 2. DEV
+    // shows from 27 columns, with room for the ellipsis, and the whole line from 44.
+    const wide = await band($, 27)
     expect(wide.keys).toEqual(['CTO', 'DEV'])
-    expect(wide.drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} │ ${SIGN.DEV}DEV ${MARK.idle} Issue #205 …`)
+    expect(wide.drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 …`)
     await wide.ui.unmount()
-    const narrow = await band($, 31)
+    const narrow = await band($, 26)
     expect(narrow.keys).toEqual(['CTO'])
-    expect(narrow.drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle} …`)
+    expect(narrow.drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO …`)
     await narrow.ui.unmount()
-    const whole = await band($, 48)
+    const almost = await band($, 43)
+    expect(almost.keys).toEqual(['CTO', 'DEV'])
+    expect(almost.drawn.endsWith('…')).toBe(true)
+    await almost.ui.unmount()
+    const whole = await band($, 44)
     expect(whole.keys).toEqual(['CTO', 'DEV', 'QA'])
-    expect(whole.drawn.endsWith('…')).toBe(false)
+    expect(whole.drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.idle} ${SIGN.QA}QA: PR #210`)
     await whole.ui.unmount()
     const tiny = await band($, 4)
     expect(tiny.keys).toEqual(['CTO'])
-    expect(tiny.drawn).toBe(`${SIGN.CTO}CTO ${MARK.idle}`)
+    expect(tiny.drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO`)
   })
 
   // QA's case on PR #213, now with the signatures: the ellipsis must fit too.
@@ -294,7 +315,7 @@ describe('the line', () => {
     const over: string[] = []
     for (let columns = 10; columns <= 80; columns++) {
       const { ui, drawn } = await band($, columns)
-      if (cells(drawn) > columns && columns >= cells(`${SIGN.CTO}CTO ${MARK.idle} (ctx: 96%)`)) {
+      if (cells(drawn) > columns && columns >= cells(`${MARK.idle} ${SIGN.CTO}CTO (ctx: 96%)`)) {
         over.push(`${columns}: ${cells(drawn)} cells, ${drawn}`)
       }
       await ui.unmount()

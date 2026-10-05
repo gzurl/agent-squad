@@ -153,7 +153,7 @@ describe('what the board leaves alone', () => {
 
 describe('the item: the issue or PR its session last acted on with gh (agent-squad #222)', () => {
   // Each form, with what the key holds after it; the session's remote is git@github.com:o/r.git.
-  const issue = (n: number) => ({ item: `Issue #${n}`, url: `https://github.com/o/r/issues/${n}` })
+  const issue = (n: number) => ({ item: `#${n}`, url: `https://github.com/o/r/issues/${n}` })
   const pr = (n: number) => ({ item: `PR #${n}`, url: `https://github.com/o/r/pull/${n}` })
   const forms: [string, { item: string; url: string | null }][] = [
     ['gh issue edit 11 --add-label "x" --remove-label "y"', issue(11)],
@@ -167,8 +167,8 @@ describe('the item: the issue or PR its session last acted on with gh (agent-squ
     ['gh pr merge 25 --squash --match-head-commit "$head"', pr(25)],
     ['gh pr edit 26 --add-label "x"', pr(26)],
     ['gh pr view https://github.com/a/b/pull/27', { item: 'PR #27', url: 'https://github.com/a/b/pull/27' }],
-    ['gh issue view https://github.com/a/b/issues/28', { item: 'Issue #28', url: 'https://github.com/a/b/issues/28' }],
-    ['gh issue view 29 --repo a/b', { item: 'Issue #29', url: 'https://github.com/a/b/issues/29' }],
+    ['gh issue view https://github.com/a/b/issues/28', { item: '#28', url: 'https://github.com/a/b/issues/28' }],
+    ['gh issue view 29 --repo a/b', { item: '#29', url: 'https://github.com/a/b/issues/29' }],
     ['gh pr view --repo a/b 30', { item: 'PR #30', url: 'https://github.com/a/b/pull/30' }],
     ['gh issue comment --body-file f 31', issue(31)],
     ['gh pr merge --squash --match-head-commit "$head" 36', pr(36)],
@@ -311,7 +311,7 @@ describe('the item: the issue or PR its session last acted on with gh (agent-squ
     w.remote = 'git@gitlab.com:o/r.git'
     await start($, 'DEV:proj')
     await runs($, w, 'gh issue view 70')
-    expect(w.store.get('proj/DEV')).toMatchObject({ item: { item: 'Issue #70', url: null } })
+    expect(w.store.get('proj/DEV')).toMatchObject({ item: { item: '#70', url: null } })
   })
 
   for (const remote of [null, 'unreadable']) {

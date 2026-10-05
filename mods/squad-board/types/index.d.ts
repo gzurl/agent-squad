@@ -8,8 +8,8 @@ export type BoardRole = 'CTO' | 'DEV' | 'QA'
 // at its prompt.
 export type BoardState = 'working' | 'permission' | 'question' | 'idle'
 
-// The issue or PR a session last acted on with gh: its label (`Issue #12`, `PR #34`) and its web
-// address, null when the session's repository is not on GitHub.
+// The issue or PR a session last acted on with gh: its label (`#12` for an issue, `PR #34` for a
+// pull request) and its web address, null when the session's repository is not on GitHub.
 export type BoardItem = { item: string; url: string | null }
 
 // One session's key in the store, `<project>/<role>`, written by that session alone.
