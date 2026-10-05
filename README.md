@@ -36,6 +36,8 @@ each goal is. **agent-squad** needs both.
   compactions and restarts.
 - 📈 **Grows with you:** several projects at once, token usage per agent, and upgrades in one
   command.
+- 🏗️ **Built by its own squad:** every change to **agent-squad** is planned, written and reviewed by
+  its own squad of agents.
 
 
 ### 👥 The team
@@ -60,26 +62,8 @@ and DEV's and QA's on the right. You talk only to the CTO.
 
 <p align="center"><img src="docs/images/squad-in-cmux.png" alt="The squad in cmux: the CTO's session on the left, DEV's and QA's on the right" width="900"></p>
 
-The CTO reports in your language, one line per agent. After `/squad-resume`, for instance:
-
-```
-👷🏼‍♂️[CTO]: ✅ The squad is back:
-💤 CTO: free. While you were away it merged PR #52.
-⏳ DEV: on #48 (export to CSV), about 1 h. While you were away it merged PR #51.
-💤 QA: free. While you were away it reviewed PRs #51 and #52.
-
-Waiting for you: #48, choose the export's columns (A, B or C).
-Plan: now DEV finishes #48 and QA reviews it; next, the import screen.
-```
-
-
-### 🏗️ Built by its own squad
-
-**agent-squad** is built by its own squad. In the 17 days up to release v41, it merged 109 pull
-requests, every one with a QA verdict, 36 of them sent back for changes first, and it shipped 34
-releases. For a review that caught a real bug, see
-[PR #154](https://github.com/gzurl/agent-squad/pull/154), where QA found that a forked session
-counted its tokens twice.
+The CTO reports to you in your language, one line per agent, and the line above its prompt shows
+what each agent is doing.
 
 
 ### ▶️ Quick start
@@ -128,7 +112,6 @@ details).
 - [🛠️ Install](#️-install)
 - [🔄 Upgrade](#-upgrade)
 - [🗂️ What goes where](#️-what-goes-where)
-- [⚠️ Things to know](#️-things-to-know)
 - [❓ FAQ](#-faq)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
@@ -431,16 +414,9 @@ It removes from `.claude/commands/` any `squad-*.md` the new release no longer h
 command is renamed, unless your project tracks that file. It leaves the rest alone. `SQUAD.md` §2.4
 says who cleans up what, and when.
 
-
-## ⚠️ Things to know
-
-- **Nothing goes straight to `main`.** The pre-push gate refuses it. When you approve an exception
-  on an issue, the agent pushes it with `SQUAD_MAIN_EXCEPTION=#<issue> git push …`.
-- **Never run `git clean -d` with `-x` or `-X` in the main checkout.** It deletes the playbook, the
-  snapshots, the evidence and `.claude/settings.local.json`, and with `-ff` the worktrees too.
-- **Setting up a project, the CTO also takes care of** the tools that walk into the agents'
-  worktrees, Git LFS, and a few traps of `git` and `gh`. [BOOTSTRAP.md](BOOTSTRAP.md), row 9b, and
-  [SQUAD.md](SQUAD.md), §2.4 and §3, have the details.
+**Never run `git clean -d` with `-x` or `-X` in the main checkout.** It deletes what git ignores
+there: the playbook, the snapshots, the evidence and `.claude/settings.local.json`, and with `-ff`
+the worktrees too.
 
 
 ## ❓ FAQ
