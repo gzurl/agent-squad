@@ -71,6 +71,8 @@ delete the others:
   If Metro cannot resolve a module in a worktree after installing its dependencies there, recreate
   the main checkout's watch: `watchman watch-del <repo>`, then `watchman watch-project <repo>`.
 - pytest: skips dot-directories by default; an overridden `norecursedirs` keeps `.*`.
+- TypeScript and mypy skip hidden folders by default, and `rg` and ruff respect `.gitignore`: they
+  need nothing.
 - Node: a worktree without its own `node_modules` silently uses the main checkout's, through
   Node's upward lookup, so DEV and QA install the dependencies in their worktree before running
   anything there.
