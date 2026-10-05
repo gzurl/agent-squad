@@ -137,50 +137,39 @@ details).
 ## 💡 Why agent-squad
 
 I have been programming since I was seven (oh boy, those wonderful years of BASIC and assembler on
-an 8-bit ZX Spectrum!), and I have been a software engineer since 2003. I have to admit that
-generative AI has changed the way we build software forever; whether for better or for worse, time
-will tell. First, GitHub Copilot seemed to guess the next block of code I was about to write. Then
-ChatGPT gave me valuable snippets I could paste into my IDE. But the real explosion came in the
-spring of 2025, when I started using Claude Code, and my relationship with programming changed
-radically. The first versions felt like a sharp intern, then like a junior engineer, and in the end
-it wrote code better and faster than any human I know. Writing code stopped being my main value as
-an engineer. I had to raise the level where I add value: organising the AI's work, knowing what has
-to be done, when is the right moment to do it and why (weighing the pros, the cons and the expected
-value), and arranging the work so that it gets done as effectively as possible. It also meant
-learning to talk to the AI efficiently, and to ask for things in a way that gets me what I want.
-That sounds obvious, but there is a particular way of talking to an AI: it is less about being
-strict with words and grammar than about what to include and what to leave out, which is probably
-where prompt engineering came from.
+an 8-bit ZX Spectrum!), and I have been a software engineer since 2003. Recently, generative AI has
+changed the way we build software forever. First came GitHub Copilot, with its auto-completed
+blocks, then ChatGPT, with snippets to paste into my IDE. Then came **Claude Code**, and it changed
+my relationship with software development radically. Writing code was no longer my main value as an
+engineer. I had to raise the level where I add value: organising the AI's work, knowing what has to
+be done, why, and when to do it. It also meant learning to talk efficiently to the AI to really get
+what I want.
 
 With Claude Code I went through several stages: a single session in the terminal, then desktop
 interfaces, then back to the terminal ([iTerm2](https://iterm2.com), then
-[tmux](https://github.com/tmux/tmux), [Ghostty](https://ghostty.org), and finally cmux, for its
-agent integration). Like almost everyone, I then tried several agents on the same repository, each
-on its own feature, and ran into the conflicts between them and the extra friction of using and
-managing Git worktrees. Several tools appeared to automate that, but I felt I was not getting all
-the juice that coding agents could give me.
+[tmux](https://github.com/tmux/tmux), [Ghostty](https://ghostty.org), and finally
+[cmux](https://cmux.com/)). Like everyone, I tried several agents on the same repository, each on
+its own feature, and then ran into the conflicts and the extra friction of managing Git worktrees.
+Several tools appeared to automate that, but I felt I was not getting all the developer experience
+that coding agents should provide.
 
-So, to be more effective, I moved to a two-role layout: a developer and a QA engineer. One builds,
-the other verifies. QA works from a different context, which keeps it from fooling itself, as the
-developer would. That worked for a while, until I noticed how much of my time went into carrying
-one agent's decisions, plus my own feedback, to the other. The `SendMessage` tool, which lets
-sessions message each other, took me out of the middle (I was no longer the bottleneck man in the
-middle). The next rock in the road was quality: on a given feature, the two could not agree on
-whether the work was good enough (the famous P2s and P3s of one model reviewing another), and they
-would get stuck in a pointless loop that only burned tokens. That brought the last step up: DEV and
-QA needed a boss, and not me, but an AI-agent CTO.
+Looking for that experience, I moved to two agents: a developer and a QA engineer. One builds, the
+other verifies. QA works from a different context, so it does not fool itself the way the developer
+would. That worked for a while, until I noticed I was spending too much time carrying one agent's
+decisions, plus my own feedback, to the other. The `SendMessage` tool, which lets sessions message
+each other, took me out of the middle (I was no longer the bottleneck-man-in-the-middle). But the
+experience was far from perfect: on a given feature, the two agents could not agree on whether the
+work was good enough (the famous P2s and P3s of one model reviewing another), and they would get
+stuck in a pointless loop that only burned tokens. That led to the last step: DEV and QA agents
+needed a boss, and not me, but an AI-agent CTO.
 
 That is how **agent-squad**'s three-agent model was born. I play the CEO, or product manager, of a
 small team: a CTO, a developer and a QA. I only talk to the CTO, about vision, product, software
 stack, architecture and so on. Together we set the project's direction, and the CTO deals with the
 rest of the team and settles their disagreements. Each member works in its own local worktree, and
-the work lives on GitHub: its issues and pull requests are the single source of truth, where I, as
-the CEO, can step in whenever I want.
-
-Every rule in [SQUAD.md](SQUAD.md) comes from something that went wrong on a real project, and the
-rules that matter most are enforced by scripts, because good intentions alone do not keep them. The
-method keeps changing as it is used: when an agent finds a flaw in it, the fix comes back here as a
-new release, and [CHANGELOG.md](CHANGELOG.md) says what each release changed.
+the source of truth lives on GitHub, where I, as the CEO, can step in whenever I want. Every rule
+in [SQUAD.md](SQUAD.md) comes from something that went wrong on a real project, and the rules that
+matter most are enforced by scripts.
 
 **agent-squad** is my own, very personal take on how to build software today with Git, GitHub and
 Claude Code. I am sure it has plenty of flaws and limits, which is why I am making it public, for
