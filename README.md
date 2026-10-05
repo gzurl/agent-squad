@@ -73,7 +73,7 @@ details).
 1. **Install the squad.** In your project's folder, run:
 
    ```bash
-   gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/gzurl/agent-squad/main/install.sh | bash
    ```
 
    It installs the latest release and tells you what it did. It ends with a short *By hand* list:
@@ -321,8 +321,7 @@ the main checkout; the same line with `enable` turns it back on.
 - **Claude Code**, with the three sessions on the same machine; 2.1.287 or later for the
   [squad board](#the-squad-board), which an older one goes without.
 - **A GitHub repository** for your project.
-- **The GitHub CLI, `gh`**, logged in with the `repo` and `workflow` scopes and with access to
-  `gzurl/agent-squad`, which is private for now.
+- **The GitHub CLI, `gh`**, logged in with the `repo` and `workflow` scopes.
 - **bash**, **git** 2.31 or later, **jq** and **tar**.
 
 Before it touches anything, the installer checks that `gh`, git, jq and tar are there, and that
@@ -347,8 +346,8 @@ overwrites or deletes a file your project owns. To pick a release, or another fo
 `bash -s --`:
 
 ```bash
-gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh \
-  | bash -s -- --tag v44 /path/to/project
+curl -fsSL https://raw.githubusercontent.com/gzurl/agent-squad/main/install.sh \
+  | bash -s -- --tag v45 /path/to/project
 ```
 
 Everything the squad installs or generates lives in `.agent-squad/`, which git ignores. Outside it,
