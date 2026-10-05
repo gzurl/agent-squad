@@ -31,9 +31,11 @@
   `agent-squad-<project>-<hash>`, with no release, so an upgrade no longer moves the board to a
   new, empty store, where it showed DEV and QA as `❓` until every session had restarted.
   - The install moves the `…-v<N>` names of v37 and v38 to the new one, and keeps a plugin off
-    where it was off.
-  - The old store files stay in `~/.claude/plugins/store/`. The README says where, and that they
-    can be deleted once every session runs v39 or later.
+    where it was off. It leaves every other marketplace alone: one of the project's own, even named
+    `agent-squad-…`, unless it points at a `.agent-squad` folder.
+  - The old store files stay in `~/.claude/plugins/store/`, named
+    `squad-board_agent-squad-<project>-<hash>-v<N>-<…>.json`, which can be deleted once every
+    session runs v39 or later.
   - A session still loads a new release of the board at its next start: the README and
     `/squad-upgrade` say to restart the three sessions after an upgrade.
 - **§7: the CEO saves state and compacts at about 90%,** not 80% (#218). On a 1M-token session,
