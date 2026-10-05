@@ -301,13 +301,14 @@ not cost: most of the input is read from the cache, which is billed far below fr
 ### The squad board
 
 Above the prompt of the CTO's session, between two blue rules, one line shows every agent of the
-project, in the order CTO, DEV, QA: its signature and role, its state, and a link to the issue or
-pull request its session last worked on with `gh`. The board shows what each session does, not
-what GitHub says: it reads nothing from GitHub.
+project, in the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its
+signature and role, then a colon and a link to the issue (`#123`) or pull request (`PR #124`) its
+session last worked on with `gh`; with no item, no colon. The board shows what each session does,
+not what GitHub says: it reads nothing from GitHub.
 
 ```
 ──────────────────────────────────────────────────────────────────
-👷🏼‍♂️CTO 💤 (ctx: 96%) │ 👨🏼‍💻DEV ⏳ Issue #123 │ 👩🏼‍🔬QA 👀 PR #235
+💤 👷🏼‍♂️CTO (ctx: 96%): PR #124 │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124
 ──────────────────────────────────────────────────────────────────
 ```
 
@@ -322,7 +323,7 @@ The states:
 - 💤 idle, free for the next request;
 - ❓ unknown: no state from that session for three minutes.
 
-The CTO's context shows once it reaches 90% of its window, as `(ctx: 96%)`.
+The CTO's context shows once it reaches 90% of its window, as `(ctx: 96%)` right after its role.
 
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
 Code 2.1.287 or later; with an older one, the squad works without it. It only watches: it never
