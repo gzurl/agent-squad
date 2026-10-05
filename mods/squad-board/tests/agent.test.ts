@@ -240,6 +240,25 @@ describe('the item: the issue or PR its session last acted on with gh (agent-squ
     ['a heredoc whose line goes on in a quote over two lines', [
       'cat <<EOF; echo "a', 'b"', 'gh pr view 4', 'EOF', 'gh pr view 239',
     ], pr(239)],
+    // agent-squad #227: a comment opens no quote and no heredoc; a # inside a word starts none.
+    ['an apostrophe in a comment line, then the call (QA-C1, on PR #226)', [
+      "# the CTO's check", 'gh pr view 240',
+    ], pr(240)],
+    ['an apostrophe in a comment after a command, then the call', [
+      "cd /work/proj # don't move", 'gh pr view 241',
+    ], pr(241)],
+    ['a heredoc named in a comment opens none', [
+      '# cat <<EOF would start one', 'gh pr view 242',
+    ], pr(242)],
+    ['a # inside a word starts no comment: the quote after it still opens', [
+      "echo a#b'c", "d' && gh pr view 243",
+    ], pr(243)],
+    ['a # after ${ starts no comment either', [
+      "echo ${#x}'", "' && gh pr view 244",
+    ], pr(244)],
+    ['a # inside double quotes is text, its apostrophe too', [
+      'git commit -q -m "x', "# not a comment, it's text", '" && gh pr view 245',
+    ], pr(245)],
     ['gh pr create from a heredoc body: the PR gh prints', [
       'gh pr create --title "x" --body-file - <<\'EOF\'', 'Closes #5; gh pr view 6', 'EOF',
     ], pr(40)],
@@ -268,6 +287,8 @@ describe('the item: the issue or PR its session last acted on with gh (agent-squ
       'gh pr create --fill', 'gh issue list --label x --limit 1000', 'gh pr view --json number',
       'gh pr checks 51', 'gh api repos/o/r/pulls/52', 'git log -3', 'echo "gh pr view 53"', 'gh pr diff 54',
       "printf '%s' 'gh issue edit 55'", 'echo "done; gh pr view 56"', "git commit -m 'x\ngh pr view 57'",
+      // The shell reads #58 as a comment: the call names no number.
+      'gh issue view #58', '# gh pr view 59',
     ]) {
       await runs($, w, command, '')
       expect(w.store.get('proj/DEV')).toMatchObject({ item: issue(50) })
