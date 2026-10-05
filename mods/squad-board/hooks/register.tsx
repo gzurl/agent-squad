@@ -129,7 +129,8 @@ function itemAt(text: string): BoardItem | null {
 // becomes '', and each heredoc's body is left out, from the line after its `<<WORD` or `<<-WORD`,
 // the word quoted or not, up to the line that holds the word alone. A `<<` inside quotes opens no
 // heredoc, nor does a here-string (`<<<`). A single quote ends at the next one; a double quote
-// ends at the next one that no backslash escapes, and may span lines.
+// ends at the next one that no backslash escapes, and may span lines. A `#` that starts a word
+// outside quotes starts a comment, which runs to the end of its line and opens nothing (#227).
 function bareOf(command: string): string {
   let bare = ''
   let quote: string | null = null
@@ -151,6 +152,7 @@ function bareOf(command: string): string {
         }
         continue
       }
+      if (c === '#' && (i === 0 || /[\s;&|()<>]/.test(line[i - 1]))) break
       const heredoc = line[i - 1] === '<' ? null : /^<<-?\s*(['"]?)([A-Za-z_]\w*)\1/.exec(line.slice(i))
       if (heredoc) {
         ends.push(heredoc[2])
