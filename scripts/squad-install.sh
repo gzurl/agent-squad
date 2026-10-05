@@ -23,6 +23,8 @@ shim_marker="agent-squad pre-push shim"
 
 # `say <step> <message>` prints one action taken or skipped; `die <message>` stops before any step.
 say() { printf 'install: %-10s %s\n' "$1" "$2"; }
+# `listed <word>...` joins its arguments with commas, for a step's one-line summary.
+listed() { local IFS=,; printf '%s' "$*" | sed 's/,/, /g'; }
 die() { echo "squad-install: $1" >&2; exit 2; }
 
 # Output whose reader has gone, as when it is piped into head, must not stop the installer halfway:
@@ -639,11 +641,14 @@ say log "appended '$previous -> $tag' to .agent-squad/install.log"
 #    name: a .gitignore with only the line v24 added for /squad-save-state gets the rule once, and
 #    keeps that line (agent-squad #101).
 gitignore="$project/.gitignore"
+# What the step added and what the project already ignored, said in one line after the loop; a line
+# that needs a decision is said at once (agent-squad #262).
+added=() kept=()
 for path in "${ignored_paths[@]}"; do
   line="$path"
   [ "$path" = .agent-squad ] && line=".agent-squad/"
   if ignored_by_project "$path"; then
-    say .gitignore "$line is already ignored"
+    kept+=("$line")
     continue
   fi
   if [ -L "$gitignore" ]; then
@@ -666,12 +671,19 @@ for path in "${ignored_paths[@]}"; do
     echo >> "$gitignore"
   fi
   echo "$line" >> "$gitignore"
-  say .gitignore "added $line"
+  added+=("$line")
   if ! ignored_by_project "$path"; then
     say .gitignore "NOT IGNORED: $line was added, and still git does not ignore it; decide with the CEO"
     needs_decision=1
   fi
 done
+if [ "${#added[@]}" -gt 0 ] && [ "${#kept[@]}" -gt 0 ]; then
+  say .gitignore "added $(listed "${added[@]}"); already ignored: $(listed "${kept[@]}")"
+elif [ "${#added[@]}" -gt 0 ]; then
+  say .gitignore "added $(listed "${added[@]}")"
+elif [ "${#kept[@]}" -gt 0 ]; then
+  say .gitignore "already ignored: $(listed "${kept[@]}")"
+fi
 
 # 3. Session hooks (D5 and D10 of agent-squad #23, #164), merged into .claude/settings.local.json:
 #    every other key and hook is kept, and only entries that run squad-handoff.sh are replaced.
@@ -722,24 +734,40 @@ for file in "$project"/.claude/commands/squad-*.md; do
     say command "removed /${name%.md}, which this release does not have"
   fi
 done
+# The commands written, rewritten and already in place, said in one line after the loop; a command
+# that needs a decision is said at once (agent-squad #262).
+wrote=() rewrote=() same=0
 while IFS= read -r name; do
   path=".claude/commands/$name"
   if tracked_by_project "$path"; then
     say command "NOT INSTALLED: $path is the project's own file, tracked by git; it is left as it is: if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached; then run again"
     needs_decision=1
   elif cmp -s "$playbook/commands/$name" "$project/$path"; then
-    say command "/${name%.md} is already in .claude/commands/"
+    same=$((same + 1))
   else
-    written="wrote"
-    [ ! -e "$project/$path" ] || written="rewrote"
+    existed=false
+    [ ! -e "$project/$path" ] || existed=true
     if mkdir -p "$project/.claude/commands" && cp "$playbook/commands/$name" "$project/$path"; then
-      say command "$written /${name%.md} into .claude/commands/"
+      if $existed; then rewrote+=("/${name%.md}"); else wrote+=("/${name%.md}"); fi
     else
       say command "NOT INSTALLED: cannot write $path; fix it and run again"
       needs_decision=1
     fi
   fi
 done < <(squad_commands)
+total=$((${#wrote[@]} + ${#rewrote[@]} + same))
+if [ "$total" -gt 0 ] && [ "${#wrote[@]}" -eq "$total" ]; then
+  say command "wrote the $total squad commands into .claude/commands/"
+elif [ "$total" -gt 0 ] && [ "$same" -eq "$total" ]; then
+  say command "the $total squad commands are already in .claude/commands/"
+elif [ "$total" -gt 0 ]; then
+  summary=""
+  [ "${#wrote[@]}" -eq 0 ] || summary="wrote $(listed "${wrote[@]}")"
+  [ "${#rewrote[@]}" -eq 0 ] || summary="${summary:+$summary, }rewrote $(listed "${rewrote[@]}")"
+  summary="$summary into .claude/commands/"
+  [ "$same" -eq 0 ] || summary="$summary; the other $same were already there"
+  say command "$summary"
+fi
 
 # 3c. The squad's mods (agent-squad #206), enabled for this project alone: the project's own
 #     marketplace in .agent-squad/, and its entries in .claude/settings.local.json, where every
@@ -810,16 +838,25 @@ fi
 
 # 5. GitHub templates, created from the playbook only when the project has none; the project owns
 #    them afterwards.
+#    What was created and what was kept are said in one line (agent-squad #262).
+created=() kept=()
 for template in .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md; do
   if [ -e "$project/$template" ]; then
-    say templates "$template exists, kept"
+    kept+=("$template")
   elif [ ! -f "$playbook/$template" ]; then
     say templates "$template is not in the playbook, skipped"
   else
     mkdir -p "$(dirname "$project/$template")" && cp "$playbook/$template" "$project/$template"
-    say templates "created $template"
+    created+=("$template")
   fi
 done
+if [ "${#created[@]}" -gt 0 ] && [ "${#kept[@]}" -gt 0 ]; then
+  say templates "created $(listed "${created[@]}"); kept $(listed "${kept[@]}"), already there"
+elif [ "${#created[@]}" -gt 0 ]; then
+  say templates "created $(listed "${created[@]}")"
+elif [ "${#kept[@]}" -gt 0 ]; then
+  say templates "kept $(listed "${kept[@]}"), already there"
+fi
 
 # 6. The remote's default branch, which the pre-push gate protects and the worktrees start from
 #    (agent-squad #72). When git does not know it, the remote is asked once, which records it for
@@ -842,10 +879,12 @@ fi
 
 # 7. The DEV and QA worktrees (D3 of agent-squad #23), detached at the default branch as it is
 #    locally: no fetch.
+#    Those created and those kept are said in one line (agent-squad #262).
+created=() kept=()
 for agent in dev qa; do
   worktree="$squad/worktrees/$agent"
   if [ -e "$worktree" ]; then
-    say worktrees ".agent-squad/worktrees/$agent exists, kept"
+    kept+=("$agent")
   elif [ -z "$base" ]; then
     say worktrees "NOT CREATED: .agent-squad/worktrees/$agent, because the remote's default branch is not known yet"
     needs_decision=1
@@ -853,40 +892,36 @@ for agent in dev qa; do
     say worktrees "NOT CREATED: .agent-squad/worktrees/$agent, because origin/$base does not exist yet; run again once it does"
     needs_decision=1
   elif error="$(git -C "$project" worktree add -q --detach "$worktree" "origin/$base" 2>&1)"; then
-    say worktrees "created .agent-squad/worktrees/$agent, detached at origin/$base"
+    created+=("$agent")
   else
     say worktrees "NOT CREATED: .agent-squad/worktrees/$agent: $error"
     needs_decision=1
   fi
 done
+[ "${#created[@]}" -eq 0 ] \
+  || say worktrees "created $(listed "${created[@]}") in .agent-squad/worktrees/, detached at origin/$base"
+[ "${#kept[@]}" -eq 0 ] || say worktrees "kept $(listed "${kept[@]}") in .agent-squad/worktrees/, already there"
 
-# 8. What only the CTO can do: the project's own tracked files.
+# 8. What only the CTO can do: the project's own tracked files. The list is the CTO's, who works
+#    through it while following BOOTSTRAP.md at the first install, and /squad-upgrade after an
+#    upgrade; the person running the installer leaves it to the CTO (agent-squad #262).
 echo
-echo "By hand:"
+echo "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
 items=0
 item() {
   items=$((items + 1))
   printf '  %d. %s\n' "$items" "$1"
 }
-template="$playbook/templates/AGENTS.md"
 if ! imports_charter "$project/AGENTS.md"; then
-  # The one source of the Squad section is the playbook's template of AGENTS.md. It is printed
-  # unindented: indented, it would become a code block in which Claude Code does not import.
-  if grep -qE '^## Squad[[:space:]]*$' "$template"; then
-    item "Add this section to AGENTS.md, which imports the charter into every session; copy the lines between the markers as they are:"
-    echo "----- begin Squad section -----"
-    awk '/^## Squad[[:space:]]*$/ { inside = 1; print; next } inside && /^## / { exit } inside' "$template"
-    echo "----- end Squad section -----"
-  else
-    item "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md"
-  fi
+  # The one source of the Squad section is the playbook's template of AGENTS.md, which the CTO reads.
+  item "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word: it imports the charter into every session"
 fi
 case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
   AGENTS.md|./AGENTS.md) ;;
   *) item "Make CLAUDE.md a symlink to AGENTS.md (ln -s AGENTS.md CLAUDE.md), once its content is in AGENTS.md" ;;
 esac
 if ! lists_a_command "$project/.agent-squad-checks"; then
-  item "Write .agent-squad-checks: the commands your CI runs, one per line; until it lists one the gate refuses every push"
+  item "Write .agent-squad-checks: the commands the project's CI runs, one per line; until it lists one the gate refuses every push"
 fi
 # The squad's files that belong in git, as git sees them now: whichever run wrote them, they are
 # left to commit until a PR takes them.
@@ -897,6 +932,22 @@ if [ -n "$uncommitted" ]; then
   item "Commit these files, which the squad writes and git shows as not committed, through a PR: $uncommitted"
 fi
 [ "$items" -gt 0 ] || echo "  nothing"
+
+# 9. A first install ends with what comes next, in the README's own words (Quick start, steps 2
+#    and 3), with the project's name in the sessions' names (agent-squad #262). The name is the
+#    main checkout's folder, quoted for the shell. An upgrade has none of it.
+if [ "$previous" = none ]; then
+  name="$(basename "$main_checkout")"
+  name="${name//\\/\\\\}" name="${name//\"/\\\"}" name="${name//\$/\\\$}" name="${name//\`/\\\`}"
+  echo
+  echo "Next steps:"
+  echo "- Start three Claude Code sessions in your project's folder, each in its own terminal, named after its role and your project:"
+  for role in CTO DEV QA; do
+    printf '    claude -n "%s:%s"\n' "$role" "$name"
+  done
+  echo "  If you like, give each session the colour the squad board gives its role: /color yellow in the CTO's, /color blue in DEV's and /color green in QA's."
+  echo "- Tell the CTO: \"Follow .agent-squad/playbook/BOOTSTRAP.md.\""
+fi
 
 if [ "$needs_decision" -ne 0 ]; then
   echo "squad-install: the steps marked NOT were not done; resolve them and run the installer again" >&2
