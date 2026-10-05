@@ -1,6 +1,6 @@
 {
   "name": "squad-board",
-  "version": "41.0.0",
+  "version": "42.0.0",
   "description": "The squad board: each agent's state, context and current issue or PR, in the CTO's session",
   "author": {
     "name": "agent-squad"
