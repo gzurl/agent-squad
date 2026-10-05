@@ -54,12 +54,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 
 ## Environment facts
 - GitHub account arrangement: **shared**, one account (`gzurl`) for the three agents.
-- `main` protection: **protected on GitHub** since the repository went public (2026-10-05): a PR
-  required, the `check` and `coverage` status checks, conversation resolution, no force-push and no
-  deletion, with no bypass, admins included. It requires no approvals, since the agents share one
-  account: QA's text verdict and the merge gate hold that gate. The pre-push gate also refuses
-  pushes to `main`; an exception approved by the CEO (§2.3) would need the CEO to lift the
-  protection for it.
+- `main` protection: **protected on GitHub**: a PR required, the `check` and `coverage` status
+  checks, conversation resolution, no force-push and no deletion, with no bypass, admins included.
+  It requires no approvals, since the agents share one account: QA's text verdict and the merge
+  gate hold that gate. The pre-push gate also refuses pushes to `main`; an exception approved by
+  the CEO (§2.3) would need the CEO to lift the protection for it.
 
 ## Git conventions
 - **Commits:** Conventional Commits, in English.
@@ -102,7 +101,7 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   project takes the new version.
 
 ## Stack and commands
-- bash, git ≥ 2.31 (2.32 for this repository's tests, #184), `jq`, `gh`, `uv` (the checks run shellcheck through `uvx`), and Claude Code
+- bash, git ≥ 2.32, `jq`, `gh`, `uv` (the checks run shellcheck through `uvx`), and Claude Code
   2.1.287 or later, the first with mods (`scripts/check-mods.sh` runs `claude plugin validate` and
   `claude plugin test` on [mods/](mods), with a home of its own; CI pins the version it installs).
 - The checks are exactly the lines of [.agent-squad-checks](.agent-squad-checks); run them all

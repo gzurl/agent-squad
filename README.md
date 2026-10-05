@@ -342,12 +342,13 @@ keeps it off if you turned it off. The release notes are in [CHANGELOG.md](CHANG
 ## 🗂️ What goes where
 
 The installer of *Quick start* can run as often as you like: it prints every step, and never
-overwrites or deletes a file your project owns. To pick a release, or another folder, add them after
-`bash -s --`:
+overwrites or deletes a file your project owns. It installs the latest release. To install into
+another folder, add it after `bash -s --`, and to pin a release, add `--tag vN` with one of the
+[tags](https://github.com/gzurl/agent-squad/tags):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gzurl/agent-squad/main/install.sh \
-  | bash -s -- --tag v45 /path/to/project
+  | bash -s -- /path/to/project
 ```
 
 Everything the squad installs or generates lives in `.agent-squad/`, which git ignores. Outside it,

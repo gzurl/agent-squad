@@ -2,7 +2,7 @@
 # Install or upgrade the squad in a project, in one line (agent-squad #89):
 #   curl -fsSL https://raw.githubusercontent.com/<upstream>/main/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/<upstream>/main/install.sh \
-#     | bash -s -- --tag v45 /path/to/project
+#     | bash -s -- --tag vN /path/to/project
 # gh can fetch it too, as /squad-upgrade does:
 #   gh api -H 'Accept: application/vnd.github.raw' repos/<upstream>/contents/install.sh | bash
 # It picks a release tag, the latest or the one given, fetches that tag's own
