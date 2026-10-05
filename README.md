@@ -283,16 +283,17 @@ not cost: most of the input is read from the cache, which is billed far below fr
 
 ### The squad board
 
-Above the prompt of the CTO's session, between two blue rules, one line shows every agent of the
-project, in the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its
-signature and role, then a colon and a link to the issue (`#123`) or pull request (`PR #124`) its
-session last worked on with `gh`; with no item, no colon. The board shows what each session does,
-not what GitHub says: it reads nothing from GitHub.
+Above the prompt of the CTO's session, between two blue rules, one line opens with `agent-squad`
+and the release of the board the CTO's session loaded, then shows every agent of the project, in
+the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its signature and
+role, then a colon and a link to the issue (`#123`) or pull request (`PR #124`) its session last
+worked on with `gh`; with no item, no colon. The board shows what each session does, not what
+GitHub says: it reads nothing from GitHub.
 
 ```
-──────────────────────────────────────────────────────────────────
-💤 👷🏼‍♂️CTO (ctx: 96%): PR #124 │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124
-──────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────
+agent-squad (v43) │ 💤 👷🏼‍♂️CTO (ctx: 96%): PR #124 │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124
+────────────────────────────────────────────────────────────────────────────────────
 ```
 
 Each role's name is in the colour *Quick start*, step 2, gives its session: the CTO yellow, DEV blue
@@ -311,7 +312,8 @@ The CTO's context shows once it reaches 90% of its window, as `(ctx: 96%)` right
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
 Code 2.1.287 or later; with an older one, the squad works without it. It only watches: it never
 answers a prompt for you, runs no command, and makes no network call. After an upgrade, restart the
-three sessions to load the new board. To turn it off, run the `claude plugin disable` line the
+three sessions to load the new board; until the CTO's restarts, its line still shows the release
+before. To turn it off, run the `claude plugin disable` line the
 installer printed, in the main checkout; the same line with `enable` turns it back on.
 
 

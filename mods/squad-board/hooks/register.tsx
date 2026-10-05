@@ -3,11 +3,11 @@ import type { Register } from 'claude-code'
 
 import type { BoardAgent, BoardAgents, BoardItem, BoardRole, BoardState } from '../types'
 
-// The squad board (agent-squad #205, #212, #217, #222). Every session of a squad publishes its own
-// state in this mod's store, under `<project>/<role>`, and only that key: what it is doing, whether
-// the CEO paused it, and the last issue or PR its agent acted on with gh. The CTO's session reads
-// its project's keys and draws them on one line above its prompt, and shows a toast when an agent
-// waits for the CEO. The band shows each session's own state, not GitHub's: nothing is read from
+// The squad board (agent-squad #205, #212, #217, #222, #235, #240). Every session of a squad
+// publishes its own state in this mod's store, under `<project>/<role>`, and only that key: what it
+// is doing, whether the CEO paused it, and the last issue or PR its agent acted on with gh. The
+// CTO's session reads its project's keys and draws them on one line above its prompt, after the
+// wordmark and the board's release, and shows a toast when an agent waits for the CEO. The band shows each session's own state, not GitHub's: nothing is read from
 // GitHub, and no command is run. A session whose name is not a squad role's does nothing. The
 // signals are the ones agent-squad #199 measured.
 
@@ -71,6 +71,8 @@ let since = 0
 let isPaused = false
 let item: BoardItem | null = null
 let repository: string | null = null
+// The CTO's session only: the release its board belongs to, as `v42`, read once when the board starts.
+let release: string | null = null
 // The CTO's session only: the waits it has already shown a toast for.
 let toasted: string[] = []
 
@@ -255,21 +257,39 @@ function widthOf(text: string): number {
   return width + [...rest].length
 }
 
-// The parts that fit in `columns`, in order, and whether the ellipsis that marks a cut is drawn.
-// The first part always shows, and the surface cuts it at the edge if even it is too wide. Each
-// later one shows only whole, and only if it leaves room for the ellipsis, unless it is the last,
-// after which nothing can be cut. The ellipsis is drawn where it fits.
-function fit(parts: Part[], columns: number): { shown: Part[]; hasEllipsis: boolean } {
-  const shown: Part[] = []
+// The line's first part (agent-squad #240): the wordmark, then the board's release when it is known.
+function prefixOf(known: string | null): string {
+  return known ? `agent-squad (${known})` : 'agent-squad'
+}
+
+// How many of the line's parts, given their widths, fit in `columns`, a bar between each two, and
+// whether the ellipsis that marks a cut is drawn. The first part always shows, and the surface cuts
+// it at the edge if even it is too wide. Each later one shows only whole, and only if it leaves room
+// for the ellipsis, unless it is the last, after which nothing can be cut. The ellipsis is drawn
+// where it fits.
+function fit(widths: number[], columns: number): { count: number; hasEllipsis: boolean } {
   let used = 0
-  for (const [index, part] of parts.entries()) {
-    const width = (shown.length === 0 ? 0 : widthOf(SEPARATOR)) + widthOf(textOf(part))
-    const room = index === parts.length - 1 ? 0 : widthOf(ELLIPSIS)
-    if (shown.length > 0 && used + width + room > columns) return { shown, hasEllipsis: used + widthOf(ELLIPSIS) <= columns }
-    shown.push(part)
-    used += width
+  for (const [index, width] of widths.entries()) {
+    const step = (index === 0 ? 0 : widthOf(SEPARATOR)) + width
+    const room = index === widths.length - 1 ? 0 : widthOf(ELLIPSIS)
+    if (index > 0 && used + step + room > columns) return { count: index, hasEllipsis: used + widthOf(ELLIPSIS) <= columns }
+    used += step
   }
-  return { shown, hasEllipsis: false }
+  return { count: widths.length, hasEllipsis: false }
+}
+
+// The release this session's board belongs to, as `v42`: the major version of the plugin.json the
+// mod ships, which check-version.sh keeps equal to the release. It is read with no host command,
+// once, when the board starts, so a session not restarted since an upgrade shows the release of
+// the code it loaded. Null when it cannot be read.
+async function releaseOf($: any): Promise<string | null> {
+  try {
+    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`))
+    const major = /^(\d+)\./.exec(String(manifest?.version ?? ''))
+    return major ? `v${major[1]}` : null
+  } catch {
+    return null
+  }
 }
 
 // Writes this session's key: its state, its pause, its item, its context use, and the time.
@@ -366,7 +386,8 @@ async function readAgents($: any) {
 }
 
 // Starts the session's work once it is known to be a squad's: its repository's address (none
-// outside a git checkout), its heartbeat and, in the CTO's session, what the band shows.
+// outside a git checkout), its heartbeat and, in the CTO's session, the board's release and what
+// the band shows.
 async function activate($: any) {
   if (!me || !isStarted || isActive) return
   isActive = true
@@ -375,6 +396,7 @@ async function activate($: any) {
   await publish($)
   $.clock.every(HEARTBEAT_MS, () => void publish($))
   if (me.role !== 'CTO') return
+  release = await releaseOf($)
   await readAgents($)
   $.clock.every(TICK_MS, () => void readAgents($))
 }
@@ -449,16 +471,19 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The board, in the CTO's session: one line above the prompt between two blue rules, the agents
-  // apart by blue bars, each part its state first, as the CTO's reports on the agents read, then
-  // the role's name in its colour, cut at its end on a narrow terminal, so that the CTO's part stays
-  // whole. A survey that holds the band goes first.
+  // The board, in the CTO's session: one line above the prompt between two blue rules. It opens
+  // with the wordmark and the board's release, `-squad` and the release in blue; then the agents,
+  // each after a blue bar, its state first, as the CTO's reports on the agents read, then the role's
+  // name in its colour. A narrow terminal cuts it at its end, the prefix first and the CTO's part
+  // whole next. A survey that holds the band goes first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
     const seen = await read($, agents)
     const parts = ROLES.map(role => partOf(role, seen.byRole[role], seen.now))
-    const { shown, hasEllipsis } = fit(parts, e.props.bodyColumns)
+    const widths = [widthOf(prefixOf(release)), ...parts.map(part => widthOf(textOf(part)))]
+    const { count, hasEllipsis } = fit(widths, e.props.bodyColumns)
+    const shown = parts.slice(0, count - 1)
     const rule = RULE.repeat(Math.max(1, e.props.bodyColumns))
     return (
       <Box flexDirection="column">
@@ -466,9 +491,14 @@ export const register: Register = on => {
           <Text color={RULE_COLOR} wrap="truncate-end">{rule}</Text>
         </Box>
         <Box key="line" flexDirection="row" overflow="hidden">
-          {shown.map((part, index) => (
+          <Box key="prefix">
+            <Text wrap="truncate-end">agent</Text>
+            <Text color={RULE_COLOR} wrap="truncate-end">-squad</Text>
+            {release !== null && <Text color={RULE_COLOR} wrap="truncate-end">{` (${release})`}</Text>}
+          </Box>
+          {shown.map(part => (
             <Box key={part.key}>
-              {index > 0 && <Text color={RULE_COLOR} wrap="truncate-end">{SEPARATOR}</Text>}
+              <Text color={RULE_COLOR} wrap="truncate-end">{SEPARATOR}</Text>
               <Text wrap="truncate-end">{`${part.mark} ${SIGNATURE[part.key]}`}</Text>
               <Text color={ROLE_COLOR[part.key].plain} wrap="truncate-end">
                 <Text color={ROLE_COLOR[part.key].key}>{part.key}</Text>

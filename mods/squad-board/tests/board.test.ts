@@ -35,6 +35,9 @@ function agent(role: string, project: string, fields: Record<string, unknown> = 
   }
 }
 
+// The line's prefix, as the world's plugin.json (version 42.0.0) makes it.
+const P = 'agent-squad (v42)'
+
 // The items the sessions of DEV and QA last acted on, as their keys hold them.
 const ISSUE = { item: { item: '#205', url: 'https://github.com/o/r/issues/205' } }
 const PR = { item: { item: 'PR #210', url: 'https://github.com/o/r/pull/210' } }
@@ -48,7 +51,7 @@ async function band($: Engine, columns = 120, hasSurvey = false) {
   })
   const line = await ui.find({ key: 'line' })
   const keys = (await ui.findAll({ type: 'Box' })).map(box => box.key)
-    .filter(key => key !== undefined && key !== 'line' && key !== 'rule' && key !== 'rule-below')
+    .filter(key => key !== undefined && !['line', 'rule', 'rule-below', 'prefix'].includes(key))
   const part = async (role: string) => (await ui.find({ key: role }))?.text ?? ''
   const rule = (await ui.find({ key: 'rule' }))?.text ?? ''
   const ruleBelow = (await ui.find({ key: 'rule-below' }))?.text ?? ''
@@ -107,10 +110,10 @@ describe('the line', () => {
     await w.clock.settle()
     const { keys, part, drawn } = await band($)
     expect(keys).toEqual(['CTO', 'DEV', 'QA'])
-    expect(await part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO`)
+    expect(await part('CTO')).toBe(` │ ${MARK.idle} ${SIGN.CTO}CTO`)
     expect(await part('DEV')).toBe(` │ ${MARK.working} ${SIGN.DEV}DEV: https://github.com/o/r/issues/205#205`)
     expect(await part('QA')).toBe(` │ ${MARK.waits} ${SIGN.QA}QA: https://github.com/o/r/pull/210PR #210`)
-    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.waits} ${SIGN.QA}QA: PR #210`)
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.waits} ${SIGN.QA}QA: PR #210`)
   })
 
   test('working is an hourglass for the CTO and DEV, and eyes for QA, who reviews', async ($, on) => {
@@ -122,7 +125,7 @@ describe('the line', () => {
     await $.turn.start({ text: 'go', turnId: 't1' })
     await w.clock.advance(3_000)
     const { part } = await band($)
-    expect(await part('CTO')).toBe(`${MARK.working} ${SIGN.CTO}CTO`)
+    expect(await part('CTO')).toBe(` │ ${MARK.working} ${SIGN.CTO}CTO`)
     expect(await part('DEV')).toBe(` │ ${MARK.working} ${SIGN.DEV}DEV`)
     expect(await part('QA')).toBe(` │ ${MARK.reviewing} ${SIGN.QA}QA`)
   })
@@ -133,7 +136,7 @@ describe('the line', () => {
     await start($, 'CTO:proj')
     await w.clock.settle()
     const below = await band($)
-    expect(await below.part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO`)
+    expect(await below.part('CTO')).toBe(` │ ${MARK.idle} ${SIGN.CTO}CTO`)
     expect(await below.part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV`)
     expect(await below.part('QA')).toBe(` │ ${MARK.idle} ${SIGN.QA}QA`)
     await below.ui.unmount()
@@ -141,7 +144,7 @@ describe('the line', () => {
       w.percent = percent
       await w.clock.advance(60_000)
       const shown = await band($)
-      expect(await shown.part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO (ctx: ${percent}%)`)
+      expect(await shown.part('CTO')).toBe(` │ ${MARK.idle} ${SIGN.CTO}CTO (ctx: ${percent}%)`)
       await shown.ui.unmount()
     }
   })
@@ -155,14 +158,61 @@ describe('the line', () => {
     await says($, '/squad-pause')
     await w.clock.advance(3_000)
     const first = await band($)
-    expect(first.drawn).toBe(`${MARK.paused} ${SIGN.CTO}CTO │ ${MARK.paused} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
+    expect(first.drawn).toBe(`${P} │ ${MARK.paused} ${SIGN.CTO}CTO │ ${MARK.paused} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
     await first.ui.unmount()
     w.store.set('proj/DEV', agent('DEV', 'proj', { paused: true, state: 'permission', tool: 'Bash', at: START + 3_000 }))
     w.store.set('proj/QA', agent('QA', 'proj', { paused: true, at: START + 3_000 }))
     await says($, '/squad-resume')
     await w.clock.advance(3_000)
     const { drawn } = await band($)
-    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.waits} ${SIGN.DEV}DEV │ ${MARK.paused} ${SIGN.QA}QA`)
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.waits} ${SIGN.DEV}DEV │ ${MARK.paused} ${SIGN.QA}QA`)
+  })
+
+  // agent-squad #240: the line opens with the wordmark and the board's own release.
+  test('the line opens with agent-squad, -squad and the release in the blue of the rules, then a bar; no colon', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE) })
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    const { ui, drawn } = await band($)
+    const texts = await ui.findAll({ type: 'Text' })
+    const style = (text: string) => texts.filter(found => found.text === text).map(found => [found.props.color, found.props.dimColor])
+    expect(style('agent')).toEqual([[undefined, undefined]])
+    expect(style('-squad')).toEqual([['#0A84FF', undefined]])
+    expect(style(' (v42)')).toEqual([['#0A84FF', undefined]])
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.unknown} ${SIGN.QA}QA`)
+  })
+
+  test("the release is the major version of the plugin.json the mod ships", async ($, on) => {
+    const w = world(on)
+    w.manifest = '{ "name": "squad-board", "version": "7.3.1" }'
+    await start($, 'CTO:proj')
+    const { drawn } = await band($)
+    expect(drawn.startsWith('agent-squad (v7) │ ')).toBe(true)
+  })
+
+  test('a plugin.json that cannot be read leaves agent-squad alone', async ($, on) => {
+    const w = world(on)
+    w.manifest = null
+    await start($, 'CTO:proj')
+    const { drawn } = await band($)
+    expect(drawn).toBe(`agent-squad │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.unknown} ${SIGN.DEV}DEV │ ${MARK.unknown} ${SIGN.QA}QA`)
+  })
+
+  test('a plugin.json with no version leaves agent-squad alone', async ($, on) => {
+    const w = world(on)
+    w.manifest = '{ "name": "squad-board" }'
+    await start($, 'CTO:proj')
+    const { drawn } = await band($)
+    expect(drawn.startsWith('agent-squad │ ')).toBe(true)
+  })
+
+  test('the release is read once, when the board starts: a newer plugin.json shows only after a restart', async ($, on) => {
+    const w = world(on)
+    await start($, 'CTO:proj')
+    w.manifest = '{ "name": "squad-board", "version": "43.0.0" }'
+    await w.clock.advance(600_000)
+    const { drawn } = await band($)
+    expect(drawn.startsWith(`${P} │ `)).toBe(true)
   })
 
   test("the CTO's context sits right after the role, before the colon and the item", async ($, on) => {
@@ -171,7 +221,7 @@ describe('the line', () => {
     // The CTO's session comes back from its key after a reload, its item with it.
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
     const { part } = await band($)
-    expect(await part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO (ctx: 96%): https://github.com/o/r/pull/231PR #231`)
+    expect(await part('CTO')).toBe(` │ ${MARK.idle} ${SIGN.CTO}CTO (ctx: 96%): https://github.com/o/r/pull/231PR #231`)
   })
 
   test('a key from an older board names an issue `Issue #N`, and the band shows it as #N', async ($, on) => {
@@ -180,7 +230,7 @@ describe('the line', () => {
     await w.clock.settle()
     const { drawn, links } = await band($)
     expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['#217'])
-    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #217 │ ${MARK.unknown} ${SIGN.QA}QA`)
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #217 │ ${MARK.unknown} ${SIGN.QA}QA`)
   })
 
   test('a blue rule of light horizontal lines across the band, above the line and below it', async ($, on) => {
@@ -200,7 +250,7 @@ describe('the line', () => {
     await start($, 'CTO:proj')
     await w.clock.settle()
     const whole = await band($)
-    expect(whole.colorsOf(' │ ')).toEqual(['#0A84FF', '#0A84FF'])
+    expect(whole.colorsOf(' │ ')).toEqual(['#0A84FF', '#0A84FF', '#0A84FF'])
     await whole.ui.unmount()
     const cut = await band($, 32)
     const ellipsis = (await cut.ui.findAll({ type: 'Text' })).find(found => found.text === ' …')
@@ -220,7 +270,7 @@ describe('the line', () => {
     expect(colorsOf('QA')).toEqual(['green', 'green_FOR_SUBAGENTS_ONLY'])
     // The mark, the signature and the item keep the terminal's own colour.
     expect(colorOf(`${MARK.idle} ${SIGN.DEV}`)).toBeUndefined()
-    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
   })
 
   test('each links the item its session last acted on, named an issue or a PR; one with no address, or not https, is no link', async ($, on) => {
@@ -235,7 +285,7 @@ describe('the line', () => {
     // A Link's text is its href, then its label.
     expect(links.map(link => link.props.href)).toEqual(['https://github.com/o/r/issues/205'])
     expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['#205'])
-    expect(drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO: #1 │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.idle} ${SIGN.QA}QA: PR #3`)
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO: #1 │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.idle} ${SIGN.QA}QA: PR #3`)
   })
 
   test("the CTO's own gh call names its item on the band", async ($, on) => {
@@ -279,32 +329,29 @@ describe('the line', () => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', PR) })
     await start($, 'CTO:proj')
     await w.clock.settle()
-    // Each emoji takes two cells: the CTO's part takes 8 (its mark, a space, its signature and its
-    // role); DEV's 3 more for the bar, 8 for itself and 6 for ': #205'; QA's 19; the ellipsis 2. DEV
-    // shows from 27 columns, with room for the ellipsis, and the whole line from 44.
-    const wide = await band($, 27)
-    expect(wide.keys).toEqual(['CTO', 'DEV'])
-    expect(wide.drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 …`)
-    await wide.ui.unmount()
-    const narrow = await band($, 26)
-    expect(narrow.keys).toEqual(['CTO'])
-    expect(narrow.drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO …`)
-    await narrow.ui.unmount()
-    const almost = await band($, 43)
-    expect(almost.keys).toEqual(['CTO', 'DEV'])
-    expect(almost.drawn.endsWith('…')).toBe(true)
-    await almost.ui.unmount()
-    const whole = await band($, 44)
-    expect(whole.keys).toEqual(['CTO', 'DEV', 'QA'])
-    expect(whole.drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.idle} ${SIGN.QA}QA: PR #210`)
-    await whole.ui.unmount()
-    const tiny = await band($, 4)
-    expect(tiny.keys).toEqual(['CTO'])
-    expect(tiny.drawn).toBe(`${MARK.idle} ${SIGN.CTO}CTO`)
+    // Each emoji takes two cells: the prefix takes 17 (agent-squad (v42)); the CTO's part 3 for the
+    // bar and 8 for itself; DEV's 3 and 14 (its mark, signature and role, then ': #205'); QA's 3 and
+    // 16; the ellipsis 2. The CTO shows from 30 columns, DEV from 47, and the whole line from 64.
+    const cases: [number, string[], string][] = [
+      [29, [], `${P} …`],
+      [30, ['CTO'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO …`],
+      [46, ['CTO'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO …`],
+      [47, ['CTO', 'DEV'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 …`],
+      [63, ['CTO', 'DEV'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 …`],
+      [64, ['CTO', 'DEV', 'QA'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.idle} ${SIGN.QA}QA: PR #210`],
+      // Narrower than the prefix: the prefix alone, which the surface cuts at the edge.
+      [4, [], P],
+    ]
+    for (const [columns, keys, drawn] of cases) {
+      const cut = await band($, columns)
+      expect([columns, cut.keys]).toEqual([columns, keys])
+      expect(cut.drawn).toBe(drawn)
+      await cut.ui.unmount()
+    }
   })
 
   // QA's case on PR #213, now with the signatures: the ellipsis must fit too.
-  test('the line drawn never takes more cells than the band has, once the CTO part fits', async ($, on) => {
+  test('the line drawn never takes more cells than the band has, once the prefix fits', async ($, on) => {
     const w = world(on, {
       'proj/DEV': agent('DEV', 'proj', { paused: true, ...ISSUE }),
       'proj/QA': agent('QA', 'proj', { state: 'working', ...PR }),
@@ -315,7 +362,7 @@ describe('the line', () => {
     const over: string[] = []
     for (let columns = 10; columns <= 80; columns++) {
       const { ui, drawn } = await band($, columns)
-      if (cells(drawn) > columns && columns >= cells(`${MARK.idle} ${SIGN.CTO}CTO (ctx: 96%)`)) {
+      if (cells(drawn) > columns && columns >= cells(P)) {
         over.push(`${columns}: ${cells(drawn)} cells, ${drawn}`)
       }
       await ui.unmount()
