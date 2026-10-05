@@ -1,5 +1,17 @@
 # Changelog
 
+## v45 — 2026-10-05
+- **agent-squad is public** (#62).
+  - The README installs it with `curl`, from `raw.githubusercontent.com`.
+  - *Requirements* no longer asks for access to a private repository. `gh` is still needed: the
+    installer downloads the release with it.
+- **A code of conduct** (#253): the Contributor Covenant 2.1, with reports through GitHub's
+  *Report content*.
+- **A security policy** (#255, #257): `SECURITY.md` asks for vulnerabilities to be reported in
+  private, with GitHub's *Report a vulnerability*, and supports the latest release only. A release
+  now carries it, so that OpenSSF Scorecard finds it.
+- No charter rule changes.
+
 ## v44 — 2026-10-05
 - **The band hides an idle agent's item** (#247), as the CEO chose. An idle agent (💤) shows its
   role alone, as `💤 👩🏼‍🔬QA`, with no colon. Its session keeps the item, which shows again as soon as

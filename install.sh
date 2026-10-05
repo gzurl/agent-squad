@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Install or upgrade the squad in a project, in one line (agent-squad #89). While the upstream
-# repository below is private, gh fetches this script; once it is public, curl can:
-#   gh api -H 'Accept: application/vnd.github.raw' repos/<upstream>/contents/install.sh | bash
-#   gh api -H 'Accept: application/vnd.github.raw' repos/<upstream>/contents/install.sh \
-#     | bash -s -- --tag v19 /path/to/project
+# Install or upgrade the squad in a project, in one line (agent-squad #89):
 #   curl -fsSL https://raw.githubusercontent.com/<upstream>/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/<upstream>/main/install.sh \
+#     | bash -s -- --tag vN /path/to/project
+# gh can fetch it too, as /squad-upgrade does:
+#   gh api -H 'Accept: application/vnd.github.raw' repos/<upstream>/contents/install.sh | bash
 # It picks a release tag, the latest or the one given, fetches that tag's own
 # scripts/squad-install.sh and runs it on the project: an install and an upgrade alike run the
 # chosen tag's installer, which writes that tag's shim in one run. Projects run this file from
