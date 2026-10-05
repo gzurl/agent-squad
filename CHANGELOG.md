@@ -1,5 +1,24 @@
 # Changelog
 
+## v40 — 2026-10-05
+- **The board shows each session's own state, not GitHub's** (#222), as the CEO asked after
+  seeing v39's line live.
+  - **The item:** each session's key holds the issue or PR its agent last acted on with `gh`
+    (`gh issue edit|comment|view|close N`, `gh pr view|checkout|review|comment|merge|edit N`,
+    `gh pr create`). It stays a link, built from the session's own remote.
+  - **No GitHub, no host command:** the board no longer reads GitHub, and the mod runs no command.
+    `squad-stalls.sh --current` is gone, and `check-mods.sh` refuses any host command in a mod.
+  - **The marks:** QA working shows 👀, and a paused agent shows ⏸️, set by `/squad-pause` or
+    `-all`, typed or relayed, and cleared by a resume or by autopilot. The CTO and DEV working
+    keep ⏳.
+  - **The look:** the line sits between two blue rules, with blue bars between the agents. Each
+    role's name is in the colour its session takes with `/color`: CTO yellow, DEV blue, QA
+    green. A mod cannot read `/color`, so the colours are fixed. They use Claude Code's
+    undocumented theme keys for `/color`, with the plain colour as a fallback.
+  - **Restart:** as before, a session loads the new board at its next start.
+- **The README and `BOOTSTRAP.md` (row 1)** say which `/color` to give each session.
+- The squad's record is recomputed up to v40.
+
 ## v39 — 2026-10-04
 - **The squad board's final line** (#217), as the CEO asked after seeing v38's band:
   `👷🏼‍♂️CTO 💤 │ 👨🏼‍💻DEV ⏳ Issue #123 │ 👩🏼‍🔬QA 🔍 PR #235`, under a rule of `─`.
