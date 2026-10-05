@@ -1,5 +1,18 @@
 # Changelog
 
+## v44 — 2026-10-05
+- **The band hides an idle agent's item** (#247), as the CEO chose. An idle agent (💤) shows its
+  role alone, as `💤 👩🏼‍🔬QA`, with no colon. Its session keeps the item, which shows again as soon as
+  the agent works.
+  - ⏳, 👀, ✋, ⏸️ and ❓ show the item as before.
+  - The CTO's context still shows from 90%.
+- **The README's last pass before publishing** (#249), with the CEO's comments:
+  - the features are shorter, and the live board says it is a Claude Code mod;
+  - *Install*, which repeated *Quick start*, is gone: how to pick a release or a folder, and
+    `--check`, are now in *What goes where*;
+  - a new *Commands* section, before the FAQ, lists every `/squad-*` command.
+- No charter rule changes. Restart the three sessions to load the new board.
+
 ## v43 — 2026-10-05
 - **The band opens with the board's name and release** (#240), as the CEO asked:
   `agent-squad (v43) │ ⏳ 👷🏼‍♂️CTO: #201 │ 💤 👨🏼‍💻DEV │ 💤 👩🏼‍🔬QA: PR #239`.
