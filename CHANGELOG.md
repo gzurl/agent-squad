@@ -1,5 +1,19 @@
 # Changelog
 
+## v42 — 2026-10-05
+- **The band reads like the CTO's reports** (#235): the state first, then the agent, then the item,
+  as `💤 👷🏼‍♂️CTO: PR #231 │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #231`.
+  - A colon comes only before an item, and the CTO's context, from 90%, sits before it.
+  - An issue reads `#123`, and a pull request `PR #124`; the item stays white.
+- **The README, finished before publishing:**
+  - *Why agent-squad* is the CEO's shorter text (#232);
+  - *This repository* becomes *Contributing* (#233);
+  - the text example of a report goes, since the screenshot shows one (#236);
+  - the squad's record goes, and becomes a *Features* line with no figures, since the PR badge
+    keeps the live count (#236);
+  - *Things to know* goes, and its `git clean` warning moves under *What goes where* (#236).
+- No charter rule changes.
+
 ## v41 — 2026-10-05
 - **The README's final review before publishing** (#200), with the CEO's seven changes. It reads
   for a first-time visitor and goes from 563 lines to 507.
