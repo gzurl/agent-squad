@@ -238,11 +238,14 @@ function markOf(role: BoardRole, agent: BoardAgent): string {
 }
 
 // An agent's part: its mark, the CTO's context once it reaches CONTEXT_FROM, and the item its
-// session last acted on; with no key, or one gone stale, the unknown mark.
+// session last acted on while the agent has something in hand (agent-squad #247): an idle agent
+// shows its role alone, and its key keeps the item for when it works again. With no key, or one
+// gone stale, the unknown mark, with the item of the work whose session went silent.
 function partOf(role: BoardRole, agent: BoardAgent | undefined, now: number): Part {
   if (!agent || now - agent.at > STALE_MS) return { key: role, mark: MARK.unknown, context: '', item: agent?.item ?? null }
   const isFull = role === 'CTO' && agent.context !== null && agent.context >= CONTEXT_FROM
-  return { key: role, mark: markOf(role, agent), context: isFull ? ` (ctx: ${agent.context}%)` : '', item: agent.item ?? null }
+  const mark = markOf(role, agent)
+  return { key: role, mark, context: isFull ? ` (ctx: ${agent.context}%)` : '', item: mark === MARK.idle ? null : agent.item ?? null }
 }
 
 // How many cells a text takes on a terminal.

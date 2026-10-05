@@ -286,14 +286,15 @@ not cost: most of the input is read from the cache, which is billed far below fr
 Above the prompt of the CTO's session, between two blue rules, one line opens with `agent-squad`
 and the release of the board the CTO's session loaded, then shows every agent of the project, in
 the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its signature and
-role, then a colon and a link to the issue (`#123`) or pull request (`PR #124`) its session last
-worked on with `gh`; with no item, no colon. The board shows what each session does, not what
-GitHub says: it reads nothing from GitHub.
+role, then, while the agent has something in hand, a colon and a link to the issue (`#123`) or
+pull request (`PR #124`) its session last worked on with `gh`. An idle agent shows its role alone,
+with no colon; its session keeps the item, which shows again once it works. The board shows what
+each session does, not what GitHub says: it reads nothing from GitHub.
 
 ```
-────────────────────────────────────────────────────────────────────────────────────
-agent-squad (v43) │ 💤 👷🏼‍♂️CTO (ctx: 96%): PR #124 │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124
-────────────────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────
+agent-squad (v44) │ 💤 👷🏼‍♂️CTO (ctx: 96%) │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124
+───────────────────────────────────────────────────────────────────────────
 ```
 
 Each role's name is in the colour *Quick start*, step 2, gives its session: the CTO yellow, DEV blue
@@ -304,7 +305,7 @@ The states:
 - 👀 working, for QA, who reviews;
 - ✋ waiting for you, on a permission or a question, with a notice in the CTO's session;
 - ⏸️ paused, from `/squad-pause` until `/squad-resume` or `/squad-autopilot`;
-- 💤 idle, free for the next request;
+- 💤 idle, free for the next request, with no item;
 - ❓ unknown: no state from that session for three minutes.
 
 The CTO's context shows once it reaches 90% of its window, as `(ctx: 96%)` right after its role.
