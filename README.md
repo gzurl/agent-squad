@@ -322,8 +322,8 @@ what GitHub says: it reads nothing from GitHub.
 ──────────────────────────────────────────────────────────────────
 ```
 
-Each role's name is in the colour of its session's `/color` (*Quick start*, step 2): the CTO yellow,
-DEV blue and QA green.
+Each role's name is in the colour *Quick start*, step 2, gives its session: the CTO yellow, DEV blue
+and QA green.
 
 The states:
 - ⏳ working;
