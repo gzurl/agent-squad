@@ -1,14 +1,15 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { asks, says, START, start, world } from './world'
+import { asks, says, START, start, turnEnd, turnStart, world } from './world'
 
-// The board in the CTO's session (agent-squad #205, #212, #217, #222, #235): one line above the
-// prompt, between two blue rules, with each agent of its own project in the order CTO, DEV, QA: its
-// state, its signature and role, the role in its colour, the CTO's context from 90%, then a colon
-// and a link to the issue or PR its session last acted on, `#123` or `PR #124`, cut at the end
-// where the terminal is narrow; a toast when an agent turns to wait for the CEO, once per wait.
-// Everything comes from the sessions' keys, nothing from GitHub.
+// The board in the CTO's session (agent-squad #205, #212, #217, #222, #235, #240, #247): one line
+// above the prompt, between two blue rules, opening with the wordmark and the board's release, then
+// each agent of its own project in the order CTO, DEV, QA: its state, its signature and role, the
+// role in its colour, the CTO's context from 90%, then, unless the agent is idle, a colon and a link
+// to the issue or PR its session last acted on, `#123` or `PR #124`, cut at the end where the
+// terminal is narrow; a toast when an agent turns to wait for the CEO, once per wait. Everything
+// comes from the sessions' keys, nothing from GitHub.
 
 // The signatures and the state marks, as the band draws them.
 const SIGN = { CTO: '\u{1F477}\u{1F3FC}‍♂️', DEV: '\u{1F468}\u{1F3FC}‍\u{1F4BB}', QA: '\u{1F469}\u{1F3FC}‍\u{1F52C}' }
@@ -170,7 +171,7 @@ describe('the line', () => {
 
   // agent-squad #240: the line opens with the wordmark and the board's own release.
   test('the line opens with agent-squad, -squad and the release in the blue of the rules, then a bar; no colon', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE) })
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', ...ISSUE }) })
     await start($, 'CTO:proj')
     await w.clock.settle()
     const { ui, drawn } = await band($)
@@ -179,7 +180,7 @@ describe('the line', () => {
     expect(style('agent')).toEqual([[undefined, undefined]])
     expect(style('-squad')).toEqual([['#0A84FF', undefined]])
     expect(style(' (v42)')).toEqual([['#0A84FF', undefined]])
-    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.unknown} ${SIGN.QA}QA`)
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.unknown} ${SIGN.QA}QA`)
   })
 
   test("the release is the major version of the plugin.json the mod ships", async ($, on) => {
@@ -216,21 +217,21 @@ describe('the line', () => {
   })
 
   test("the CTO's context sits right after the role, before the colon and the item", async ($, on) => {
-    const w = world(on, { 'proj/CTO': agent('CTO', 'proj', { sessionId: 'sid-1', item: { item: 'PR #231', url: 'https://github.com/o/r/pull/231' } }) })
+    const w = world(on, { 'proj/CTO': agent('CTO', 'proj', { sessionId: 'sid-1', state: 'working', item: { item: 'PR #231', url: 'https://github.com/o/r/pull/231' } }) })
     w.percent = 96
     // The CTO's session comes back from its key after a reload, its item with it.
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
     const { part } = await band($)
-    expect(await part('CTO')).toBe(` │ ${MARK.idle} ${SIGN.CTO}CTO (ctx: 96%): https://github.com/o/r/pull/231PR #231`)
+    expect(await part('CTO')).toBe(` │ ${MARK.working} ${SIGN.CTO}CTO (ctx: 96%): https://github.com/o/r/pull/231PR #231`)
   })
 
   test('a key from an older board names an issue `Issue #N`, and the band shows it as #N', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { item: { item: 'Issue #217', url: 'https://github.com/o/r/issues/217' } }) })
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', item: { item: 'Issue #217', url: 'https://github.com/o/r/issues/217' } }) })
     await start($, 'CTO:proj')
     await w.clock.settle()
     const { drawn, links } = await band($)
     expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['#217'])
-    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #217 │ ${MARK.unknown} ${SIGN.QA}QA`)
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #217 │ ${MARK.unknown} ${SIGN.QA}QA`)
   })
 
   test('a blue rule of light horizontal lines across the band, above the line and below it', async ($, on) => {
@@ -261,7 +262,7 @@ describe('the line', () => {
   // The theme keys are undocumented: a key Claude Code does not know paints nothing, so the plain
   // colour of the text around it shows (agent-squad #222, the live probe in its evidence).
   test("each role's name in the colour its session gets with /color: the CTO yellow, DEV blue, QA green, the plain colour around the theme's", async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', { state: 'working' }) })
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', ...ISSUE }), 'proj/QA': agent('QA', 'proj', { state: 'working' }) })
     await start($, 'CTO:proj')
     await w.clock.settle()
     const { colorOf, colorsOf, drawn } = await band($)
@@ -269,15 +270,15 @@ describe('the line', () => {
     expect(colorsOf('DEV')).toEqual(['blue', 'blue_FOR_SUBAGENTS_ONLY'])
     expect(colorsOf('QA')).toEqual(['green', 'green_FOR_SUBAGENTS_ONLY'])
     // The mark, the signature and the item keep the terminal's own colour.
-    expect(colorOf(`${MARK.idle} ${SIGN.DEV}`)).toBeUndefined()
-    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
+    expect(colorOf(`${MARK.working} ${SIGN.DEV}`)).toBeUndefined()
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
   })
 
   test('each links the item its session last acted on, named an issue or a PR; one with no address, or not https, is no link', async ($, on) => {
     const w = world(on, {
-      'proj/CTO': agent('CTO', 'proj', { sessionId: 'sid-1', item: { item: 'Issue #1', url: 'javascript:alert(1)' } }),
-      'proj/DEV': agent('DEV', 'proj', ISSUE),
-      'proj/QA': agent('QA', 'proj', { item: { item: 'PR #3', url: null } }),
+      'proj/CTO': agent('CTO', 'proj', { sessionId: 'sid-1', state: 'working', item: { item: 'Issue #1', url: 'javascript:alert(1)' } }),
+      'proj/DEV': agent('DEV', 'proj', { state: 'working', ...ISSUE }),
+      'proj/QA': agent('QA', 'proj', { paused: true, item: { item: 'PR #3', url: null } }),
     })
     // The CTO's session comes back from its key after a reload, its item with it.
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
@@ -285,12 +286,13 @@ describe('the line', () => {
     // A Link's text is its href, then its label.
     expect(links.map(link => link.props.href)).toEqual(['https://github.com/o/r/issues/205'])
     expect(links.map(link => link.text.replace(String(link.props.href), ''))).toEqual(['#205'])
-    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO: #1 │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.idle} ${SIGN.QA}QA: PR #3`)
+    expect(drawn).toBe(`${P} │ ${MARK.working} ${SIGN.CTO}CTO: #1 │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.paused} ${SIGN.QA}QA: PR #3`)
   })
 
   test("the CTO's own gh call names its item on the band", async ($, on) => {
     const w = world(on)
     await start($, 'CTO:proj')
+    await turnStart($)
     await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh issue edit 222 --add-label "x"' } as any)
     await w.clock.advance(3_000)
     const { links } = await band($)
@@ -326,7 +328,7 @@ describe('the line', () => {
   })
 
   test('on a narrow terminal the line is cut at its end: the CTO first and whole, then only whole parts', async ($, on) => {
-    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', PR) })
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', ...ISSUE }), 'proj/QA': agent('QA', 'proj', { state: 'working', ...PR }) })
     await start($, 'CTO:proj')
     await w.clock.settle()
     // Each emoji takes two cells: the prefix takes 17 (agent-squad (v42)); the CTO's part 3 for the
@@ -336,9 +338,9 @@ describe('the line', () => {
       [29, [], `${P} …`],
       [30, ['CTO'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO …`],
       [46, ['CTO'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO …`],
-      [47, ['CTO', 'DEV'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 …`],
-      [63, ['CTO', 'DEV'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 …`],
-      [64, ['CTO', 'DEV', 'QA'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.idle} ${SIGN.QA}QA: PR #210`],
+      [47, ['CTO', 'DEV'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 …`],
+      [63, ['CTO', 'DEV'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 …`],
+      [64, ['CTO', 'DEV', 'QA'], `${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA: PR #210`],
       // Narrower than the prefix: the prefix alone, which the surface cuts at the edge.
       [4, [], P],
     ]
@@ -368,6 +370,63 @@ describe('the line', () => {
       await ui.unmount()
     }
     expect(over).toEqual([])
+  })
+})
+
+describe('an idle agent shows its role alone (agent-squad #247)', () => {
+  test('idle hides the item and its colon, the CTO keeps its context, and each key keeps its item', async ($, on) => {
+    const cto = agent('CTO', 'proj', { sessionId: 'sid-1', item: { item: 'PR #243', url: 'https://github.com/o/r/pull/243' } })
+    const w = world(on, { 'proj/CTO': cto, 'proj/DEV': agent('DEV', 'proj', ISSUE), 'proj/QA': agent('QA', 'proj', PR) })
+    w.percent = 96
+    // The CTO's session comes back from its key after a reload, its item with it.
+    await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
+    const { drawn, links } = await band($)
+    expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO (ctx: 96%) │ ${MARK.idle} ${SIGN.DEV}DEV │ ${MARK.idle} ${SIGN.QA}QA`)
+    expect(links).toEqual([])
+    expect(w.store.get('proj/CTO')).toMatchObject({ item: cto.item })
+    expect(w.store.get('proj/DEV')).toMatchObject(ISSUE)
+    expect(w.store.get('proj/QA')).toMatchObject(PR)
+  })
+
+  // Every state but idle shows the item: working, reviewing, waiting for the CEO, paused, and the
+  // unknown mark of a key gone stale.
+  const shown: [string, string, Record<string, unknown>, string][] = [
+    ['working', 'DEV', { state: 'working' }, MARK.working],
+    ['reviewing', 'QA', { state: 'working' }, MARK.reviewing],
+    ['waiting on a permission', 'DEV', { state: 'permission', tool: 'Bash' }, MARK.waits],
+    ['waiting on a question', 'QA', { state: 'question' }, MARK.waits],
+    ['paused', 'DEV', { paused: true }, MARK.paused],
+    ['unknown, its key gone stale', 'QA', { state: 'working', at: START - 240_000 }, MARK.unknown],
+  ]
+  for (const [name, role, fields, mark] of shown) {
+    test(`${name}: the item shows`, async ($, on) => {
+      const w = world(on, { [`proj/${role}`]: agent(role, 'proj', { ...fields, ...ISSUE }) })
+      await start($, 'CTO:proj')
+      await w.clock.settle()
+      const { part } = await band($)
+      expect(await part(role)).toBe(` │ ${mark} ${SIGN[role as keyof typeof SIGN]}${role}: https://github.com/o/r/issues/205#205`)
+    })
+  }
+
+  test('idle, then back to work: the same item shows again, with no new gh call', async ($, on) => {
+    const w = world(on)
+    await start($, 'CTO:proj')
+    await turnStart($)
+    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh pr view 243' } as any)
+    await w.clock.advance(3_000)
+    const working = await band($)
+    expect(await working.part('CTO')).toBe(` │ ${MARK.working} ${SIGN.CTO}CTO: https://github.com/o/r/pull/243PR #243`)
+    await working.ui.unmount()
+    await turnEnd($)
+    await w.clock.advance(3_000)
+    const idle = await band($)
+    expect(await idle.part('CTO')).toBe(` │ ${MARK.idle} ${SIGN.CTO}CTO`)
+    expect(w.store.get('proj/CTO')).toMatchObject({ item: { item: 'PR #243', url: 'https://github.com/o/r/pull/243' } })
+    await idle.ui.unmount()
+    await turnStart($)
+    await w.clock.advance(3_000)
+    const again = await band($)
+    expect(await again.part('CTO')).toBe(` │ ${MARK.working} ${SIGN.CTO}CTO: https://github.com/o/r/pull/243PR #243`)
   })
 })
 
