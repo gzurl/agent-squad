@@ -472,10 +472,10 @@ export const register: Register = on => {
   })
 
   // The board, in the CTO's session: one line above the prompt between two blue rules. It opens
-  // with the wordmark, `-squad` in blue, and the board's release, dim; then the agents, each after a
-  // blue bar, its state first, as the CTO's reports on the agents read, then the role's name in its
-  // colour. A narrow terminal cuts it at its end, the prefix first and the CTO's part whole next. A
-  // survey that holds the band goes first.
+  // with the wordmark and the board's release, `-squad` and the release in blue; then the agents,
+  // each after a blue bar, its state first, as the CTO's reports on the agents read, then the role's
+  // name in its colour. A narrow terminal cuts it at its end, the prefix first and the CTO's part
+  // whole next. A survey that holds the band goes first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
@@ -494,7 +494,7 @@ export const register: Register = on => {
           <Box key="prefix">
             <Text wrap="truncate-end">agent</Text>
             <Text color={RULE_COLOR} wrap="truncate-end">-squad</Text>
-            {release !== null && <Text dimColor wrap="truncate-end">{` (${release})`}</Text>}
+            {release !== null && <Text color={RULE_COLOR} wrap="truncate-end">{` (${release})`}</Text>}
           </Box>
           {shown.map(part => (
             <Box key={part.key}>

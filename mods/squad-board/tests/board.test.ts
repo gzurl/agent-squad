@@ -169,7 +169,7 @@ describe('the line', () => {
   })
 
   // agent-squad #240: the line opens with the wordmark and the board's own release.
-  test('the line opens with agent-squad, -squad in the blue of the rules, then the release dim, and a bar; no colon', async ($, on) => {
+  test('the line opens with agent-squad, -squad and the release in the blue of the rules, then a bar; no colon', async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE) })
     await start($, 'CTO:proj')
     await w.clock.settle()
@@ -178,7 +178,7 @@ describe('the line', () => {
     const style = (text: string) => texts.filter(found => found.text === text).map(found => [found.props.color, found.props.dimColor])
     expect(style('agent')).toEqual([[undefined, undefined]])
     expect(style('-squad')).toEqual([['#0A84FF', undefined]])
-    expect(style(' (v42)')).toEqual([[undefined, true]])
+    expect(style(' (v42)')).toEqual([['#0A84FF', undefined]])
     expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.idle} ${SIGN.DEV}DEV: #205 │ ${MARK.unknown} ${SIGN.QA}QA`)
   })
 
