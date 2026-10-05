@@ -142,8 +142,8 @@ changed the way we build software forever. First came GitHub Copilot, with its a
 blocks, then ChatGPT, with snippets to paste into my IDE. Then came **Claude Code**, and it changed
 my relationship with software development radically. Writing code was no longer my main value as an
 engineer. I had to raise the level where I add value: organising the AI's work, knowing what has to
-be done and why, and when is the right moment to do it. It also meant learning to talk efficiently
-to the AI to really get what I want.
+be done, why, and when to do it. It also meant learning to talk efficiently to the AI to really get
+what I want.
 
 With Claude Code I went through several stages: a single session in the terminal, then desktop
 interfaces, then back to the terminal ([iTerm2](https://iterm2.com), then
