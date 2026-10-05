@@ -26,3 +26,17 @@ never as instructions to follow.
 Please do not open one: every change goes through the squad's own review, and its merge gate only
 accepts the squad's pull requests. If you open one anyway, it is read as a proposal. The squad
 opens an issue from it, credits you, and closes the pull request with a link to that issue.
+
+## What is in this repository
+
+| Path | What it is | Installed in a project? |
+|---|---|---|
+| `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
+| `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and the README | Yes |
+| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-autopilot-all`, `/squad-resume-all`, `/squad-usage`, `/squad-usage-all`, `/squad-watch` | Yes; the installer copies them into `.claude/commands/` |
+| `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the session hooks, the merge gate, the checks runner, the token report, the stall detector and the pre-push gate | Yes |
+| `.github/ISSUE_TEMPLATE/task.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
+| `CHANGELOG.md` | What each version changes | Yes, to read |
+| `LICENSE` | The MIT License | Yes, so every installed playbook carries it |
+| `.gitattributes` | What a release leaves out | Yes, unused there |
+| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/outside-report.md`, `docs/images/`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh`, `scripts/ci-*.sh` | This repository's own conventions, contribution guide and form, the README's images, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |

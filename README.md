@@ -29,8 +29,8 @@ each goal is. **agent-squad** needs both.
 - 🌳 **Each agent works in its own git worktree,** so nobody steps on anyone's files.
 - 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main`, no merge
   without QA's approval.
-- 🧭 **A live line above the CTO's prompt:** each agent's state, how full its context is, and the
-  issue or PR it works on, with a notice when an agent waits for you.
+- 🧭 **A live line above the CTO's prompt:** each agent's state and the issue or PR it works on,
+  with a notice when an agent waits for you.
 - ☕ **Step away and come back:** pause the squad, or put it on autopilot, which checks every half
   hour that no work has stalled, and get a summary when you return. Sessions keep the thread across
   compactions and restarts.
@@ -64,12 +64,12 @@ The CTO reports in your language, one line per agent. After `/squad-resume`, for
 
 ```
 👷🏼‍♂️[CTO]: ✅ The squad is back:
-💤 CTO: free. While you were away it merged PR #152 and released v33.
-⏳ DEV: on #119 (token usage per agent), about 1 h. While you were away it merged PR #151.
-💤 QA: free. While you were away it reviewed PRs #151 and #152 and verified v33.
+💤 CTO: free. While you were away it merged PR #52.
+⏳ DEV: on #48 (export to CSV), about 1 h. While you were away it merged PR #51.
+💤 QA: free. While you were away it reviewed PRs #51 and #52.
 
-Waiting for you: #119, choose how token usage is reported (A, B or C).
-Plan: now v34 (DEV finishes #119, then the version PR); next, publishing.
+Waiting for you: #48, choose the export's columns (A, B or C).
+Plan: now DEV finishes #48 and QA reviews it; next, the import screen.
 ```
 
 
@@ -286,10 +286,8 @@ you see at a glance who is still busy.
 `/squad-resume-all`, typed in any squad's CTO session, do the same for every squad, and you get one
 answer, grouped by squad, that names any squad that did not answer.
 
-A session that is waiting for you in its own terminal, on a question or a permission prompt,
-cannot act on a command until you answer it there: the CTO tells you which one, and passes the
-command to the rest of its squad. A command that reaches an agent late is checked with whoever sent
-it before anyone acts on it.
+A session waiting for you in its own terminal, on a question or a permission, cannot act on a
+command until you answer it there, so the CTO tells you which one.
 
 **Work that stalls.** An agent waits only for a message, and a message can go astray.
 `/squad-watch`, in the CTO's session, finds work whose next step has waited half an hour on an
@@ -314,10 +312,9 @@ not cost: most of the input is read from the cache, which is billed far below fr
 ### The squad board
 
 Above the prompt of the CTO's session, between two blue rules, one line shows every agent of the
-project, apart by blue bars, in the order CTO, DEV, QA: its signature and role, its state, and a
-link to the issue or pull request its session last worked on, the last one its agent acted on with
-`gh` (viewing, commenting, editing, reviewing, merging, or opening a pull request). The board shows
-what each session does, not what GitHub says: it reads nothing from GitHub.
+project, in the order CTO, DEV, QA: its signature and role, its state, and a link to the issue or
+pull request its session last worked on with `gh`. The board shows what each session does, not
+what GitHub says: it reads nothing from GitHub.
 
 ```
 ──────────────────────────────────────────────────────────────────
@@ -325,42 +322,24 @@ what each session does, not what GitHub says: it reads nothing from GitHub.
 ──────────────────────────────────────────────────────────────────
 ```
 
-Each role's name is in the colour its session takes with `/color` (*Quick start*, step 2): the CTO
-yellow, DEV blue and QA green, in the shades your Claude Code theme gives them. A mod cannot read a
-session's `/color`, so the board keeps these three whatever colour you give the sessions.
+Each role's name is in the colour of its session's `/color` (*Quick start*, step 2): the CTO yellow,
+DEV blue and QA green.
 
 The states:
 - ⏳ working;
 - 👀 working, for QA, who reviews;
-- ✋ waiting for you, on a permission or a question; when DEV or QA starts to wait, a notice pops
-  up in the CTO's session, once per wait;
-- ⏸️ paused: the session received `/squad-pause` or `/squad-pause-all`, typed or relayed, and no
-  `/squad-resume` or `/squad-autopilot` since, nor their `-all`; a turn while paused shows as
-  working, and the pause shows again after it;
+- ✋ waiting for you, on a permission or a question, with a notice in the CTO's session;
+- ⏸️ paused, from `/squad-pause` until `/squad-resume` or `/squad-autopilot`;
 - 💤 idle, free for the next request;
-- ❓ unknown: the session has written no state for three minutes, or has none.
+- ❓ unknown: no state from that session for three minutes.
 
-The CTO's context shows only once it reaches 90% of its window; the others' never shows. A command
-that names no issue or pull request leaves the item as it was, and the item goes when its session
-ends. On a narrow terminal the line is cut at its end, so the CTO's part always shows, whole unless
-the terminal is narrower than it.
+The CTO's context shows once it reaches 90% of its window, as `(ctx: 96%)`.
 
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
 Code 2.1.287 or later; with an older one, the squad works without it. It only watches: it never
-answers a prompt for you, runs no command, and makes no network call. A session loads a
-new release of the board when it starts, so after an upgrade, restart the three sessions when it
-suits you; until then, each keeps the board it loaded. To turn the board off, run the
-`claude plugin disable` line the installer printed, in the main checkout; it stays off after
-upgrades, and the same line with `enable` in place of `disable` turns it back on.
-
-The squad's marketplace in `.claude/settings.local.json` is named `agent-squad-<project>-<hash>`,
-and keeps that name from one release to the next, so the board keeps its store. The squad's
-marketplaces are those whose name starts with `agent-squad-` and that point at a `.agent-squad`
-folder: an install replaces the others of them, from a release before v39 or a checkout since
-moved, and leaves every other marketplace alone. Releases before v39 put the version in the name,
-so each left a store file of its own in `~/.claude/plugins/store/`, named
-`squad-board_agent-squad-<project>-<hash>-v<N>-<…>.json`: a few hundred bytes each, which you can
-delete once every session has restarted on v39 or later.
+answers a prompt for you, runs no command, and makes no network call. After an upgrade, restart the
+three sessions to load the new board. To turn it off, run the `claude plugin disable` line the
+installer printed, in the main checkout; the same line with `enable` turns it back on.
 
 
 ## 📋 Requirements
@@ -396,14 +375,9 @@ gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/
 To upgrade later, see [Upgrade](#-upgrade).
 
 The installer can run as often as you like, and it never overwrites or deletes a file your project
-owns. It puts the release in `.agent-squad/playbook/`, adds its hooks to
-`.claude/settings.local.json`, writes the squad's commands (`/squad-save-state`, `/squad-pause`,
-`/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-usage`, `/squad-watch`, and the
-four `-all` ones) into `.claude/commands/`, enables the [squad board](#the-squad-board) for this
-project in the same settings file, adds three lines to `.gitignore`, installs a small pre-push
-hook, creates the DEV and QA worktrees, and adds GitHub issue and pull request templates if the
-project has none. It prints every step, and ends with a *By hand* list of what it leaves to the
-CTO, who takes care of it while following `BOOTSTRAP.md`:
+owns. It prints every step, and [What goes where](#️-what-goes-where) shows everything it
+writes. It ends with a *By hand* list of what it leaves to the CTO, who takes care of it while
+following `BOOTSTRAP.md`:
 
 - the *Squad* section of `AGENTS.md`, which loads the charter into every session (the installer
   prints it);
@@ -473,32 +447,11 @@ says who cleans up what, and when.
 
 - **Nothing goes straight to `main`.** The pre-push gate refuses it. When you approve an exception
   on an issue, the agent pushes it with `SQUAD_MAIN_EXCEPTION=#<issue> git push …`.
-- **Some tools walk into `.agent-squad/worktrees/`** from the main checkout, where the other agents'
-  copies of the project live, and pick up their files: [Jest](https://jestjs.io) and
-  [Metro](https://metrobundler.dev) do by default, and so do `grep -r` and some IDE indexers and
-  bundlers. Exclude `.agent-squad/` in each tool's configuration with a pattern anchored at the
-  project root: the worktrees live inside `.agent-squad/`, so an unanchored pattern also excludes a
-  worktree's own files when the tool runs there. `templates/AGENTS.md` has the settings for common
-  tools, and the CTO checks them while setting up. Leave `.agent-squad` out of
-  [Watchman](https://facebook.github.io/watchman/)'s `ignore_dirs`: a worktree's watch reuses the
-  main checkout's. TypeScript, pytest and mypy skip hidden folders by default, and `rg` and ruff
-  respect `.gitignore`.
-- **`git worktree remove` refuses a worktree with modified or untracked files**, though ignored
-  files do not stop it. `git -C <worktree> status` shows what is in the way: commit it, or discard
-  it once you are sure it is not needed, and only then use `--force`.
 - **Never run `git clean -d` with `-x` or `-X` in the main checkout.** It deletes the playbook, the
   snapshots, the evidence and `.claude/settings.local.json`, and with `-ff` the worktrees too.
-- **A project that uses [Git LFS](https://git-lfs.com) runs LFS's pre-push hook from
-  `.git/hooks/pre-push.local`.** The squad's shim owns `.git/hooks/pre-push`, so `git lfs install`
-  cannot add LFS's hook there, and a push would send pointers without their files. Put `git lfs
-  pre-push "$@"` in an executable `.git/hooks/pre-push.local`, which the shim runs first. A project
-  that had LFS's hook before the install already has it there. Files pushed before the hook was in
-  place reached the remote as pointers: `git lfs push --all origin` uploads what the remote lacks.
-  `--check` shows an item for it when a `.gitattributes` of the project has `filter=lfs`.
-- **`gh issue list --label` silently returns nothing** for a label whose emoji is made of several
-  characters, as the owner labels and `needs-ceo` are. Filter on GitHub's web page, or with
-  `gh issue list --state open --limit 1000 --json number,title,labels` and `jq`; without
-  `--limit`, the list stops at 30 issues.
+- **Setting up a project, the CTO also takes care of** the tools that walk into the agents'
+  worktrees, Git LFS, and a few traps of `git` and `gh`. [BOOTSTRAP.md](BOOTSTRAP.md), row 9b, and
+  [SQUAD.md](SQUAD.md), §2.4 and §3, have the details.
 
 
 ## ❓ FAQ
@@ -543,17 +496,8 @@ issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
 To report a problem or propose an idea, open an issue: [CONTRIBUTING.md](CONTRIBUTING.md) says how.
 The squad turns accepted issues into its own pull requests.
 
-| Path | What it is | Installed in a project? |
-|---|---|---|
-| `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
-| `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and this guide | Yes |
-| `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-autopilot-all`, `/squad-resume-all`, `/squad-usage`, `/squad-usage-all`, `/squad-watch` | Yes; the installer copies them into `.claude/commands/` |
-| `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the session hooks, the merge gate, the checks runner, the token report, the stall detector and the pre-push gate | Yes |
-| `.github/ISSUE_TEMPLATE/task.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
-| `CHANGELOG.md` | What each version changes | Yes, to read |
-| `LICENSE` | The MIT License | Yes, so every installed playbook carries it |
-| `.gitattributes` | What a release leaves out | Yes, unused there |
-| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/outside-report.md`, `docs/images/`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh`, `scripts/ci-*.sh` | This repository's own conventions, contribution guide and form, the README's images, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
+[CONTRIBUTING.md](CONTRIBUTING.md) also lists what each file of this repository is, and which
+ones a release ships.
 
 
 ## 📄 License
