@@ -130,7 +130,7 @@ details).
 - [🗂️ What goes where](#️-what-goes-where)
 - [⚠️ Things to know](#️-things-to-know)
 - [❓ FAQ](#-faq)
-- [📦 This repository](#-this-repository)
+- [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 
 
@@ -480,7 +480,7 @@ you what it needs to know.
 issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 
-## 📦 This repository
+## 🤝 Contributing
 
 To report a problem or propose an idea, open an issue: [CONTRIBUTING.md](CONTRIBUTING.md) says how.
 The squad turns accepted issues into its own pull requests.
