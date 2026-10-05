@@ -15,7 +15,7 @@ decision is yours.
 
 The agents run on **Claude Code** and coordinate on **[GitHub](https://github.com)**: issues hold
 the work to do, pull requests carry each change and its review, and milestones show how far along
-each goal is. **agent-squad** needs both.
+each goal is.
 
 
 <p align="center"><img src="docs/images/team.jpg" alt="The CEO behind the squad's three agents: the CTO, the developer and the QA" width="800"></p>
@@ -29,22 +29,20 @@ each goal is. **agent-squad** needs both.
 - 🌳 **Each agent works in its own git worktree,** so nobody steps on anyone's files.
 - 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main`, no merge
   without QA's approval.
-- 🧭 **A live line above the CTO's prompt:** each agent's state and the issue or PR it works on,
-  with a notice when an agent waits for you.
-- ☕ **Step away and come back:** pause the squad, or put it on autopilot, which checks every half
-  hour that no work has stalled, and get a summary when you return. Sessions keep the thread across
-  compactions and restarts.
+- 🧭 **A live board, a Claude Code mod,** above the CTO's prompt: what each agent is doing, and
+  who waits for you.
+- ☕ **Step away and come back:** pause the squad or leave it on autopilot, and get a summary when
+  you return. Sessions keep the thread across compactions and restarts.
 - 📈 **Grows with you:** several projects at once, token usage per agent, and upgrades in one
   command.
-- 🏗️ **Built by its own squad:** every change to **agent-squad** is planned, written and reviewed by
-  its own squad of agents.
+- 🏗️ **Built by its own squad,** which plans, writes and reviews every change.
 
 
 ### 👥 The team
 
 <img src="docs/images/logo.png" alt="agent-squad: three robot agents, a CTO, a developer and a QA" width="340" align="right">
 
-- 👨🏻‍💼 **CEO, you.** You decide what to build and why, and you only need to talk to the CTO. The
+- 👨🏻‍💼 **CEO, you, the human.** You decide what to build and why, and you only need to talk to the CTO. The
   agents write to you in your language, and to each other in English.
 - 👷🏼‍♂️ **CTO.** Your partner on the product. It talks through with you what to build, helps you
   shape the vision and choose the stack, and plans the work as GitHub issues. It settles any
@@ -109,9 +107,9 @@ details).
   - [How many tokens the agents use](#how-many-tokens-the-agents-use)
   - [The squad board](#the-squad-board)
 - [📋 Requirements](#-requirements)
-- [🛠️ Install](#️-install)
 - [🔄 Upgrade](#-upgrade)
 - [🗂️ What goes where](#️-what-goes-where)
+- [⌨️ Commands](#️-commands)
 - [❓ FAQ](#-faq)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
@@ -332,50 +330,6 @@ Before it touches anything, the installer checks that `gh`, git, jq and tar are 
 what; it does not install anything for you.
 
 
-## 🛠️ Install
-
-In your project's main checkout (the folder you cloned, not a worktree), run:
-
-```bash
-gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh | bash
-```
-
-That installs the latest release. To pick a version or another folder, add them after
-`bash -s --`:
-
-```bash
-gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh \
-  | bash -s -- --tag v31 /path/to/project
-```
-
-To upgrade later, see [Upgrade](#-upgrade).
-
-The installer can run as often as you like, and it never overwrites or deletes a file your project
-owns. It prints every step, and [What goes where](#️-what-goes-where) shows everything it
-writes. It ends with a *By hand* list of what it leaves to the CTO, who takes care of it while
-following `BOOTSTRAP.md`:
-
-- the *Squad* section of `AGENTS.md`, which loads the charter into every session (the installer
-  prints it);
-- `CLAUDE.md` as a symlink to `AGENTS.md`;
-- `.agent-squad-checks`, the commands your CI runs, one per line: until it lists one, the pre-push
-  gate refuses every push;
-- the files the installer changed that belong in git, which reach `main` through a pull request
-  like everything else.
-
-To check the installation at any time, from the same folder:
-
-```bash
-.agent-squad/playbook/scripts/squad-install.sh --check .
-```
-
-It changes nothing. It prints one line per item, `check: ok` or `check: FAILED` with the reason,
-exits with 1 if any item failed, and proves that the pre-push gate really refuses a failing check.
-Right after installing, the items on the *By hand* list fail until the CTO completes them. In a
-brand-new repository with no commits, so do the worktrees and the default branch: the installer
-sets both when it runs again after the first commit.
-
-
 ## 🔄 Upgrade
 
 When a new release is out, type `/squad-upgrade` in the CTO's session. The CTO tells you which
@@ -387,6 +341,15 @@ keeps it off if you turned it off. The release notes are in [CHANGELOG.md](CHANG
 
 
 ## 🗂️ What goes where
+
+The installer of *Quick start* can run as often as you like: it prints every step, and never
+overwrites or deletes a file your project owns. To pick a release, or another folder, add them after
+`bash -s --`:
+
+```bash
+gh api -H 'Accept: application/vnd.github.raw' repos/gzurl/agent-squad/contents/install.sh \
+  | bash -s -- --tag v44 /path/to/project
+```
 
 Everything the squad installs or generates lives in `.agent-squad/`, which git ignores. Outside it,
 the installer touches only the files listed before it:
@@ -418,9 +381,30 @@ It removes from `.claude/commands/` any `squad-*.md` the new release no longer h
 command is renamed, unless your project tracks that file. It leaves the rest alone. `SQUAD.md` §2.4
 says who cleans up what, and when.
 
+To check the installation at any time, run `.agent-squad/playbook/scripts/squad-install.sh --check .`
+in the main checkout. It changes nothing: it prints `check: ok` or `check: FAILED` with the reason
+for each item, and proves that the pre-push gate refuses a failing check. Until the CTO has
+finished `BOOTSTRAP.md`, the items it leaves to the CTO fail.
+
 **Never run `git clean -d` with `-x` or `-X` in the main checkout.** It deletes what git ignores
 there: the playbook, the snapshots, the evidence and `.claude/settings.local.json`, and with `-ff`
 the worktrees too.
+
+
+## ⌨️ Commands
+
+You type them in a Claude Code session of the squad. Each `-all` variant does the same for every
+squad on the machine.
+
+| Command | Type it in | What it does |
+|---|---|---|
+| ⏸️&nbsp;`/squad-pause`<br>`/squad-pause-all` | the CTO's session | Stops the squad at a safe point, each agent's state saved on GitHub ([When you step away](#when-you-step-away)). |
+| ⏩&nbsp;`/squad-autopilot`<br>`/squad-autopilot-all` | the CTO's session | You leave, the machine stays on: the squad carries on and leaves your decisions on GitHub. |
+| ▶️&nbsp;`/squad-resume`<br>`/squad-resume-all` | the CTO's session | You are back: what was done, what waits for you, and the plan ahead. |
+| 🔎&nbsp;`/squad-watch` | the CTO's session | Looks for stalled work and pings whoever owns its next step; autopilot runs it every half hour. |
+| 💾&nbsp;`/squad-save-state` | any session | Its agent writes its state on GitHub, before you type `/compact` ([When a session's context fills up](#when-a-sessions-context-fills-up)). |
+| 📊&nbsp;`/squad-usage`<br>`/squad-usage-all` | any session | The tokens each agent has used ([How many tokens the agents use](#how-many-tokens-the-agents-use)). |
+| 🔄&nbsp;`/squad-upgrade` | the CTO's session | What a new release changes; installs it when you say yes ([Upgrade](#-upgrade)). |
 
 
 ## ❓ FAQ
