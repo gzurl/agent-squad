@@ -125,32 +125,64 @@ function itemAt(text: string): BoardItem | null {
   return { item: `${found[3] === 'pull' ? 'PR' : 'Issue'} #${found[4]}`, url: `https://github.com/${found[1]}/${found[2]}/${found[3]}/${found[4]}` }
 }
 
-// A command without the bodies of its heredocs: each line after a `<<WORD` or `<<-WORD`, the word
-// quoted or not, up to the line that holds the word alone. A here-string (`<<<`) has no body.
-function withoutHeredocs(command: string): string {
-  const kept: string[] = []
+// A command as the parser reads it (agent-squad #225), scanned as the shell does: each quoted string
+// becomes '', and each heredoc's body is left out, from the line after its `<<WORD` or `<<-WORD`,
+// the word quoted or not, up to the line that holds the word alone. A `<<` inside quotes opens no
+// heredoc, nor does a here-string (`<<<`). A single quote ends at the next one; a double quote
+// ends at the next one that no backslash escapes, and may span lines.
+function bareOf(command: string): string {
+  let bare = ''
+  let quote: string | null = null
   const ends: string[] = []
   for (const line of command.split('\n')) {
-    if (ends.length > 0) {
+    // A heredoc's body: skipped whole, up to the line that ends it.
+    if (quote === null && ends.length > 0) {
       if (line.trim() === ends[0]) ends.shift()
       continue
     }
-    kept.push(line)
-    for (const found of line.matchAll(/(?<!<)<<(?!<)-?\s*(['"]?)([A-Za-z_]\w*)\1/g)) ends.push(found[2])
+    let i = 0
+    while (i < line.length) {
+      const c = line[i]
+      if (quote !== null) {
+        if (quote === '"' && c === '\\') i += 2
+        else {
+          if (c === quote) quote = null
+          i += 1
+        }
+        continue
+      }
+      const heredoc = line[i - 1] === '<' ? null : /^<<-?\s*(['"]?)([A-Za-z_]\w*)\1/.exec(line.slice(i))
+      if (heredoc) {
+        ends.push(heredoc[2])
+        bare += '<<'
+        i += heredoc[0].length
+      } else if (c === '\\') {
+        bare += line.slice(i, i + 2)
+        i += 2
+      } else if (c === '"' || c === "'") {
+        quote = c
+        bare += "''"
+        i += 1
+      } else {
+        bare += c
+        i += 1
+      }
+    }
+    if (quote === null) bare += '\n'
   }
-  return kept.join('\n')
+  return bare
 }
 
 // The issue or PR a gh command acts on (agent-squad #222): the first `gh issue` or `gh pr` the
 // command runs, at its start or after a separator, with its heredoc bodies and its quoted text left
-// out, so that a body or a title is never read as a command or as its target.
+// out (bareOf), so that a body or a title is never read as a command or as its target.
 // - issue edit, comment, view or close, and pr view, checkout, review, comment, merge or edit:
 //   their first number or GitHub address, flags before it or not; `--repo owner/name` names
 //   another repository than the session's;
 // - pr create: the address of the new PR, which gh prints.
 // Null for any other command, and for one that names no number.
 function itemOf(command: string, output: string, home: string | null): BoardItem | null {
-  const bare = withoutHeredocs(command).replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, "''")
+  const bare = bareOf(command)
   const call = /(?:^|[\n;&|(]\s*)(?:rtk\s+)?gh\s+(issue|pr)\s+([a-z]+)\b([^\n;&|)]*)/.exec(bare)
   if (!call) return null
   const [, noun, verb, rest] = call

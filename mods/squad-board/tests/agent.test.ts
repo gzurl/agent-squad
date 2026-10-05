@@ -203,8 +203,10 @@ describe('the item: the issue or PR its session last acted on with gh (agent-squ
       'EOF',
       'gh pr view 216 --json headRefOid',
     ], pr(216)],
+    // QA-H3 wrote the apostrophe as \' inside single quotes, which bash refuses (`bash -n` exits 2), so
+    // that call would fail and name no item; this is the form bash runs (agent-squad #225).
     ['a closed single-quoted body, then gh pr comment (QA-H3)', [
-      "printf '%s\\n' '**QA:** waiting since 21:15, the CTO\\'s call' > wait.md && gh pr comment 221 --body-file wait.md",
+      "printf '%s\\n' '**QA:** waiting since 21:15, the CTO'\\''s call' > wait.md && gh pr comment 221 --body-file wait.md",
     ], pr(221)],
     ['an unquoted heredoc word, and a gh call in its body', [
       'cat > a.md <<EOF', 'gh issue view 1', 'EOF', 'gh issue comment 230 --body-file a.md',
@@ -218,6 +220,26 @@ describe('the item: the issue or PR its session last acted on with gh (agent-squ
     ['a here-string has no body: the next line is a command', [
       'tr a-z A-Z <<<hello', 'gh pr view 233',
     ], pr(233)],
+    // agent-squad #225: a << inside quotes opens no heredoc.
+    ['a << inside double quotes, then a gh call on the next line', [
+      'echo "write bodies with << EOF"', 'gh pr view 234',
+    ], pr(234)],
+    ['a << inside single quotes, then a gh call on the next line', [
+      "echo 'a <<EOF b'", 'gh pr view 235',
+    ], pr(235)],
+    ['a real heredoc after a quoted << on the same line', [
+      'echo "x << y" && cat > a.md <<\'EOF\'', 'gh pr view 1', 'EOF', 'gh pr view 236',
+    ], pr(236)],
+    ['a double-quoted body over several lines, with a gh line inside it', [
+      'git commit -q -m "fix: x', '', 'gh pr view 3 is not a call"', 'gh pr view 237',
+    ], pr(237)],
+    ['an escaped double quote inside double quotes', [
+      'echo "say \\"hi\\" << now"', 'gh pr view 238',
+    ], pr(238)],
+    // As bash reads it: a heredoc's body starts once the quote its line opened is closed.
+    ['a heredoc whose line goes on in a quote over two lines', [
+      'cat <<EOF; echo "a', 'b"', 'gh pr view 4', 'EOF', 'gh pr view 239',
+    ], pr(239)],
     ['gh pr create from a heredoc body: the PR gh prints', [
       'gh pr create --title "x" --body-file - <<\'EOF\'', 'Closes #5; gh pr view 6', 'EOF',
     ], pr(40)],
