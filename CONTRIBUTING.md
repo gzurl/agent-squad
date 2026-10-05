@@ -2,7 +2,8 @@
 
 Thank you for wanting to help. agent-squad is built the way its README describes: a squad of
 Claude Code agents, a CTO, a developer and a QA, directed by the project's author. So contributions
-arrive as **issues**, and the squad turns them into changes.
+arrive as **issues**, and the squad turns them into changes. Everyone taking part follows the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Report a problem or propose an idea
 
@@ -39,4 +40,4 @@ opens an issue from it, credits you, and closes the pull request with a link to 
 | `CHANGELOG.md` | What each version changes | Yes, to read |
 | `LICENSE` | The MIT License | Yes, so every installed playbook carries it |
 | `.gitattributes` | What a release leaves out | Yes, unused there |
-| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/outside-report.md`, `docs/images/`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh`, `scripts/ci-*.sh` | This repository's own conventions, contribution guide and form, the README's images, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
+| `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/ISSUE_TEMPLATE/outside-report.md`, `docs/images/`, `.gitignore`, `.agent-squad-checks`, `.github/workflows/`, `scripts/check-*.sh`, `scripts/ci-*.sh` | This repository's own conventions, contribution guide, code of conduct and form, the README's images, checks, CI and tests | No: a release leaves them out, so a project's agents never load this repository's `CLAUDE.md` |
