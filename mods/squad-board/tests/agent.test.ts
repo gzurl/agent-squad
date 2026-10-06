@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { asks, runs, says, START, start, turnEnd, turnStart, world } from './world'
+import { asks, runs, says, START, start, stops, turnEnd, turnStart, world } from './world'
 
 // What every squad session publishes (agent-squad #205, #222): its own key, `<project>/<role>`,
 // with its state, its pause, the issue or PR it last acted on with gh, its context use, its session
@@ -30,7 +30,7 @@ describe("a squad session's key", () => {
     expect([...w.store.keys()]).toEqual(['proj/DEV'])
     expect(w.store.get('proj/DEV')).toEqual({
       project: 'proj', role: 'DEV', name: 'DEV:proj', sessionId: 'sid-1',
-      state: 'idle', tool: null, since: START, at: START, context: 42, paused: false, item: null,
+      state: 'idle', tool: null, since: START, at: START, context: 42, paused: false, background: false, item: null,
     })
   })
 
@@ -71,7 +71,7 @@ describe("a squad session's key", () => {
     const w = world(on, { 'proj/DEV': kept, 'other/DEV': { ...kept, project: 'other', name: 'DEV:other', sessionId: 'sid-9' } })
     // A reload runs session.start again, without the SessionStart hook that gave the name.
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
-    expect(w.store.get('proj/DEV')).toEqual({ ...kept, at: START, context: 42, paused: false, item: null })
+    expect(w.store.get('proj/DEV')).toEqual({ ...kept, at: START, context: 42, paused: false, background: false, item: null })
   })
 
   test('after a reload, keeps its pause and its item', async ($, on) => {
@@ -82,7 +82,7 @@ describe("a squad session's key", () => {
     }
     const w = world(on, { 'proj/QA': kept })
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
-    expect(w.store.get('proj/QA')).toEqual({ ...kept, at: START, context: 42 })
+    expect(w.store.get('proj/QA')).toEqual({ ...kept, at: START, context: 42, background: false })
   })
 })
 
@@ -406,5 +406,60 @@ describe('the pause (agent-squad #222)', () => {
       await says($, text)
       expect(w.store.get('proj/DEV')).toMatchObject({ paused: false })
     }
+  })
+})
+
+describe('a background shell (agent-squad #264)', () => {
+  test('a turn that ends with a background shell running sets it in the key; a later turn that ends with none clears it', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await turnStart($)
+    await stops($, ['shell'])
+    expect(w.store.get('proj/DEV')).toMatchObject({ state: 'idle', background: true })
+    // The shell's end opens a turn of its own, whose Stop lists none.
+    await says($, 'Background command "sleep 30" completed', 'task-notification' as any)
+    await turnStart($)
+    expect(w.store.get('proj/DEV')).toMatchObject({ state: 'working', background: true })
+    await stops($)
+    expect(w.store.get('proj/DEV')).toMatchObject({ state: 'idle', background: false })
+  })
+
+  test('a Stop that comes after turn.complete still writes the key at once, with no heartbeat', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await turnStart($)
+    await turnEnd($)
+    await $.classic.Stop({ hook_event_name: 'Stop', stop_hook_active: false, background_tasks: [{ id: 'b0', type: 'shell', status: 'running', description: 'sleep' }] } as any)
+    expect(w.store.get('proj/DEV')).toMatchObject({ state: 'idle', background: true, at: START })
+  })
+
+  test('only a shell counts: a background subagent or monitor does not', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await turnStart($)
+    await stops($, ['subagent', 'monitor'])
+    expect(w.store.get('proj/DEV')).toMatchObject({ background: false })
+  })
+
+  test('the shell survives a reload, and goes with the key at the session end', async ($, on) => {
+    const kept = {
+      project: 'proj', role: 'QA', name: 'QA:proj', sessionId: 'sid-1',
+      state: 'idle', tool: null, since: START - 5_000, at: START - 5_000, context: 30, background: true,
+    }
+    const w = world(on, { 'proj/QA': kept })
+    await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
+    expect(w.store.get('proj/QA')).toMatchObject({ background: true })
+    await $.session.end({ reason: 'clear', sessionId: 'sid-1', resume: { id: 'sid-1' } } as any)
+    w.sessionId = 'sid-2'
+    await w.clock.advance(60_000)
+    expect(w.store.get('proj/QA')).toMatchObject({ sessionId: 'sid-2', background: false })
+  })
+
+  test('outside the squad, a Stop writes nothing', async ($, on) => {
+    const w = world(on)
+    await start($, 'modtest-1')
+    await turnStart($)
+    await stops($, ['shell'])
+    expect([...w.store.keys()]).toEqual([])
   })
 })

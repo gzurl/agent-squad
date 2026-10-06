@@ -94,6 +94,7 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
   on('classic.UserPromptSubmit', () => ({}))
   on('classic.PermissionRequest', () => ({}))
   on('classic.PostToolUse', () => ({}))
+  on('classic.Stop', () => ({}))
   // What the engine draws beneath the plugins: a line of its own.
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -120,6 +121,14 @@ export async function turnEnd($: Engine, agentId?: string) {
 // Claude Code asks the person for a permission, or AskUserQuestion asks a question.
 export async function asks($: Engine, tool: string) {
   await $.classic.PermissionRequest({ tool_name: tool, tool_input: {} } as any)
+}
+
+// A turn of the main loop ends as Claude Code ends one: its Stop hook, with the background work still
+// running ('shell', 'subagent', …), then turn.complete (agent-squad #264).
+export async function stops($: Engine, background: string[] = []) {
+  const tasks = background.map((type, index) => ({ id: `b${index}`, type, status: 'running', description: type }))
+  await $.classic.Stop({ hook_event_name: 'Stop', stop_hook_active: false, background_tasks: tasks } as any)
+  await turnEnd($)
 }
 
 // The agent runs a command with Bash, which prints `output`.

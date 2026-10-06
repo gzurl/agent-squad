@@ -18,12 +18,13 @@ const STALE_MS = 180_000
 // How often the CTO's session reads the keys.
 const TICK_MS = 3_000
 // The state marks of SQUAD.md §6, written as escapes since emojis stay out of code: hourglass
-// (working), eyes (QA working, since it reviews), pause (paused by the CEO; a text character made an
-// emoji by its selector), raised hand (waits for the CEO), zzz (idle), question mark (no recent
-// state).
+// (working), eyes (QA working, since it reviews), gear (its turn ended with a background shell still
+// running, agent-squad #264), pause (paused by the CEO), raised hand (waits for the CEO), zzz
+// (idle), question mark (no recent state). The gear and the pause are text characters made emojis
+// by their selector.
 const MARK = {
-  working: '\u23F3', reviewing: '\u{1F440}', paused: '\u23F8\uFE0F', waits: '\u270B', idle: '\u{1F4A4}',
-  unknown: '\u2753',
+  working: '\u23F3', reviewing: '\u{1F440}', background: '\u2699\uFE0F', paused: '\u23F8\uFE0F',
+  waits: '\u270B', idle: '\u{1F4A4}', unknown: '\u2753',
 }
 // The members' signatures of SQUAD.md §6, as escapes: each a person, a skin tone, a joiner and what
 // they do (and for the CTO a presentation selector), which a terminal draws as one emoji.
@@ -69,6 +70,8 @@ let state: BoardState = 'idle'
 let tool: string | null = null
 let since = 0
 let isPaused = false
+// Whether the session's last turn ended with a background shell still running, as its Stop said.
+let hasShell = false
 let item: BoardItem | null = null
 let repository: string | null = null
 // The CTO's session only: the release its board belongs to, as `v42`, read once when the board starts.
@@ -229,11 +232,13 @@ function textOf(part: Part): string {
   return part.item ? `${head}: ${labelOf(part.item)}` : head
 }
 
-// An agent's mark: working (eyes for QA, who reviews), paused while it is idle and the CEO has
-// paused it, waiting for the CEO, idle.
+// An agent's mark: working (eyes for QA, who reviews), waiting for the CEO, a background shell still
+// running after its turn, paused while it is idle and the CEO has paused it, idle. The shell goes
+// before the pause: something of the agent's still runs.
 function markOf(role: BoardRole, agent: BoardAgent): string {
   if (agent.state === 'working') return role === 'QA' ? MARK.reviewing : MARK.working
   if (isWaiting(agent.state)) return MARK.waits
+  if (agent.background === true) return MARK.background
   return agent.paused === true ? MARK.paused : MARK.idle
 }
 
@@ -310,6 +315,7 @@ async function publish($: any) {
     at: await $.clock.now(),
     context: usage.context?.percent ?? null,
     paused: isPaused,
+    background: hasShell,
     item,
   }
   if (me.role === 'CTO') agent.toasted = toasted
@@ -342,6 +348,7 @@ async function recover($: any) {
       tool = value.tool
       since = value.since
       isPaused = value.paused === true
+      hasShell = value.background === true
       item = value.item ?? null
       toasted = value.toasted ?? []
       return
@@ -350,7 +357,7 @@ async function recover($: any) {
 }
 
 // At the session's end its key goes, unless another session of its role has written it since;
-// after a /clear the session goes on under a new id, idle, with no item.
+// after a /clear the session goes on under a new id, idle, with no item and no shell.
 async function leave($: any, sessionId: string) {
   if (!me) return
   const key = keyOf(me.project, me.role)
@@ -358,6 +365,7 @@ async function leave($: any, sessionId: string) {
   if (isAgent(value) && value.sessionId === sessionId) await $.store.delete(key)
   state = 'idle'
   tool = null
+  hasShell = false
   item = null
 }
 
@@ -440,6 +448,16 @@ export const register: Register = on => {
   })
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) await become($, 'idle')
+    return next(e)
+  })
+  // A turn of the main loop ends: whether a background shell still runs (agent-squad #264). Stop
+  // comes just before turn.complete; a shell's end opens a turn of its own, whose Stop lists none.
+  on('classic.Stop', async ($, e, next) => {
+    const running = (e.background_tasks ?? []).some(task => task.type === 'shell')
+    if (me && running !== hasShell) {
+      hasShell = running
+      await publish($)
+    }
     return next(e)
   })
   on('classic.PermissionRequest', async ($, e, next) => {
