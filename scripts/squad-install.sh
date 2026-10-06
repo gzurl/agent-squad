@@ -736,12 +736,13 @@ for file in "$project"/.claude/commands/squad-*.md; do
 done
 # The commands written, rewritten and already in place, said in one line after the loop; a command
 # that needs a decision is said at once (agent-squad #262).
-wrote=() rewrote=() same=0
+wrote=() rewrote=() same=0 held=0
 while IFS= read -r name; do
   path=".claude/commands/$name"
   if tracked_by_project "$path"; then
     say command "NOT INSTALLED: $path is the project's own file, tracked by git; it is left as it is: if it is a command of the project's own, rename it; if it is the squad's command committed by mistake, untrack it with git rm --cached; then run again"
     needs_decision=1
+    held=$((held + 1))
   elif cmp -s "$playbook/commands/$name" "$project/$path"; then
     same=$((same + 1))
   else
@@ -752,20 +753,29 @@ while IFS= read -r name; do
     else
       say command "NOT INSTALLED: cannot write $path; fix it and run again"
       needs_decision=1
+      held=$((held + 1))
     fi
   fi
 done < <(squad_commands)
 total=$((${#wrote[@]} + ${#rewrote[@]} + same))
+# "The 11 squad commands", or "the other 10" when a NOT line has just named one (agent-squad #267).
+counted="the $total squad commands"
+[ "$held" -eq 0 ] || counted="the other $total squad commands"
+[ "$total" -ne 1 ] || counted="${counted% commands} command"
 if [ "$total" -gt 0 ] && [ "${#wrote[@]}" -eq "$total" ]; then
-  say command "wrote the $total squad commands into .claude/commands/"
+  say command "wrote $counted into .claude/commands/"
 elif [ "$total" -gt 0 ] && [ "$same" -eq "$total" ]; then
-  say command "the $total squad commands are already in .claude/commands/"
+  say command "$counted $([ "$total" -eq 1 ] && echo is || echo are) already in .claude/commands/"
 elif [ "$total" -gt 0 ]; then
   summary=""
   [ "${#wrote[@]}" -eq 0 ] || summary="wrote $(listed "${wrote[@]}")"
   [ "${#rewrote[@]}" -eq 0 ] || summary="${summary:+$summary, }rewrote $(listed "${rewrote[@]}")"
   summary="$summary into .claude/commands/"
-  [ "$same" -eq 0 ] || summary="$summary; the other $same were already there"
+  if [ "$same" -eq 1 ]; then
+    summary="$summary; the other one was already there"
+  elif [ "$same" -gt 1 ]; then
+    summary="$summary; the other $same were already there"
+  fi
   say command "$summary"
 fi
 
@@ -935,15 +945,26 @@ fi
 
 # 9. A first install ends with what comes next, in the README's own words (Quick start, steps 2
 #    and 3), with the project's name in the sessions' names (agent-squad #262). The name is the
-#    main checkout's folder, quoted for the shell. An upgrade has none of it.
+#    main checkout's folder, quoted for the shell as a pasted line is read: in double quotes, as the
+#    README writes them, or in single quotes when it holds a `!`, which an interactive bash or zsh
+#    expands even inside double quotes (agent-squad #267). An upgrade has none of it.
+# `session_word <role>` prints the quoted argument of `claude -n` for that role.
+session_word() {
+  local word
+  word="$1:$(basename "$main_checkout")"
+  if [[ "$word" == *'!'* ]]; then
+    printf "'%s'" "$(printf '%s' "$word" | sed "s/'/'\\\\''/g")"
+  else
+    word="${word//\\/\\\\}" word="${word//\"/\\\"}" word="${word//\$/\\\$}" word="${word//\`/\\\`}"
+    printf '"%s"' "$word"
+  fi
+}
 if [ "$previous" = none ]; then
-  name="$(basename "$main_checkout")"
-  name="${name//\\/\\\\}" name="${name//\"/\\\"}" name="${name//\$/\\\$}" name="${name//\`/\\\`}"
   echo
   echo "Next steps:"
   echo "- Start three Claude Code sessions in your project's folder, each in its own terminal, named after its role and your project:"
   for role in CTO DEV QA; do
-    printf '    claude -n "%s:%s"\n' "$role" "$name"
+    printf '    claude -n %s\n' "$(session_word "$role")"
   done
   echo "  If you like, give each session the colour the squad board gives its role: /color yellow in the CTO's, /color blue in DEV's and /color green in QA's."
   echo "- Tell the CTO: \"Follow .agent-squad/playbook/BOOTSTRAP.md.\""

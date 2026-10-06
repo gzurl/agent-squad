@@ -446,6 +446,14 @@ check "a changed /squad-save-state is rewritten on the next install, saying so" 
   contains "$out" "install: command    rewrote /squad-save-state into .claude/commands/"
 check "and is the playbook's again" cmp -s "$target/.agent-squad/playbook/commands/squad-save-state.md" \
   "$target/.claude/commands/squad-save-state.md"
+# With every command changed but one, the summary names the rewritten ones and says the other one
+# was already there (agent-squad #267).
+for file in "$target"/.claude/commands/squad-*.md; do
+  [ "$(basename "$file")" = squad-save-state.md ] || echo "An edit." >> "$file"
+done
+out="$("$install" "$target" "$tag_a" 2>&1)"
+check "when one command was already there, the summary says the other one was" \
+  bash -c 'grep "^install: command " <<<"$1" | grep -q "rewrote /.*; the other one was already there\$"' _ "$out"
 
 # 7e. A project that tracks a file of its own at that path keeps it: the install leaves it, says so
 #     as a step marked NOT and exits 1, and --check fails the command item (#104).
@@ -464,6 +472,9 @@ check "and the install says the file is the project's, and which way out fits wh
   contains "$out" "install: command    NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git; it is left as it is: $advice; then run again"
 check "and leaves it byte for byte" \
   [ "$(cat "$target/.claude/commands/squad-save-state.md")" = "The project's own command." ]
+others=$(($(find "$target/.agent-squad/playbook/commands" -name 'squad-*.md' | wc -l) - 1))
+check "and says it wrote the other $others, not that the squad has $others commands" \
+  contains "$out" "install: command    wrote the other $others squad commands into .claude/commands/"
 out="$("$install" --check "$target" 2>&1)"
 check "and --check fails the command item, saying that the project owns the file and which way out fits" \
   contains "$out" "check: FAILED  $item_command: .claude/commands/squad-save-state.md is tracked by git, so the project owns it: $advice; then install again"
@@ -1166,10 +1177,32 @@ target="$(new_project "$odd")" || exit 2
 out="$("$install" "$target" "$tag_a" 2>&1)"
 check "a project whose name the shell would expand gets it quoted in the next steps" \
   ends_with_next_steps "$out" 'odd \"one\" \$HOME \`x\`'
-# `named_by <line>` runs a printed `claude -n` line with a claude that prints the name it is given.
+# `named_by <line>` runs a printed `claude -n` line with a claude that prints the name it is given;
+# `pasted_by <line>` runs it as a line pasted into an interactive bash, whose history expansion
+# reads a `!` even inside double quotes (agent-squad #267).
 named_by() { bash -c "claude() { printf '%s' \"\$2\"; }; $1"; }
-named="$(named_by "$(grep -F '    claude -n "DEV:' <<<"$out")")"
+pasted_by() {
+  local named_file="$lab/named.txt"
+  rm -f "$named_file"
+  { printf '%s\n' "claude() { printf '%s' \"\$2\" > '$named_file'; }"; printf '%s\n' "$1"; } \
+    | bash --norc --noprofile -i >/dev/null 2>&1
+  cat "$named_file" 2>/dev/null
+}
+dev_line="$(grep -F '    claude -n "DEV:' <<<"$out")"
 check "and each printed line, run by the shell, names the session after the project, as it is" \
-  [ "$named" = "DEV:$odd" ]
+  [ "$(named_by "$dev_line")" = "DEV:$odd" ]
+check "and so does the line pasted into an interactive bash" [ "$(pasted_by "$dev_line")" = "DEV:$odd" ]
+
+# 18b. A name with a `!` goes in single quotes, which an interactive shell does not expand, and an
+#      apostrophe in it is written '\'' (agent-squad #267). GitHub's repository names cannot hold a
+#      `!`; a renamed folder can.
+bang="it's a!b"
+target="$(new_project "$bang")" || exit 2
+out="$("$install" "$target" "$tag_a" 2>&1)"
+dev_line="$(grep -F '    claude -n ' <<<"$out" | grep -F 'DEV:')"
+check "a name with a ! is printed in single quotes" \
+  [ "$dev_line" = "    claude -n 'DEV:it'\\''s a!b'" ]
+check "and the line pasted into an interactive bash names the session after the project, as it is" \
+  [ "$(pasted_by "$dev_line")" = "DEV:$bang" ]
 
 exit "$status"
