@@ -1,5 +1,19 @@
 # Changelog
 
+## v47 — 2026-10-06
+- **The installer ends with the next steps until the squad is set up** (#271), not only on a first
+  install. The CEO found the gap in a test project installed the day before and never set up: a
+  rerun printed the CTO's *By hand* list and no next steps.
+  - While `AGENTS.md` does not import the charter, every run ends with the next steps and prints no
+    *By hand*.
+  - Once it does, a run prints *By hand, for the CTO, …* and no next steps.
+  - The *By hand* item about the *Squad* section is gone, since it could no longer show: `--check`
+    still fails until the section is there.
+  - `BOOTSTRAP.md`'s *The installer's files* and row 13 follow the rule.
+- **The README's *Why agent-squad* takes the launch post's best lines** (#272): the meteorite, the
+  CTO the agents needed, and agent-squad building itself.
+- No charter rule changes.
+
 ## v46 — 2026-10-06
 - **A simpler install, coherent with the README** (#262, #267), after the CEO's first install in a
   new project.
