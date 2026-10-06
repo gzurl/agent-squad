@@ -77,10 +77,9 @@ details).
    ```
 
    It installs the latest release, says what it did, and ends with the next steps below, your
-   project's name in them. Its *By hand* list is the CTO's, for step 3.
+   project's name in them.
 
-2. **Start three Claude Code sessions** in your project's folder, each in its own terminal, named
-   after its role and your project:
+2. **Start three Claude Code sessions** in your project's folder, each in its own terminal:
 
    ```bash
    claude -n "CTO:<project-name>"
@@ -88,7 +87,7 @@ details).
    claude -n "QA:<project-name>"
    ```
 
-   If you like, give each session the colour the [squad board](#the-squad-board) gives its role:
+   If you like, give each session its colour on the [squad board](#the-squad-board):
    `/color yellow` in the CTO's, `/color blue` in DEV's and `/color green` in QA's.
 
 3. **Tell the CTO:** *"Follow `.agent-squad/playbook/BOOTSTRAP.md`."* It asks which language to
@@ -302,7 +301,8 @@ The states:
 - ⏳ working;
 - 👀 working, for QA, who reviews;
 - ✋ waiting for you, on a permission or a question, with a notice in the CTO's session;
-- ⚙️ its turn ended with a shell still running in the background, until the shell ends;
+- ⚙️ its turn ended with a shell still running in the background, until the shell ends; it reads
+  messages meanwhile, since no turn runs;
 - ⏸️ paused, from `/squad-pause` until `/squad-resume` or `/squad-autopilot`;
 - 💤 idle, free for the next request, with no item;
 - ❓ unknown: no state from that session for three minutes.

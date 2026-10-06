@@ -63,9 +63,10 @@ prints_nothing() {
 # project's name as the installer quotes it for the shell.
 next_steps() {
   printf '%s\n' "Next steps:" \
-    "- Start three Claude Code sessions in your project's folder, each in its own terminal, named after its role and your project:" \
+    "- Start three Claude Code sessions in your project's folder, each in its own terminal:" \
     "    claude -n \"CTO:$1\"" "    claude -n \"DEV:$1\"" "    claude -n \"QA:$1\"" \
-    "  If you like, give each session the colour the squad board gives its role: /color yellow in the CTO's, /color blue in DEV's and /color green in QA's." \
+    "  If you like, give each session its colour on the squad board: /color yellow in the CTO's," \
+    "  /color blue in DEV's and /color green in QA's." \
     "- Tell the CTO: \"Follow .agent-squad/playbook/BOOTSTRAP.md.\""
 }
 # `ends_with_next_steps <output> <quoted name>` passes when the output's last lines, from "Next
@@ -305,12 +306,11 @@ check "the $commands_count commands are said in one line, with their number" \
   _ "$out" "$commands_count"
 check ".gitignore, the templates and the worktrees take one line each" \
   bash -c 'for step in .gitignore templates worktrees; do [ "$(grep -cF "install: $step " <<<"$1")" -eq 1 ] || exit 1; done' _ "$out"
-check "the By hand list says it is the CTO's" \
-  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
-check "and names the Squad section of the playbook's templates/AGENTS.md" \
-  contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word"
-check "whose text it does not print" lacks "$out" "The squad section this test expects, first line."
-check "a first install ends with the next steps, the project's name in the sessions' names" \
+# A first install prints no By hand list, nor any line about it: what is left, --check says to the CTO
+# who follows BOOTSTRAP.md (agent-squad #267).
+check "a first install prints no By hand list" lacks "$out" "By hand"
+check "nor the Squad section's text" lacks "$out" "The squad section this test expects, first line."
+check "and ends with the next steps, the project's name in the sessions' names" \
   ends_with_next_steps "$out" project
 check "--check after a fresh install fails only on what is left by hand, AGENTS.md" check_reports "$item_import"
 
@@ -335,6 +335,11 @@ check "which says $tag_a -> $tag_a" log_ends_with "$project" "$tag_a -> $tag_a"
 check "a second run reports every step as already done" \
   matches_none "$out" "^install: [^ ]+ +(installed|added|wrote|rewrote|created|recorded|kept the project)"
 check "and shows no next steps, which are for a first install" lacks "$out" "Next steps:"
+check "and prints the By hand list, which says it is the CTO's" \
+  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
+check "which names the Squad section of the playbook's templates/AGENTS.md" \
+  contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word"
+check "without printing its text" lacks "$out" "The squad section this test expects, first line."
 check "and says .gitignore, the commands, the templates and the worktrees in one line each" \
   bash -c 'for step in .gitignore command templates worktrees; do [ "$(grep -cF "install: $step " <<<"$1")" -eq 1 ] || exit 1; done' _ "$out"
 
@@ -446,6 +451,14 @@ check "a changed /squad-save-state is rewritten on the next install, saying so" 
   contains "$out" "install: command    rewrote /squad-save-state into .claude/commands/"
 check "and is the playbook's again" cmp -s "$target/.agent-squad/playbook/commands/squad-save-state.md" \
   "$target/.claude/commands/squad-save-state.md"
+# With every command changed but one, the summary names the rewritten ones and says the other one
+# was already there (agent-squad #267).
+for file in "$target"/.claude/commands/squad-*.md; do
+  [ "$(basename "$file")" = squad-save-state.md ] || echo "An edit." >> "$file"
+done
+out="$("$install" "$target" "$tag_a" 2>&1)"
+check "when one command was already there, the summary says the other one was" \
+  bash -c 'grep "^install: command " <<<"$1" | grep -q "rewrote /.*; the other one was already there\$"' _ "$out"
 
 # 7e. A project that tracks a file of its own at that path keeps it: the install leaves it, says so
 #     as a step marked NOT and exits 1, and --check fails the command item (#104).
@@ -464,6 +477,9 @@ check "and the install says the file is the project's, and which way out fits wh
   contains "$out" "install: command    NOT INSTALLED: .claude/commands/squad-save-state.md is the project's own file, tracked by git; it is left as it is: $advice; then run again"
 check "and leaves it byte for byte" \
   [ "$(cat "$target/.claude/commands/squad-save-state.md")" = "The project's own command." ]
+others=$(($(find "$target/.agent-squad/playbook/commands" -name 'squad-*.md' | wc -l) - 1))
+check "and says it wrote the other $others, not that the squad has $others commands" \
+  contains "$out" "install: command    wrote the other $others squad commands into .claude/commands/"
 out="$("$install" --check "$target" 2>&1)"
 check "and --check fails the command item, saying that the project owns the file and which way out fits" \
   contains "$out" "check: FAILED  $item_command: .claude/commands/squad-save-state.md is tracked by git, so the project owns it: $advice; then install again"
@@ -1012,6 +1028,8 @@ target="$(new_project partial-tree)" || exit 2
 out="$("$install" --source "$lab/partial" "$target" "$tag_b" 2>&1)"
 check "a tree without the issue template skips it, saying so" \
   contains "$out" "templates  .github/ISSUE_TEMPLATE/task.md is not in the playbook, skipped"
+# Its By hand list, which a second run prints (a first install prints none, agent-squad #267).
+out="$("$install" --source "$lab/partial" "$target" "$tag_b" 2>&1)"
 check "and a template of AGENTS.md without a Squad section is named, not printed" \
   contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md"
 
@@ -1166,10 +1184,32 @@ target="$(new_project "$odd")" || exit 2
 out="$("$install" "$target" "$tag_a" 2>&1)"
 check "a project whose name the shell would expand gets it quoted in the next steps" \
   ends_with_next_steps "$out" 'odd \"one\" \$HOME \`x\`'
-# `named_by <line>` runs a printed `claude -n` line with a claude that prints the name it is given.
+# `named_by <line>` runs a printed `claude -n` line with a claude that prints the name it is given;
+# `pasted_by <line>` runs it as a line pasted into an interactive bash, whose history expansion
+# reads a `!` even inside double quotes (agent-squad #267).
 named_by() { bash -c "claude() { printf '%s' \"\$2\"; }; $1"; }
-named="$(named_by "$(grep -F '    claude -n "DEV:' <<<"$out")")"
+pasted_by() {
+  local named_file="$lab/named.txt"
+  rm -f "$named_file"
+  { printf '%s\n' "claude() { printf '%s' \"\$2\" > '$named_file'; }"; printf '%s\n' "$1"; } \
+    | bash --norc --noprofile -i >/dev/null 2>&1
+  cat "$named_file" 2>/dev/null
+}
+dev_line="$(grep -F '    claude -n "DEV:' <<<"$out")"
 check "and each printed line, run by the shell, names the session after the project, as it is" \
-  [ "$named" = "DEV:$odd" ]
+  [ "$(named_by "$dev_line")" = "DEV:$odd" ]
+check "and so does the line pasted into an interactive bash" [ "$(pasted_by "$dev_line")" = "DEV:$odd" ]
+
+# 18b. A name with a `!` goes in single quotes, which an interactive shell does not expand, and an
+#      apostrophe in it is written '\'' (agent-squad #267). GitHub's repository names cannot hold a
+#      `!`; a renamed folder can.
+bang="it's a!b"
+target="$(new_project "$bang")" || exit 2
+out="$("$install" "$target" "$tag_a" 2>&1)"
+dev_line="$(grep -F '    claude -n ' <<<"$out" | grep -F 'DEV:')"
+check "a name with a ! is printed in single quotes" \
+  [ "$dev_line" = "    claude -n 'DEV:it'\\''s a!b'" ]
+check "and the line pasted into an interactive bash names the session after the project, as it is" \
+  [ "$(pasted_by "$dev_line")" = "DEV:$bang" ]
 
 exit "$status"
