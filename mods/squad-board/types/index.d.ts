@@ -28,6 +28,8 @@ export type BoardAgent = {
   context: number | null
   // Whether the CEO paused the session (/squad-pause), until a resume or autopilot.
   paused?: boolean
+  // Whether the session's last turn ended with a background shell still running (agent-squad #264).
+  background?: boolean
   // The issue or PR the session last acted on with gh; null before its first.
   item?: BoardItem | null
   // The CTO's session only: the waits it has already shown a toast for.

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { asks, says, START, start, turnEnd, turnStart, world } from './world'
+import { asks, says, START, start, stops, turnEnd, turnStart, world } from './world'
 
 // The board in the CTO's session (agent-squad #205, #212, #217, #222, #235, #240, #247): one line
 // above the prompt, between two blue rules, opening with the wordmark and the board's release, then
@@ -13,7 +13,7 @@ import { asks, says, START, start, turnEnd, turnStart, world } from './world'
 
 // The signatures and the state marks, as the band draws them.
 const SIGN = { CTO: '\u{1F477}\u{1F3FC}‍♂️', DEV: '\u{1F468}\u{1F3FC}‍\u{1F4BB}', QA: '\u{1F469}\u{1F3FC}‍\u{1F52C}' }
-const MARK = { working: '\u23F3', reviewing: '\u{1F440}', paused: '\u23F8\uFE0F', waits: '\u270B', idle: '\u{1F4A4}', unknown: '\u2753' }
+const MARK = { working: '\u23F3', reviewing: '\u{1F440}', background: '\u2699\uFE0F', paused: '\u23F8\uFE0F', waits: '\u270B', idle: '\u{1F4A4}', unknown: '\u2753' }
 
 // How many cells a text takes on a terminal: each emoji two, however many code points it has, and
 // any other character one.
@@ -396,6 +396,7 @@ describe('an idle agent shows its role alone (agent-squad #247)', () => {
     ['waiting on a permission', 'DEV', { state: 'permission', tool: 'Bash' }, MARK.waits],
     ['waiting on a question', 'QA', { state: 'question' }, MARK.waits],
     ['paused', 'DEV', { paused: true }, MARK.paused],
+    ['with a background shell after its turn', 'DEV', { background: true }, MARK.background],
     ['unknown, its key gone stale', 'QA', { state: 'working', at: START - 240_000 }, MARK.unknown],
   ]
   for (const [name, role, fields, mark] of shown) {
@@ -427,6 +428,41 @@ describe('an idle agent shows its role alone (agent-squad #247)', () => {
     await w.clock.advance(3_000)
     const again = await band($)
     expect(await again.part('CTO')).toBe(` │ ${MARK.working} ${SIGN.CTO}CTO: https://github.com/o/r/pull/243PR #243`)
+  })
+})
+
+describe('a background shell after the turn (agent-squad #264)', () => {
+  test('shows the gear with the item; working shows over it; it goes before a pause', async ($, on) => {
+    const w = world(on, {
+      'proj/DEV': agent('DEV', 'proj', { background: true, ...ISSUE }),
+      'proj/QA': agent('QA', 'proj', { state: 'working', background: true, ...PR }),
+    })
+    await start($, 'CTO:proj')
+    await w.clock.settle()
+    const first = await band($)
+    expect(first.drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.background} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA: PR #210`)
+    await first.ui.unmount()
+    w.store.set('proj/DEV', agent('DEV', 'proj', { background: true, paused: true, at: START + 3_000, ...ISSUE }))
+    await w.clock.advance(3_000)
+    const { part } = await band($)
+    expect(await part('DEV')).toBe(` │ ${MARK.background} ${SIGN.DEV}DEV: https://github.com/o/r/issues/205#205`)
+  })
+
+  test("the CTO's own turn that ends with a shell running shows the gear, and its end shows the idle mark", async ($, on) => {
+    const w = world(on)
+    await start($, 'CTO:proj')
+    await turnStart($)
+    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh pr view 265' } as any)
+    await stops($, ['shell'])
+    await w.clock.advance(3_000)
+    const running = await band($)
+    expect(await running.part('CTO')).toBe(` │ ${MARK.background} ${SIGN.CTO}CTO: https://github.com/o/r/pull/265PR #265`)
+    await running.ui.unmount()
+    await turnStart($)
+    await stops($)
+    await w.clock.advance(3_000)
+    const done = await band($)
+    expect(await done.part('CTO')).toBe(` │ ${MARK.idle} ${SIGN.CTO}CTO`)
   })
 })
 
