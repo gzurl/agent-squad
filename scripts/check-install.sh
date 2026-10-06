@@ -59,6 +59,18 @@ prints_nothing() {
   local out
   out="$("$@")" && [ -z "$out" ]
 }
+# `next_steps <quoted name>` prints the lines a first install ends with (agent-squad #262), the
+# project's name as the installer quotes it for the shell.
+next_steps() {
+  printf '%s\n' "Next steps:" \
+    "- Start three Claude Code sessions in your project's folder, each in its own terminal, named after its role and your project:" \
+    "    claude -n \"CTO:$1\"" "    claude -n \"DEV:$1\"" "    claude -n \"QA:$1\"" \
+    "  If you like, give each session the colour the squad board gives its role: /color yellow in the CTO's, /color blue in DEV's and /color green in QA's." \
+    "- Tell the CTO: \"Follow .agent-squad/playbook/BOOTSTRAP.md.\""
+}
+# `ends_with_next_steps <output> <quoted name>` passes when the output's last lines, from "Next
+# steps:" on, are exactly those.
+ends_with_next_steps() { [ "$(sed -n '/^Next steps:$/,$p' <<<"$1")" = "$(next_steps "$2")" ]; }
 # `absent <dir> <path...>` and `present <dir> <path...>` test paths under a directory.
 absent() {
   local dir="$1" path
@@ -285,11 +297,21 @@ for agent in dev qa; do
   check "worktrees/$agent is a linked worktree detached at origin/main" \
     detached_at "$project" "$squad/worktrees/$agent" main
 done
-check "the Squad section of the playbook's templates/AGENTS.md is printed" \
-  contains "$out" "The squad section this test expects, first line."
-check "unindented, so that the import works once pasted" has_line "$out" "@.agent-squad/playbook/SQUAD.md"
-check "between markers" has_line "$out" "----- begin Squad section -----"
-check "and nothing after the section" lacks "$out" "Not part of the section."
+# The output (agent-squad #262): one line per step, the By hand list said to be the CTO's, the Squad
+# section named rather than printed, and a first install that ends with the README's next steps.
+commands_count="$(find "$squad/playbook/commands" -name 'squad-*.md' | wc -l | tr -d ' ')"
+check "the $commands_count commands are said in one line, with their number" \
+  bash -c '[ "$(grep -c "^install: command " <<<"$1")" -eq 1 ] && grep -qxF "install: command    wrote the $2 squad commands into .claude/commands/" <<<"$1"' \
+  _ "$out" "$commands_count"
+check ".gitignore, the templates and the worktrees take one line each" \
+  bash -c 'for step in .gitignore templates worktrees; do [ "$(grep -cF "install: $step " <<<"$1")" -eq 1 ] || exit 1; done' _ "$out"
+check "the By hand list says it is the CTO's" \
+  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
+check "and names the Squad section of the playbook's templates/AGENTS.md" \
+  contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word"
+check "whose text it does not print" lacks "$out" "The squad section this test expects, first line."
+check "a first install ends with the next steps, the project's name in the sessions' names" \
+  ends_with_next_steps "$out" project
 check "--check after a fresh install fails only on what is left by hand, AGENTS.md" check_reports "$item_import"
 
 # 2. The project's local settings are kept; only the entries that run squad-handoff.sh change.
@@ -312,6 +334,9 @@ check "a second run adds one line to install.log" [ "$(log_lines "$project")" -e
 check "which says $tag_a -> $tag_a" log_ends_with "$project" "$tag_a -> $tag_a"
 check "a second run reports every step as already done" \
   matches_none "$out" "^install: [^ ]+ +(installed|added|wrote|rewrote|created|recorded|kept the project)"
+check "and shows no next steps, which are for a first install" lacks "$out" "Next steps:"
+check "and says .gitignore, the commands, the templates and the worktrees in one line each" \
+  bash -c 'for step in .gitignore command templates worktrees; do [ "$(grep -cF "install: $step " <<<"$1")" -eq 1 ] || exit 1; done' _ "$out"
 
 # 4. The project's pre-push is chained: kept as pre-push.local, run first, and still able to refuse.
 check "the project's pre-push is kept as pre-push.local" cmp -s "$lab/project-pre-push" "$hooks/pre-push.local"
@@ -361,6 +386,9 @@ runtime_before="$(runtime_state)"
 out="$("$squad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$project" "$tag_b" 2>&1)"
 code=$?
 check "an upgrade exits 0" [ "$code" -eq 0 ]
+check "an upgrade shows no next steps" lacks "$out" "Next steps:"
+check "and its By hand list is the CTO's" \
+  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
 check "the playbook is now vb, file for file (one changed, one removed, one added)" \
   same_tree "$squad/playbook" "$lab/vb"
 check "worktrees/, handoff/ and evidence/ are untouched" [ "$runtime_before" = "$(runtime_state)" ]
@@ -453,7 +481,7 @@ check "and keeps v24's line, with the rule once" \
   bash -c '[ "$(grep -cxF ".claude/commands/squad-*.md" "$1")" -eq 1 ] && grep -qxF .claude/commands/squad-save-state.md "$1"' _ "$target/.gitignore"
 out="$("$install" "$target" "$tag_a" 2>&1)"
 check "and a second run says the rule is already there" \
-  contains "$out" "install: .gitignore .claude/commands/squad-*.md is already ignored"
+  has_line "$out" "install: .gitignore already ignored: .agent-squad/, .claude/settings.local.json, .claude/commands/squad-*.md"
 
 # 7g. Git LFS (#121). Its own pre-push hook cannot go where the shim is, so a project that routes
 #     files through LFS runs it from hooks/pre-push.local, which the shim runs first. --check shows
@@ -1129,5 +1157,19 @@ check "a release with no mods says so" contains "$out" "mods       SKIPPED: this
 check "and removes the entries of the release before it" \
   jq_holds '(.extraKnownMarketplaces | keys) == ["agent-squad-tools", "agent-squad-ui-facade", "agent-squad-x-202610", "shelf", "team-tools"]
     and .enabledPlugins == {"lint@team-tools": true, "format@agent-squad-tools": true, "ui@agent-squad-ui-facade": true}' "$tsettings"
+
+# 18. The next steps quote the project's name for the shell (agent-squad #262): a folder whose name
+#     holds a blank, double quotes, a dollar and a backquote gives sessions named after it, as the
+#     shell reads each printed line.
+odd='odd "one" $HOME `x`'
+target="$(new_project "$odd")" || exit 2
+out="$("$install" "$target" "$tag_a" 2>&1)"
+check "a project whose name the shell would expand gets it quoted in the next steps" \
+  ends_with_next_steps "$out" 'odd \"one\" \$HOME \`x\`'
+# `named_by <line>` runs a printed `claude -n` line with a claude that prints the name it is given.
+named_by() { bash -c "claude() { printf '%s' \"\$2\"; }; $1"; }
+named="$(named_by "$(grep -F '    claude -n "DEV:' <<<"$out")")"
+check "and each printed line, run by the shell, names the session after the project, as it is" \
+  [ "$named" = "DEV:$odd" ]
 
 exit "$status"

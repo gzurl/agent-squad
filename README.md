@@ -76,11 +76,11 @@ details).
    curl -fsSL https://raw.githubusercontent.com/gzurl/agent-squad/main/install.sh | bash
    ```
 
-   It installs the latest release and tells you what it did. It ends with a short *By hand* list:
-   leave that to the CTO, who deals with it in step 3.
+   It installs the latest release, says what it did, and ends with the next steps below, your
+   project's name in them. Its *By hand* list is the CTO's, for step 3.
 
-2. **Start three Claude Code sessions** in that same folder, each in its own terminal, named after
-   its role and your project (replace `<project-name>`):
+2. **Start three Claude Code sessions** in your project's folder, each in its own terminal, named
+   after its role and your project:
 
    ```bash
    claude -n "CTO:<project-name>"
@@ -88,8 +88,8 @@ details).
    claude -n "QA:<project-name>"
    ```
 
-   Then give each session its colour, the one the [squad board](#the-squad-board) gives its role:
-   type `/color yellow` in the CTO's, `/color blue` in DEV's and `/color green` in QA's.
+   If you like, give each session the colour the [squad board](#the-squad-board) gives its role:
+   `/color yellow` in the CTO's, `/color blue` in DEV's and `/color green` in QA's.
 
 3. **Tell the CTO:** *"Follow `.agent-squad/playbook/BOOTSTRAP.md`."* It asks which language to
    use with you, finishes setting up the repository, asks you what it needs to know, and then asks
