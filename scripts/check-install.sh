@@ -63,9 +63,10 @@ prints_nothing() {
 # project's name as the installer quotes it for the shell.
 next_steps() {
   printf '%s\n' "Next steps:" \
-    "- Start three Claude Code sessions in your project's folder, each in its own terminal, named after its role and your project:" \
+    "- Start three Claude Code sessions in your project's folder, each in its own terminal:" \
     "    claude -n \"CTO:$1\"" "    claude -n \"DEV:$1\"" "    claude -n \"QA:$1\"" \
-    "  If you like, give each session the colour the squad board gives its role: /color yellow in the CTO's, /color blue in DEV's and /color green in QA's." \
+    "  If you like, give each session its colour on the squad board: /color yellow in the CTO's," \
+    "  /color blue in DEV's and /color green in QA's." \
     "- Tell the CTO: \"Follow .agent-squad/playbook/BOOTSTRAP.md.\""
 }
 # `ends_with_next_steps <output> <quoted name>` passes when the output's last lines, from "Next
@@ -305,12 +306,11 @@ check "the $commands_count commands are said in one line, with their number" \
   _ "$out" "$commands_count"
 check ".gitignore, the templates and the worktrees take one line each" \
   bash -c 'for step in .gitignore templates worktrees; do [ "$(grep -cF "install: $step " <<<"$1")" -eq 1 ] || exit 1; done' _ "$out"
-check "the By hand list says it is the CTO's" \
-  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
-check "and names the Squad section of the playbook's templates/AGENTS.md" \
-  contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word"
-check "whose text it does not print" lacks "$out" "The squad section this test expects, first line."
-check "a first install ends with the next steps, the project's name in the sessions' names" \
+# A first install prints no By hand list, nor any line about it: what is left, --check says to the CTO
+# who follows BOOTSTRAP.md (agent-squad #267).
+check "a first install prints no By hand list" lacks "$out" "By hand"
+check "nor the Squad section's text" lacks "$out" "The squad section this test expects, first line."
+check "and ends with the next steps, the project's name in the sessions' names" \
   ends_with_next_steps "$out" project
 check "--check after a fresh install fails only on what is left by hand, AGENTS.md" check_reports "$item_import"
 
@@ -335,6 +335,11 @@ check "which says $tag_a -> $tag_a" log_ends_with "$project" "$tag_a -> $tag_a"
 check "a second run reports every step as already done" \
   matches_none "$out" "^install: [^ ]+ +(installed|added|wrote|rewrote|created|recorded|kept the project)"
 check "and shows no next steps, which are for a first install" lacks "$out" "Next steps:"
+check "and prints the By hand list, which says it is the CTO's" \
+  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
+check "which names the Squad section of the playbook's templates/AGENTS.md" \
+  contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word"
+check "without printing its text" lacks "$out" "The squad section this test expects, first line."
 check "and says .gitignore, the commands, the templates and the worktrees in one line each" \
   bash -c 'for step in .gitignore command templates worktrees; do [ "$(grep -cF "install: $step " <<<"$1")" -eq 1 ] || exit 1; done' _ "$out"
 
@@ -1023,6 +1028,8 @@ target="$(new_project partial-tree)" || exit 2
 out="$("$install" --source "$lab/partial" "$target" "$tag_b" 2>&1)"
 check "a tree without the issue template skips it, saying so" \
   contains "$out" "templates  .github/ISSUE_TEMPLATE/task.md is not in the playbook, skipped"
+# Its By hand list, which a second run prints (a first install prints none, agent-squad #267).
+out="$("$install" --source "$lab/partial" "$target" "$tag_b" 2>&1)"
 check "and a template of AGENTS.md without a Squad section is named, not printed" \
   contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md"
 

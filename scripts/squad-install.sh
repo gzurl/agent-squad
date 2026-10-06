@@ -912,36 +912,40 @@ done
   || say worktrees "created $(listed "${created[@]}") in .agent-squad/worktrees/, detached at origin/$base"
 [ "${#kept[@]}" -eq 0 ] || say worktrees "kept $(listed "${kept[@]}") in .agent-squad/worktrees/, already there"
 
-# 8. What only the CTO can do: the project's own tracked files. The list is the CTO's, who works
-#    through it while following BOOTSTRAP.md at the first install, and /squad-upgrade after an
-#    upgrade; the person running the installer leaves it to the CTO (agent-squad #262).
-echo
-echo "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
-items=0
-item() {
-  items=$((items + 1))
-  printf '  %d. %s\n' "$items" "$1"
-}
-if ! imports_charter "$project/AGENTS.md"; then
-  # The one source of the Squad section is the playbook's template of AGENTS.md, which the CTO reads.
-  item "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word: it imports the charter into every session"
+# 8. What only the CTO can do: the project's own tracked files. The list is the CTO's. A first
+#    install prints none: its output ends with the next steps, and the CTO finds what is left with
+#    --check while following BOOTSTRAP.md (agent-squad #267). Every later run prints it, for the
+#    CTO who upgrades with /squad-upgrade or runs the installer again.
+if [ "$previous" != none ]; then
+  echo
+  echo "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
+  items=0
+  item() {
+    items=$((items + 1))
+    printf '  %d. %s\n' "$items" "$1"
+  }
+  if ! imports_charter "$project/AGENTS.md"; then
+    # The one source of the Squad section is the playbook's template of AGENTS.md, which the CTO
+    # reads.
+    item "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word: it imports the charter into every session"
+  fi
+  case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
+    AGENTS.md|./AGENTS.md) ;;
+    *) item "Make CLAUDE.md a symlink to AGENTS.md (ln -s AGENTS.md CLAUDE.md), once its content is in AGENTS.md" ;;
+  esac
+  if ! lists_a_command "$project/.agent-squad-checks"; then
+    item "Write .agent-squad-checks: the commands the project's CI runs, one per line; until it lists one the gate refuses every push"
+  fi
+  # The squad's files that belong in git, as git sees them now: whichever run wrote them, they are
+  # left to commit until a PR takes them.
+  uncommitted="$(git -C "$project" status --porcelain --untracked-files=all -- .gitignore \
+    .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md | cut -c4- | LC_ALL=C sort \
+    | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')"
+  if [ -n "$uncommitted" ]; then
+    item "Commit these files, which the squad writes and git shows as not committed, through a PR: $uncommitted"
+  fi
+  [ "$items" -gt 0 ] || echo "  nothing"
 fi
-case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
-  AGENTS.md|./AGENTS.md) ;;
-  *) item "Make CLAUDE.md a symlink to AGENTS.md (ln -s AGENTS.md CLAUDE.md), once its content is in AGENTS.md" ;;
-esac
-if ! lists_a_command "$project/.agent-squad-checks"; then
-  item "Write .agent-squad-checks: the commands the project's CI runs, one per line; until it lists one the gate refuses every push"
-fi
-# The squad's files that belong in git, as git sees them now: whichever run wrote them, they are
-# left to commit until a PR takes them.
-uncommitted="$(git -C "$project" status --porcelain --untracked-files=all -- .gitignore \
-  .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md | cut -c4- | LC_ALL=C sort \
-  | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')"
-if [ -n "$uncommitted" ]; then
-  item "Commit these files, which the squad writes and git shows as not committed, through a PR: $uncommitted"
-fi
-[ "$items" -gt 0 ] || echo "  nothing"
 
 # 9. A first install ends with what comes next, in the README's own words (Quick start, steps 2
 #    and 3), with the project's name in the sessions' names (agent-squad #262). The name is the
@@ -962,11 +966,12 @@ session_word() {
 if [ "$previous" = none ]; then
   echo
   echo "Next steps:"
-  echo "- Start three Claude Code sessions in your project's folder, each in its own terminal, named after its role and your project:"
+  echo "- Start three Claude Code sessions in your project's folder, each in its own terminal:"
   for role in CTO DEV QA; do
     printf '    claude -n %s\n' "$(session_word "$role")"
   done
-  echo "  If you like, give each session the colour the squad board gives its role: /color yellow in the CTO's, /color blue in DEV's and /color green in QA's."
+  echo "  If you like, give each session its colour on the squad board: /color yellow in the CTO's,"
+  echo "  /color blue in DEV's and /color green in QA's."
   echo "- Tell the CTO: \"Follow .agent-squad/playbook/BOOTSTRAP.md.\""
 fi
 
