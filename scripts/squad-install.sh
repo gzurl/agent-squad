@@ -912,11 +912,16 @@ done
   || say worktrees "created $(listed "${created[@]}") in .agent-squad/worktrees/, detached at origin/$base"
 [ "${#kept[@]}" -eq 0 ] || say worktrees "kept $(listed "${kept[@]}") in .agent-squad/worktrees/, already there"
 
-# 8. What only the CTO can do: the project's own tracked files. The list is the CTO's. A first
-#    install prints none: its output ends with the next steps, and the CTO finds what is left with
-#    --check while following BOOTSTRAP.md (agent-squad #267). Every later run prints it, for the
-#    CTO who upgrades with /squad-upgrade or runs the installer again.
-if [ "$previous" != none ]; then
+# 8. What only the CTO can do: the project's own tracked files. The run ends one of two ways,
+#    chosen by whether the squad is set up, that is whether AGENTS.md imports the charter, not by
+#    whether this is the first install (agent-squad #271). Until it is set up, a run prints no By
+#    hand list and ends with the next steps (section 9), whether it is the first, a second or an
+#    upgrade: the CTO finds what is left with --check while following BOOTSTRAP.md
+#    (agent-squad #267). Once it is set up, a run prints the list, for the CTO who upgrades with
+#    /squad-upgrade or runs the installer again, and no next steps.
+set_up=0
+imports_charter "$project/AGENTS.md" && set_up=1
+if [ "$set_up" -eq 1 ]; then
   echo
   echo "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
   items=0
@@ -924,11 +929,6 @@ if [ "$previous" != none ]; then
     items=$((items + 1))
     printf '  %d. %s\n' "$items" "$1"
   }
-  if ! imports_charter "$project/AGENTS.md"; then
-    # The one source of the Squad section is the playbook's template of AGENTS.md, which the CTO
-    # reads.
-    item "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word: it imports the charter into every session"
-  fi
   case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
     AGENTS.md|./AGENTS.md) ;;
     *) item "Make CLAUDE.md a symlink to AGENTS.md (ln -s AGENTS.md CLAUDE.md), once its content is in AGENTS.md" ;;
@@ -947,11 +947,12 @@ if [ "$previous" != none ]; then
   [ "$items" -gt 0 ] || echo "  nothing"
 fi
 
-# 9. A first install ends with what comes next, in the README's own words (Quick start, steps 2
-#    and 3), with the project's name in the sessions' names (agent-squad #262). The name is the
-#    main checkout's folder, quoted for the shell as a pasted line is read: in double quotes, as the
-#    README writes them, or in single quotes when it holds a `!`, which an interactive bash or zsh
-#    expands even inside double quotes (agent-squad #267). An upgrade has none of it.
+# 9. A run before the squad is set up ends with what comes next, in the README's own words (Quick
+#    start, steps 2 and 3), with the project's name in the sessions' names (agent-squad #262,
+#    #271). The name is the main checkout's folder, quoted for the shell as a pasted line is read:
+#    in double quotes, as the README writes them, or in single quotes when it holds a `!`, which an
+#    interactive bash or zsh expands even inside double quotes (agent-squad #267). A run once the
+#    squad is set up has none of it.
 # `session_word <role>` prints the quoted argument of `claude -n` for that role.
 session_word() {
   local word
@@ -963,7 +964,7 @@ session_word() {
     printf '"%s"' "$word"
   fi
 }
-if [ "$previous" = none ]; then
+if [ "$set_up" -eq 0 ]; then
   echo
   echo "Next steps:"
   echo "- Start three Claude Code sessions in your project's folder, each in its own terminal:"

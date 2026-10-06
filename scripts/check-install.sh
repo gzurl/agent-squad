@@ -298,16 +298,16 @@ for agent in dev qa; do
   check "worktrees/$agent is a linked worktree detached at origin/main" \
     detached_at "$project" "$squad/worktrees/$agent" main
 done
-# The output (agent-squad #262): one line per step, the By hand list said to be the CTO's, the Squad
-# section named rather than printed, and a first install that ends with the README's next steps.
+# The output (agent-squad #262): one line per step, and a first install that ends with the README's
+# next steps.
 commands_count="$(find "$squad/playbook/commands" -name 'squad-*.md' | wc -l | tr -d ' ')"
 check "the $commands_count commands are said in one line, with their number" \
   bash -c '[ "$(grep -c "^install: command " <<<"$1")" -eq 1 ] && grep -qxF "install: command    wrote the $2 squad commands into .claude/commands/" <<<"$1"' \
   _ "$out" "$commands_count"
 check ".gitignore, the templates and the worktrees take one line each" \
   bash -c 'for step in .gitignore templates worktrees; do [ "$(grep -cF "install: $step " <<<"$1")" -eq 1 ] || exit 1; done' _ "$out"
-# A first install prints no By hand list, nor any line about it: what is left, --check says to the CTO
-# who follows BOOTSTRAP.md (agent-squad #267).
+# A first install, the squad not set up yet, prints no By hand list, nor any line about it: what is
+# left, --check says to the CTO who follows BOOTSTRAP.md (agent-squad #267, #271).
 check "a first install prints no By hand list" lacks "$out" "By hand"
 check "nor the Squad section's text" lacks "$out" "The squad section this test expects, first line."
 check "and ends with the next steps, the project's name in the sessions' names" \
@@ -334,12 +334,10 @@ check "a second run adds one line to install.log" [ "$(log_lines "$project")" -e
 check "which says $tag_a -> $tag_a" log_ends_with "$project" "$tag_a -> $tag_a"
 check "a second run reports every step as already done" \
   matches_none "$out" "^install: [^ ]+ +(installed|added|wrote|rewrote|created|recorded|kept the project)"
-check "and shows no next steps, which are for a first install" lacks "$out" "Next steps:"
-check "and prints the By hand list, which says it is the CTO's" \
-  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
-check "which names the Squad section of the playbook's templates/AGENTS.md" \
-  contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md, word for word"
-check "without printing its text" lacks "$out" "The squad section this test expects, first line."
+# The squad is not set up yet, AGENTS.md not importing the charter: the run ends as a first install
+# does (agent-squad #271).
+check "a second run before the setup ends with the next steps again" ends_with_next_steps "$out" project
+check "and prints no By hand list" lacks "$out" "By hand"
 check "and says .gitignore, the commands, the templates and the worktrees in one line each" \
   bash -c 'for step in .gitignore command templates worktrees; do [ "$(grep -cF "install: $step " <<<"$1")" -eq 1 ] || exit 1; done' _ "$out"
 
@@ -391,9 +389,8 @@ runtime_before="$(runtime_state)"
 out="$("$squad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$project" "$tag_b" 2>&1)"
 code=$?
 check "an upgrade exits 0" [ "$code" -eq 0 ]
-check "an upgrade shows no next steps" lacks "$out" "Next steps:"
-check "and its By hand list is the CTO's" \
-  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
+check "an upgrade before the setup ends with the next steps" ends_with_next_steps "$out" project
+check "and prints no By hand list" lacks "$out" "By hand"
 check "the playbook is now vb, file for file (one changed, one removed, one added)" \
   same_tree "$squad/playbook" "$lab/vb"
 check "worktrees/, handoff/ and evidence/ are untouched" [ "$runtime_before" = "$(runtime_state)" ]
@@ -837,10 +834,23 @@ mended "$project/AGENTS.md"
 
 check "with every breakage undone, --check passes again" check_reports
 
+# 14b. Once the squad is set up, AGENTS.md importing the charter, a run prints the By hand list, for
+#      the CTO, and no next steps (agent-squad #271).
+out="$("$squad/playbook/scripts/squad-install.sh" --source "$lab/vb" "$project" "$tag_b" 2>&1)"
+code=$?
+check "a run once the squad is set up exits 0" [ "$code" -eq 0 ]
+check "and prints the By hand list, which says it is the CTO's" \
+  has_line "$out" "By hand, for the CTO, who does it while following BOOTSTRAP.md or /squad-upgrade:"
+check "which ends the output, with an item or nothing" \
+  bash -c 'tail -n 1 <<<"$1" | grep -qE "^  ([0-9]+\. |nothing$)"' _ "$out"
+check "and shows no next steps" lacks "$out" "Next steps:"
+
 # 15. By hand lists the squad's tracked files that are not committed yet, whatever run wrote them,
 #     and none once they are committed (#49).
 target="$(new_project uncommitted)" || exit 2
 "$install" "$target" "$tag_a" >/dev/null 2>&1
+# Set up, so that a run prints the list (agent-squad #271); AGENTS.md is not one of the files it lists.
+printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$target/AGENTS.md"
 out="$("$install" "$target" "$tag_a" 2>&1)"
 commit_item="$(grep 'Commit these files' <<<"$out")"
 check "a second run still lists the files the first one wrote and nobody committed" \
@@ -1020,18 +1030,13 @@ out="$("$install" "$target" "$tag_a" 2>&1)"
 code=$?
 check "a default branch the clone does not have yet makes the installer exit 1, asking for another run" \
   bash -c '[ "$1" -eq 1 ] && grep -qF "because origin/main does not exist yet; run again once it does" <<<"$2"' _ "$code" "$out"
-# A tree without the issue template, or whose template of AGENTS.md has no Squad section.
+# A tree without the issue template.
 rm -rf "$lab/partial" && mkdir -p "$lab/partial" && cp -pR "$lab/vb/." "$lab/partial/"
 rm "$lab/partial/.github/ISSUE_TEMPLATE/task.md"
-printf '# AGENTS.md\n\nNo section of the squad here.\n' > "$lab/partial/templates/AGENTS.md"
 target="$(new_project partial-tree)" || exit 2
 out="$("$install" --source "$lab/partial" "$target" "$tag_b" 2>&1)"
 check "a tree without the issue template skips it, saying so" \
   contains "$out" "templates  .github/ISSUE_TEMPLATE/task.md is not in the playbook, skipped"
-# Its By hand list, which a second run prints (a first install prints none, agent-squad #267).
-out="$("$install" --source "$lab/partial" "$target" "$tag_b" 2>&1)"
-check "and a template of AGENTS.md without a Squad section is named, not printed" \
-  contains "$out" "Add the Squad section of .agent-squad/playbook/templates/AGENTS.md to AGENTS.md"
 
 # 18. A squad command the playbook no longer has, as after a rename (#188), is removed on the next
 #     install, saying so; one the project tracks is its own, and stays.
