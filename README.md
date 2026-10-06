@@ -119,11 +119,11 @@ details).
 I have been programming since I was seven (oh boy, those wonderful years of BASIC and assembler on
 an 8-bit ZX Spectrum!), and I have been a software engineer since 2003. Recently, generative AI has
 changed the way we build software forever. First came GitHub Copilot, with its auto-completed
-blocks, then ChatGPT, with snippets to paste into my IDE. Then came **Claude Code**, and it changed
-my relationship with software development radically. Writing code was no longer my main value as an
-engineer. I had to raise the level where I add value: organising the AI's work, knowing what has to
-be done, why, and when to do it. It also meant learning to talk efficiently to the AI to really get
-what I want.
+blocks, then ChatGPT, with snippets to paste into my IDE. Then came **Claude Code**, which hit like
+the meteorite that ended the age of the dinosaurs: the age of writing software by hand was over.
+Code was no longer my main value as an engineer. I had to raise the level where I add value:
+organising the AI's work, knowing what has to be done, why, and when to do it. It also meant
+learning to talk efficiently to the AI to really get what I want.
 
 With Claude Code I went through several stages: a single session in the terminal, then desktop
 interfaces, then back to the terminal ([iTerm2](https://iterm2.com), then
@@ -140,8 +140,8 @@ decisions, plus my own feedback, to the other. The `SendMessage` tool, which let
 each other, took me out of the middle (I was no longer the bottleneck-man-in-the-middle). But the
 experience was far from perfect: on a given feature, the two agents could not agree on whether the
 work was good enough (the famous P2s and P3s of one model reviewing another), and they would get
-stuck in a pointless loop that only burned tokens. That led to the last step: DEV and QA agents
-needed a boss, and not me, but an AI-agent CTO.
+stuck in a pointless loop that only burned tokens. That led to the last step: they needed a boss.
+Not me: an AI CTO.
 
 That is how **agent-squad**'s three-agent model was born. I play the CEO, or product manager, of a
 small team: a CTO, a developer and a QA. I only talk to the CTO, about vision, product, software
@@ -151,9 +151,12 @@ the source of truth lives on GitHub, where I, as the CEO, can step in whenever I
 in [SQUAD.md](SQUAD.md) comes from something that went wrong on a real project, and the rules that
 matter most are enforced by scripts.
 
+By the way, **agent-squad** has built itself: its own squad planned, wrote and reviewed it. I only
+set the direction.
+
 **agent-squad** is my own, very personal take on how to build software today with Git, GitHub and
-Claude Code. I am sure it has plenty of flaws and limits, which is why I am making it public, for
-anyone who wants to lend a hand and contribute.
+Claude Code. I am sure it has plenty of flaws and limits. Try it, break it, and tell me what you
+think.
 
 
 ## 🔭 Overview
