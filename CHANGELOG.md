@@ -1,5 +1,24 @@
 # Changelog
 
+## v46 — 2026-10-06
+- **A simpler install, coherent with the README** (#262, #267), after the CEO's first install in a
+  new project.
+  - A first install ends with the next steps of *Quick start*: the three `claude -n` lines with the
+    project's name, the optional `/color`, and the sentence for the CTO. It prints no *By hand*
+    list: the CTO finds what is left with `--check`, as `BOOTSTRAP.md` now says.
+  - A later run, a second one or an upgrade, prints *By hand, for the CTO, …* and no next steps.
+  - The output is shorter, with one line each for `.gitignore`, the commands, the templates and the
+    worktrees.
+  - A folder name holding a `!` is printed in single quotes, so that a pasted line works.
+  - *Quick start* reads like the output, and `/color` is optional there and in `BOOTSTRAP.md`.
+- **The band shows ⚙️** (#264) while a session's turn has ended and a shell it started in the
+  background still runs. It used to show 💤. Meanwhile the session reads messages, since no turn
+  runs.
+- **§3:** the installer's PR names each item the installer left to the CTO, since a first install
+  prints no *By hand* list. `BOOTSTRAP.md` row 0 names *Quick start*, where it named the README's
+  *Install*, a section gone since v44.
+- Restart the three sessions to load the new board.
+
 ## v45 — 2026-10-05
 - **agent-squad is public** (#62).
   - The README installs it with `curl`, from `raw.githubusercontent.com`.
