@@ -302,7 +302,8 @@ The states:
 - ⏳ working;
 - 👀 working, for QA, who reviews;
 - ✋ waiting for you, on a permission or a question, with a notice in the CTO's session;
-- ⚙️ its turn ended with a shell still running in the background, until the shell ends;
+- ⚙️ its turn ended with a shell still running in the background, until the shell ends; it reads
+  messages meanwhile, since no turn runs;
 - ⏸️ paused, from `/squad-pause` until `/squad-resume` or `/squad-autopilot`;
 - 💤 idle, free for the next request, with no item;
 - ❓ unknown: no state from that session for three minutes.
