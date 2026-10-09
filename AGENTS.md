@@ -54,8 +54,9 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 
 ## Environment facts
 - GitHub account arrangement: **shared**, one account (`gzurl`) for the three agents.
-- `main` protection: **protected on GitHub**: a PR required, the `check` and `coverage` status
-  checks, conversation resolution, no force-push and no deletion, with no bypass, admins included.
+- `main` protection: **protected on GitHub**: a PR required, the `checks`, `install`, `gates`,
+  `mods` and `coverage` status checks (CI's five jobs), conversation resolution, no force-push and
+  no deletion, with no bypass, admins included.
   It requires no approvals, since the agents share one account: QA's text verdict and the merge
   gate hold that gate. The pre-push gate also refuses pushes to `main`; an exception approved by
   the CEO (§2.3) would need the CEO to lift the protection for it.

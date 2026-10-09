@@ -43,15 +43,22 @@ measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
 # 1. Each test under kcov, which keeps the bash files whose path contains /<name> of a measured
 #    script: the scripts, their copies, and other files of those names, which step 2 tells apart.
 #    Each test's exit status goes to runs/<test>.status, and the root it ran in to runs/root, so
-#    that --summary-only can work from them elsewhere.
+#    that --summary-only can work from them elsewhere. The tests run side by side (agent-squad
+#    #245), under job control: without it, a command started in the background ignores SIGINT,
+#    and so would every command of its test, such as the --check that check-install.sh interrupts.
 if ! $summary_only; then
   patterns="$(printf '/%s,' "${measured[@]##*/}")"
   printf '%s\n' "$root" > "$out/runs/root"
+  set -m
   for test in scripts/check-*.sh; do
     name="$(basename "$test" .sh)"
-    kcov --include-pattern="${patterns%,}" "$out/runs/$name" "$test" >"$out/runs/$name.log" 2>&1 </dev/null
-    echo "$?" > "$out/runs/$name.status"
+    (
+      kcov --include-pattern="${patterns%,}" "$out/runs/$name" "$test" >"$out/runs/$name.log" 2>&1 </dev/null
+      echo "$?" > "$out/runs/$name.status"
+    ) &
   done
+  set +m
+  wait
 fi
 run_root="$(cat "$out/runs/root" 2>/dev/null)" \
   || { echo "ci-coverage: $out/runs holds no run of this script" >&2; exit 1; }
