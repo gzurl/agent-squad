@@ -1371,8 +1371,8 @@ for i in "${!groups[@]}"; do
   code=$?
   echo "check-install: $group ($(cat "$labs/$group.seconds" 2>/dev/null || echo "?") s)" >&2
   cat "$labs/$group.log" >&2
-  grep -qE '^  (ok|FAILED)  ' "$labs/$group.log" || { fail "$group ran no check"; code=1; }
-  [ "$code" -eq 0 ] || [ "$code" -eq 1 ] || fail "$group stopped before its end, with exit $code"
+  grep -qE '^  (ok|FAILED)  ' "$labs/$group.log" || fail "$group ran no check"
+  [ "$code" -le 1 ] || fail "$group stopped before its end, with exit $code"
   [ "$code" -le "$status" ] || status="$code"
 done
 for group in $(compgen -A function cases_); do
