@@ -5,15 +5,19 @@ on:
   push:
     branches: [main]
 
+# The checks run in four jobs side by side, so that a PR waits for the slowest job, not for the sum
+# of every check (agent-squad #245); coverage, a fifth, runs them all again under kcov. Each
+# scripts/check-*.sh is the run: of one step, as scripts/check-ci.sh checks.
 jobs:
-  check:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The runner's image has shellcheck; apt installs it only on one that does not.
       - name: Shell syntax and shellcheck
         run: |
           for f in scripts/*.sh .githooks/* install.sh; do bash -n "$f"; done
-          sudo apt-get install -y -qq shellcheck >/dev/null
+          command -v shellcheck >/dev/null || sudo apt-get install -y -qq shellcheck >/dev/null
           shellcheck scripts/*.sh .githooks/* install.sh
       - name: Relative links, images and anchors resolve
         run: scripts/check-links.sh
@@ -21,16 +25,6 @@ jobs:
         run: scripts/check-link-checker.sh
       - name: Charter version matches the changelog
         run: scripts/check-version.sh
-      - name: The pre-push gate behaves as the charter says
-        run: scripts/check-gate.sh
-      - name: The merge gate stops when a PR is behind main on a file it changes
-        run: scripts/check-merge-gate.sh
-      - name: The compaction hooks keep their snapshots in the main checkout
-        run: scripts/check-handoff.sh
-      - name: The installer installs, upgrades and refuses as it says
-        run: scripts/check-install.sh
-      - name: install.sh installs the chosen tag with that tag's own installer
-        run: scripts/check-one-line-install.sh
       - name: No squad script filters gh by label
         run: scripts/check-gh-filters.sh
       - name: The token report counts each response once and keeps its history
@@ -41,6 +35,31 @@ jobs:
         run: scripts/check-coverage.sh
       - name: The stall detector finds who owns each stalled next step
         run: scripts/check-stalls.sh
+
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The installer installs, upgrades and refuses as it says
+        run: scripts/check-install.sh
+      - name: install.sh installs the chosen tag with that tag's own installer
+        run: scripts/check-one-line-install.sh
+
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The pre-push gate behaves as the charter says
+        run: scripts/check-gate.sh
+      - name: The merge gate stops when a PR is behind main on a file it changes
+        run: scripts/check-merge-gate.sh
+      - name: The compaction hooks keep their snapshots in the main checkout
+        run: scripts/check-handoff.sh
+
+  mods:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Claude Code, for the mods' validation and tests
         run: npm install -g --no-fund --no-audit @anthropic-ai/claude-code@2.1.289
       - name: The squad's mods validate, pass their tests and call nothing they must not
@@ -52,12 +71,11 @@ jobs:
   # no figure fails the build, and nothing is sent outside GitHub.
   coverage:
     runs-on: ubuntu-latest
+    env:
+      # What kcov needs to be built, and the libraries it then runs with.
+      KCOV_DEPS: binutils-dev cmake libcurl4-openssl-dev libdw-dev libelf-dev libiberty-dev libssl-dev zlib1g-dev
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: kcov's build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq binutils-dev cmake libcurl4-openssl-dev libdw-dev libelf-dev libiberty-dev libssl-dev zlib1g-dev >/dev/null
       - name: kcov v43, built once and cached
         id: kcov
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -67,10 +85,22 @@ jobs:
       - name: Build kcov v43
         if: steps.kcov.outputs.cache-hit != 'true'
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq $KCOV_DEPS >/dev/null
           git clone -q https://github.com/SimonKagstrom/kcov "$RUNNER_TEMP/kcov"
           git -C "$RUNNER_TEMP/kcov" checkout -q a39874f938ce13f7a65f253120d1ec946b349ffe
           cmake -S "$RUNNER_TEMP/kcov" -B "$RUNNER_TEMP/kcov/build" -DCMAKE_INSTALL_PREFIX="$HOME/kcov" >/dev/null
           make -s -C "$RUNNER_TEMP/kcov/build" -j"$(nproc)" install >/dev/null
+      # The cached kcov runs with the runner's own libraries; apt installs them only when one is
+      # missing, as on a runner whose image changed.
+      - name: kcov's libraries
+        run: |
+          missing="$(ldd "$HOME/kcov/bin/kcov" | grep 'not found' || true)"
+          if [ -n "$missing" ]; then
+            printf 'kcov lacks, so apt installs its dependencies:\n%s\n' "$missing"
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq $KCOV_DEPS >/dev/null
+          fi
       - name: Claude Code, which scripts/check-mods.sh runs
         run: npm install -g --no-fund --no-audit @anthropic-ai/claude-code@2.1.289
       - name: Coverage of the scripts while the checks run
