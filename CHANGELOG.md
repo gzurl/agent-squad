@@ -1,5 +1,20 @@
 # Changelog
 
+## v48 — 2026-10-10
+- **`--check` works on Windows with Git Bash** (#277, from #276 by @lauverrec, the first report from
+  outside the squad).
+  - The gate's self-test makes its lab with a plain `mkdir` under `umask 077`, where it used
+    `mkdir -m 700`, whose separate mode step fails on NTFS. The lab is still closed to others
+    (mode 700) on macOS and Linux.
+  - `BOOTSTRAP.md` row 10 says that on Windows `CLAUDE.md` as a link needs `core.symlinks=true`
+    and Developer Mode.
+  - The README's *Requirements* says that macOS and Linux are tested, and Windows with Git Bash is
+    best effort.
+- **This repository's CI takes about half the time** (#245): about 50 s per pull request, where it
+  took 100 to 120. The installer's test runs its cases side by side, and CI runs five jobs in
+  parallel. Only this repository's own tests and CI change, so projects see no difference.
+- No charter rule changes.
+
 ## v47 — 2026-10-06
 - **The installer ends with the next steps until the squad is set up** (#271), not only on a first
   install. The CEO found the gap in a test project installed the day before and never set up: a
