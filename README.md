@@ -327,6 +327,8 @@ the main checkout; the same line with `enable` turns it back on.
 - **A GitHub repository** for your project.
 - **The GitHub CLI, `gh`**, logged in with the `repo` and `workflow` scopes.
 - **bash**, **git** 2.31 or later, **jq** and **tar**.
+- **macOS or Linux.** The squad is tested on both, and on Linux in CI. Windows with Git Bash is
+  best effort: it is untested in CI.
 
 Before it touches anything, the installer checks that `gh`, git, jq and tar are there, and that
 `gh` is logged in and can read `gzurl/agent-squad`. If something is missing, it stops and says

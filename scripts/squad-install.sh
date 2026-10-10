@@ -246,7 +246,10 @@ gate_refusal() {
   # Its name is fixed before the directory exists, under TMPDIR, so that an interrupt at any moment
   # finds in the trap exactly the sandbox or nothing: not TMPDIR itself, and never a directory made
   # but not yet named, as mktemp's is until it prints its path (agent-squad #71). mkdir either makes
-  # the directory or fails, so the name is this run's alone.
+  # the directory or fails, so the name is this run's alone, and a failure leaves nothing to remove.
+  # It is closed to others from the start by the umask, not by mkdir -m: GNU mkdir -m sets the mode
+  # after making the directory, which fails on NTFS under Git Bash and left the directory behind
+  # (agent-squad #277).
   lab="${TMPDIR:-/tmp}"
   lab="${lab%/}/squad-check.$$.$RANDOM$RANDOM"
   # The sandbox runs as a job with a process group of its own, which everything it starts inherits,
@@ -268,7 +271,7 @@ gate_refusal() {
     rm -rf "$lab"
   }
   trap 'clear_sandbox "${!:-}"; exit 130' INT TERM HUP
-  if ! mkdir -m 700 "$lab" 2>/dev/null; then
+  if ! (umask 077 && mkdir "$lab") 2>/dev/null; then
     trap - INT TERM HUP
     echo "cannot create a temporary directory"
     return
