@@ -978,6 +978,26 @@ chmod +x "$lab/no-init/git"
 check "a gate check whose sandbox git cannot make says so, and does not blame the gate" \
   env PATH="$lab/no-init:$PATH" bash -c "$(declare -f check_reason); install=\"\$1\" project=\"\$2\"; check_reason \"\$3\" \"\$4\"" _ \
   "$install" "$target" "$item_gate" "cannot build a throw-away repository to test the gate in"
+# A mkdir that makes the directory but cannot set its mode, as on NTFS under Git Bash, where mkdir -m
+# then exits 1 (agent-squad #277): the gate check still runs, leaves no lab behind, and its lab is
+# closed to others as before. Its git writes down the mode of the lab each repository is made in.
+mkdir -p "$lab/no-mode" "$lab/mode-tmp"
+printf '%s\n' '#!/usr/bin/env bash' \
+  '# mkdir as on NTFS under Git Bash: given a mode, it makes the directory and cannot set the mode.' \
+  'args=() mode=""' \
+  'while [ $# -gt 0 ]; do' \
+  '  case "$1" in -m) mode=yes; shift 2 ;; -m*) mode=yes; shift ;; *) args+=("$1"); shift ;; esac' \
+  'done' \
+  "$(printf '%q' "$(command -v mkdir)")"' "${args[@]}" || exit' \
+  '[ -z "$mode" ]' > "$lab/no-mode/mkdir"
+printf '#!/usr/bin/env bash\n[ "${1:-}" = init ] && ls -ld "$(dirname "${!#}")" | cut -c1-10 >> %q\nexec %q "$@"\n' \
+  "$lab/lab-modes.txt" "$(command -v git)" > "$lab/no-mode/git"
+chmod +x "$lab/no-mode/mkdir" "$lab/no-mode/git"
+check "a mkdir that cannot set a mode, as on NTFS under Git Bash, does not fail the gate item" \
+  contains "$(TMPDIR="$lab/mode-tmp" PATH="$lab/no-mode:$PATH" "$install" --check "$target" 2>&1)" "check: ok      $item_gate"
+check "and leaves no lab behind" [ -z "$(find "$lab/mode-tmp" -name 'squad-check.*')" ]
+check "and the lab it tests the gate in is closed to others, as before" \
+  bash -c '[ -s "$1" ] && ! grep -vqxF "drwx------" "$1"' _ "$lab/lab-modes.txt"
 # An upgrade whose new playbook cannot be moved in place keeps the installed one.
 mkdir -p "$lab/no-mv"
 printf '#!/usr/bin/env bash\ncase "${1:-}" in */playbook.new.*) exit 1 ;; esac\nexec %q "$@"\n' "$(command -v mv)" > "$lab/no-mv/mv"
