@@ -344,6 +344,16 @@ nothing else for you to do; the CTO asks you to compact the sessions only after 
 rewrites much of the charter. The upgrade also moves the squad board to the new release, and
 keeps it off if you turned it off. The release notes are in [CHANGELOG.md](CHANGELOG.md).
 
+**To remove the squad from a project,** run `.agent-squad/playbook/scripts/squad-uninstall.sh .`
+from its main checkout, with `--dry-run` first to see what it would do.
+- **What it removes:** what the installer wrote outside git. That is the hooks, the commands, the pre-push shim (your own pre-push goes back in place), the board's mods, the worktrees and `.agent-squad/`.
+- **What it keeps:** the squad's records (compaction snapshots, review evidence, token history), unless you add `--records`.
+- **When it stops:** while a worktree holds work that is not committed or not pushed, it removes nothing.
+- **What it leaves:** a list of the tracked files the squad added, for the CTO to remove through a PR.
+
+Removing `.agent-squad/` by hand instead leaves the hooks behind in `.claude/settings.local.json`,
+failing at every session start.
+
 
 ## 🗂️ What goes where
 
