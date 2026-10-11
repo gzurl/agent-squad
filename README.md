@@ -347,7 +347,7 @@ keeps it off if you turned it off. The release notes are in [CHANGELOG.md](CHANG
 **To remove the squad from a project,** run `.agent-squad/playbook/scripts/squad-uninstall.sh .`
 from its main checkout, with `--dry-run` first to see what it would do.
 - **What it removes:** what the installer wrote outside git. That is the hooks, the commands, the pre-push shim (your own pre-push goes back in place), the board's mods, the worktrees and `.agent-squad/`.
-- **What it keeps:** the squad's records (compaction snapshots, review evidence, token history), unless you add `--records`.
+- **What it keeps:** the squad's records (compaction snapshots, review evidence, token history), and what a worktree held that git ignores, such as a `.env`, which it moves into `.agent-squad/kept/`. `--records` removes them too.
 - **When it stops:** while a worktree holds work that is not committed or not pushed, it removes nothing.
 - **What it leaves:** a list of the tracked files the squad added, for the CTO to remove through a PR.
 

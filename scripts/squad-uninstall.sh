@@ -11,7 +11,9 @@
 #   (handoff/), the review evidence (evidence/) and the token history (tokens.tsv) are records: they
 #   are kept in .agent-squad/, unless --records is given.
 # It never loses work: while a worktree holds changes that are not committed, or commits that no
-# remote branch holds, it refuses, names them, and removes nothing. It never touches a tracked
+# remote branch holds, it refuses, names them, and removes nothing. What a worktree holds that git
+# ignores, such as a .env or a run's output, is moved aside into .agent-squad/kept/<worktree>/, a
+# rename on the same disk, and kept like the records (agent-squad #263, QA's review of PR #288). It never touches a tracked
 # file: it lists, for the CTO to remove through a PR, the tracked files the squad added. It runs
 # from a copy of itself, so that removing the playbook it lives in does not cut it short, and a
 # second run finds nothing left to remove.
@@ -64,7 +66,7 @@ playbook="$squad/playbook"
 settings="$project/.claude/settings.local.json"
 commands_dir="$project/.claude/commands"
 hooks_dir="$common_dir/hooks"
-records_kept=(handoff evidence tokens.tsv)
+records_kept=(handoff evidence tokens.tsv kept)
 needs_decision=0
 # Whether any step found something of the squad's to remove.
 found=false
@@ -99,6 +101,26 @@ if [ "${#in_the_way[@]}" -gt 0 ]; then
   echo "squad-uninstall: nothing was removed; commit and push that work, or set it aside, then run again" >&2
   exit 1
 fi
+
+# 1b. What each worktree holds that git ignores, as git status collapses it (a wholly ignored
+#     directory is one entry), and where it goes: .agent-squad/kept/<worktree>/, or, when an earlier
+#     uninstall left one there, a name of its own beside it.
+# `ignored_in <worktree>` prints those entries, one per line, relative to the worktree.
+ignored_in() { git -C "$1" status --ignored --porcelain -z 2>/dev/null | tr '\0' '\n' | sed -n 's/^!! //p'; }
+for worktree in ${worktrees[@]+"${worktrees[@]}"}; do
+  [ -d "$worktree" ] || continue
+  entries="$(ignored_in "$worktree")"
+  [ -n "$entries" ] || continue
+  name="$(basename "$worktree")" dest="$squad/kept/$(basename "$worktree")"
+  [ ! -e "$dest" ] || dest="$dest.$(date +%Y%m%dT%H%M%S)"
+  if ! $dry_run; then
+    while IFS= read -r entry; do
+      { mkdir -p "$dest/$(dirname "$entry")" && mv "$worktree/${entry%/}" "$dest/${entry%/}"; } \
+        || { say kept "NOT MOVED: worktrees/$name/$entry; nothing more was removed"; exit 1; }
+    done <<<"$entries"
+  fi
+  say kept "$(did moved "would move") what worktrees/$name holds that git ignores into ${dest#"$project/"}/: $(paste -sd, - <<<"$entries" | sed 's/,/, /g')"
+done
 
 # 2. What the CTO removes through a PR: the tracked files the squad added, read now, while the
 #    playbook is there to compare the templates with.
