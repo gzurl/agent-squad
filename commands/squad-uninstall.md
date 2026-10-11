@@ -25,29 +25,35 @@ installer wrote outside git and nothing else, and it never touches a tracked fil
        evidence and the token history), what the worktrees hold that git ignores, such as a
        `.env`, which it moves into `.agent-squad/kept/` and names on its `kept` lines, and any
        squad-named command the project tracks. `--records` removes all of them but the command;
-     - what git tracks and the uninstaller leaves, from its *By hand* list, which step 4 removes
-       through a PR.
+     - what git tracks and the uninstaller leaves, from its *By hand* list, which step 3 removes
+       through a PR, before anything else.
 2. **Ask the CEO to confirm**, as options with a recommendation and what each costs: remove the
    squad and keep the records, remove it with its records, or keep the squad. Remove nothing until
    the CEO says yes. If the answer is no, stop there.
-3. **Remove it**, on the CEO's yes, from the main checkout: `<uninstaller> .`, with `--records`
-   if the CEO chose it. Read its whole output and its exit status.
-   - **Exit 1 with `refused` lines:** work appeared in a worktree since the dry run, and nothing
-     was removed. Report it to the CEO as in step 1.
+3. **First, one PR for what git tracks,** while the squad is still installed, so that the merge
+   gate, QA's worktree and the pre-push checks are all there for it. It takes the *Squad* section of
+   `AGENTS.md`, the `.gitignore` lines the dry run names (keep `.agent-squad/` unless the CEO chose
+   `--records`: the records stay there), and the GitHub templates if the CEO wants them gone.
+   - **Write it** from a `cto-<topic>` worktree, as for the installer's files (`BOOTSTRAP.md`, *The
+     installer's files*).
+   - **Its description** names the release installed and each item it removes. Like the
+     installer's PR, it needs no issue of its own (§3).
+   - **QA reviews it** as any PR.
+   - **Merge it through `squad-merge-gate.sh`** (§4.9), chaining `git pull --ff-only` in the main
+     checkout, the removal of the `cto-<topic>` worktree, and the deletion of its branch, as for any
+     PR of yours.
+4. **Then remove the squad**, from the main checkout: `<uninstaller> .`, with `--records` if the
+   CEO chose it. Read its whole output and its exit status.
+   - **Exit 1 with `refused` lines:** work appeared in a worktree since the dry run, and nothing was
+     removed. The tracked part is already gone, and the rest stays until the uninstaller runs
+     again, so nothing is lost. Tell the CEO whose work it is, and run it again once that work is
+     committed and pushed, or set aside.
    - **Exit 1 with a `NOT REMOVED` line:** a step needs a decision. Bring it to the CEO as options
      with a recommendation.
-   - **Exit 0:** check that `.agent-squad/` holds no more than the records the CEO kept, that
+   - **Exit 0:** check that `.agent-squad/` holds no more than what the CEO kept, that
      `git worktree list` shows the main checkout alone, and that no `squad-*` command is left in
      `.claude/commands/` but those the project tracks.
-4. **Open one PR for what git tracks:** the *Squad* section of `AGENTS.md`, the `.gitignore` lines
-   the uninstaller names (keep `.agent-squad/` while the records stay there), and the GitHub
-   templates if the CEO wants them gone. Write it from a worktree of its own, as for the
-   installer's files (`BOOTSTRAP.md`, *The installer's files*), but outside the project, since
-   `.agent-squad/worktrees/` went with the uninstall; remove it after the merge. QA reviews it as
-   any PR, on GitHub, since its worktree went too. The merge gate went with the playbook, so check by API what it checks (§4.9): QA's
-   verdict on the PR's head, no open thread, `✅ status:approved` alone, and CI green. Then merge
-   with `gh pr merge <pr> --squash --match-head-commit <the head QA approved>`.
-5. **Once that PR is merged, tell DEV and QA**, one message each, that the squad is gone from this
-   project and that their sessions can close: their worktrees went with it.
-6. **Report to the CEO**, in the CEO's language: what was removed, what was kept, the PR for the
-   tracked files, and that the three sessions, this one included, can now be closed.
+5. **Tell DEV and QA**, one message each, that the squad is gone from this project and that their
+   sessions can close: their worktrees went with it.
+6. **Report to the CEO**, in the CEO's language: the PR for the tracked files, what was removed,
+   what was kept, and that the three sessions, this one included, can now be closed.
