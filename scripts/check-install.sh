@@ -1353,6 +1353,149 @@ cases_mods() {
       and .enabledPlugins == {"lint@team-tools": true, "format@agent-squad-tools": true, "ui@agent-squad-ui-facade": true}' "$tsettings"
 }
 
+# Case 20: the uninstaller (#263), run as a project runs it, from its installed playbook.
+cases_uninstall() {
+  # 20. An install, then an uninstall, leaves the project as it was, but for the tracked files the
+  #     squad added, which it lists for the CTO: the project's own settings, pre-push and tracked
+  #     command stay, the records stay in .agent-squad/ unless --records, a dry run changes
+  #     nothing, and a second run finds nothing left. It runs from a copy of itself, which it
+  #     removes, so that removing the playbook it lives in does not cut it short.
+  target="$(new_project removable)" || exit 2
+  mkdir -p "$target/.claude/commands"
+  jq -n '{permissions: {allow: ["Bash(ls:*)"]},
+    hooks: {PreToolUse: [{matcher: "Bash", hooks: [{type: "command", command: "echo own hook"}]}]},
+    extraKnownMarketplaces: {"agent-squad-tools": {source: {source: "directory", path: "/more-tools"}}}}' \
+    > "$target/.claude/settings.local.json"
+  echo "the project's own command" > "$target/.claude/commands/squad-own.md"
+  git -C "$target" add -f .claude/commands/squad-own.md && git -C "$target" commit -qm "a command of the project's own" || exit 2
+  printf '#!/bin/sh\necho the project pre-push\n' > "$target/.git/hooks/pre-push" && chmod +x "$target/.git/hooks/pre-push"
+  # `outside_squad <project>` lists its files as tree_state does, but for the squad's directory,
+  # the settings, which installs rewrite as jq prints JSON, and the tracked files the squad adds.
+  outside_squad() {
+    tree_state "$1" | grep -vE ' \./(\.agent-squad/|\.claude/settings\.local\.json$|\.gitignore$|\.github/ISSUE_TEMPLATE/task\.md$)'
+  }
+  files_before="$(outside_squad "$target")" hooks_before="$(tree_state "$target/.git/hooks")"
+  settings_before="$(jq -S . "$target/.claude/settings.local.json")"
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  mkdir -p "$target/.agent-squad/handoff" "$target/.agent-squad/evidence/7"
+  echo snapshot > "$target/.agent-squad/handoff/x.md" && echo evidence > "$target/.agent-squad/evidence/7/a.txt"
+  echo "a token record" > "$target/.agent-squad/tokens.tsv"
+  cp "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$lab/uninstall-copy.sh"
+  mkdir -p "$lab/tmp-u"
+  # `uninstall_state` is everything an uninstall may change: the project's files, its git hooks,
+  # its worktrees and its settings.
+  uninstall_state() { project_state "$target"; git -C "$target" worktree list; cat "$target/.claude/settings.local.json" 2>/dev/null; }
+  state="$(uninstall_state)"
+  out="$(TMPDIR="$lab/tmp-u" "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" --dry-run "$target" 2>&1)"
+  code=$?
+  check "a dry run exits 0, says what it would remove, and changes nothing" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "uninstall: squad      would remove .agent-squad/ but for the records" <<<"$2" && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$state" "$(uninstall_state)"
+  out="$(TMPDIR="$lab/tmp-u" "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" 2>&1)"
+  code=$?
+  check "an uninstall run from the playbook it removes exits 0" [ "$code" -eq 0 ]
+  check "and leaves the project's files as they were before the install, but for the tracked ones it lists" \
+    [ "$(outside_squad "$target")" = "$files_before" ]
+  check "and the project's own settings, its hook and its marketplace, without the squad's hooks and mods" \
+    [ "$(jq -S . "$target/.claude/settings.local.json")" = "$settings_before" ]
+  check "and the project's own pre-push back in its place, the shim gone" [ "$(tree_state "$target/.git/hooks")" = "$hooks_before" ]
+  check "and no worktree left" [ "$(git -C "$target" worktree list | wc -l | tr -d ' ')" -eq 1 ]
+  check "and the command the project tracks, saying so" \
+    bash -c '[ -f "$1/.claude/commands/squad-own.md" ] && grep -qF "kept /squad-own, which the project tracks" <<<"$2"' _ "$target" "$out"
+  check "and of .agent-squad/ only the records" \
+    [ "$(find "$target/.agent-squad" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort | tr '\n' ' ')" = "evidence handoff tokens.tsv " ]
+  check "and it lists the tracked files for the CTO: .gitignore's lines and the squad's issue template, not the project's own" \
+    bash -c 'grep -qF ".gitignore'"'"'s lines .agent-squad/, .claude/settings.local.json, .claude/commands/squad-*.md; keep .agent-squad/ while the records stay there" <<<"$1" \
+      && grep -qF ".github/ISSUE_TEMPLATE/task.md, the squad'"'"'s template" <<<"$1" && ! grep -qF PULL_REQUEST_TEMPLATE <<<"$1"' _ "$out"
+  check "and leaves no copy of itself behind" [ -z "$(ls -A "$lab/tmp-u")" ]
+  state="$(uninstall_state)"
+  out="$(TMPDIR="$lab/tmp-u" "$lab/uninstall-copy.sh" "$target" 2>&1)"
+  code=$?
+  check "a second run exits 0, finds nothing left to remove, and changes nothing" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "nothing of the squad'"'"'s is left to remove here" <<<"$2" && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$state" "$(uninstall_state)"
+  out="$(TMPDIR="$lab/tmp-u" "$lab/uninstall-copy.sh" --records "$target" 2>&1)"
+  check "--records removes the records, and .agent-squad/ with them" \
+    bash -c '[ ! -e "$1/.agent-squad" ] && grep -qF "uninstall: squad      removed .agent-squad/" <<<"$2"' _ "$target" "$out"
+}
+
+#   And what it refuses: work in a worktree, a place that is not the main checkout, bad usage. The
+#   hooks as releases before v49 wrote them are the squad's too. What a worktree holds that git
+#   ignores, such as a key in a .env, is moved aside into .agent-squad/kept/ and kept.
+cases_uninstall_refusals() {
+  target="$(new_project unremovable)" || exit 2
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  uninstall="$target/.agent-squad/playbook/scripts/squad-uninstall.sh"
+  state() { project_state "$target"; git -C "$target" worktree list; cat "$target/.claude/settings.local.json" 2>/dev/null; }
+  before="$(state)"
+  echo "work in progress" > "$target/.agent-squad/worktrees/dev/notes.txt"
+  before="$(state)"
+  out="$("$uninstall" "$target" 2>&1)"
+  code=$?
+  check "a worktree with changes not committed stops the uninstall, exit 1, naming them, and nothing is removed" \
+    bash -c '[ "$1" -eq 1 ] && grep -qF "uninstall: refused    worktrees/dev has changes that are not committed: notes.txt" <<<"$2" && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$before" "$(state)"
+  rm "$target/.agent-squad/worktrees/dev/notes.txt"
+  git -C "$target/.agent-squad/worktrees/qa" commit -q --allow-empty -m "a commit no remote holds"
+  before="$(state)"
+  out="$("$uninstall" "$target" 2>&1)"
+  code=$?
+  check "and so does one with a commit that no remote branch holds" \
+    bash -c '[ "$1" -eq 1 ] && grep -qF "uninstall: refused    worktrees/qa has 1 commit(s) that no remote branch holds" <<<"$2" && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$before" "$(state)"
+  git -C "$target/.agent-squad/worktrees/qa" switch -q --detach origin/main
+  out="$("$uninstall" "$target/.agent-squad/worktrees/dev" 2>&1)"
+  code=$?
+  check "a linked worktree is not the main checkout: exit 2" \
+    bash -c '[ "$1" -eq 2 ] && grep -qF "is not the project'"'"'s main checkout" <<<"$2"' _ "$code" "$out"
+  for args in "" "--bogus $target" "--dry-run" "$target extra"; do
+    # shellcheck disable=SC2086 # the arguments are split on purpose
+    "$uninstall" $args >/dev/null 2>&1
+    code=$?
+    check "'$args' is bad usage, exit 2" [ "$code" -eq 2 ]
+  done
+  # What the dev worktree holds that git ignores, a .env with a key and a run's output: the dry run
+  # names it, the run moves it into .agent-squad/kept/dev/ and keeps it (QA's review of PR #288),
+  # and a second run leaves it there.
+  printf '.env\nout/\n' >> "$target/.git/info/exclude"
+  echo "SECRET=1" > "$target/.agent-squad/worktrees/dev/.env"
+  mkdir -p "$target/.agent-squad/worktrees/dev/out" && echo "a result" > "$target/.agent-squad/worktrees/dev/out/results.txt"
+  cp "$uninstall" "$lab/uninstall-again.sh"
+  before="$(state)"
+  out="$("$uninstall" --dry-run "$target" 2>&1)"
+  code=$?
+  check "a dry run names what a worktree holds that git ignores, and where it would go, and moves nothing" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "uninstall: kept       would move what worktrees/dev holds that git ignores into .agent-squad/kept/dev/: .env, out/" <<<"$2" && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$before" "$(state)"
+  # The five hooks as v48 wrote them, beside nothing of the project's: the settings go entirely.
+  old='f="$CLAUDE_PROJECT_DIR"/.agent-squad/playbook/scripts/squad-handoff.sh; if [ -x "$f" ]; then "$f" '
+  jq --arg old "$old" '.hooks = {PreCompact: [{matcher: "manual", hooks: [{type: "command", command: ($old + "save; fi")}]},
+    {matcher: "auto", hooks: [{type: "command", command: ($old + "save; fi")}]}],
+    SessionStart: [{matcher: "startup", hooks: [{type: "command", command: ($old + "startup; else echo missing; fi")}]}]}' \
+    "$target/.claude/settings.local.json" > "$lab/v48-settings.json" && cp "$lab/v48-settings.json" "$target/.claude/settings.local.json"
+  out="$("$uninstall" "$target" 2>&1)"
+  code=$?
+  check "hooks as releases before v49 wrote them are the squad's too: with the mods, the settings go entirely" \
+    bash -c '[ "$1" -eq 0 ] && [ ! -e "$2/.claude" ] && grep -qF "removed .claude/settings.local.json, which held only the squad'"'"'s hooks and mods" <<<"$3"' \
+    _ "$code" "$target" "$out"
+  check "and what the worktree held that git ignores is in .agent-squad/kept/dev/, the .env with its key" \
+    bash -c '[ "$(cat "$1/.agent-squad/kept/dev/.env")" = SECRET=1 ] && [ "$(cat "$1/.agent-squad/kept/dev/out/results.txt")" = "a result" ] && [ ! -e "$1/.agent-squad/worktrees" ]' _ "$target"
+  check "kept like the records, as the output says" \
+    bash -c 'grep -qF "moved what worktrees/dev holds that git ignores into .agent-squad/kept/dev/: .env, out/" <<<"$1" && grep -qF "removed .agent-squad/ but for the records, kept" <<<"$1"' _ "$out"
+  out="$("$lab/uninstall-again.sh" "$target" 2>&1)"
+  code=$?
+  check "and a second run finds nothing left to remove, and leaves the kept files where they are" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "nothing of the squad'"'"'s is left to remove here; its records stay" <<<"$2" && [ "$(cat "$3/.agent-squad/kept/dev/.env")" = SECRET=1 ]' \
+    _ "$code" "$out" "$target"
+  # Installed again and removed again, with another .env: the first kept/dev/ stays as it was, and the
+  # new one goes beside it, under a name of its own.
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  echo "SECRET=2" > "$target/.agent-squad/worktrees/dev/.env"
+  "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" >/dev/null 2>&1
+  check "a later uninstall keeps what an earlier one kept, and puts its own beside it" \
+    bash -c '[ "$(cat "$1/.agent-squad/kept/dev/.env")" = SECRET=1 ] && [ "$(cat "$1"/.agent-squad/kept/dev.*/.env)" = SECRET=2 ]' _ "$target"
+}
+
 # Cases 18 and 18b on names.
 cases_quoted_names() {
   # 18. The next steps quote the project's name for the shell (agent-squad #262): a folder whose name
@@ -1415,6 +1558,8 @@ groups=(
   cases_failure_installs
   cases_leftover_commands
   cases_mods
+  cases_uninstall
+  cases_uninstall_refusals
   cases_quoted_names
 )
 pids=()
