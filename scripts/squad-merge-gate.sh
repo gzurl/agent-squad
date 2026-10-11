@@ -4,8 +4,8 @@
 # SQUAD.md §4.9's command, which reaches this script through the playbook from any worktree,
 #   p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" &&
 #   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
-# cannot merge over an open thread, a stale verdict, a missing label or a second state label, an
-# unsettled body-only finding, a red or absent CI, or a head that moved between the check and the
+# cannot merge over an open thread, a stale verdict, a missing label or a second state label, a
+# needs-ceo label (agent-squad #283), an unsettled body-only finding, a red or absent CI, or a head that moved between the check and the
 # merge. Only the reviews and comments of the repository's owner, its organization's members and
 # its collaborators count (agent-squad #160). When the PR is behind its base, it says what the
 # base changed since (agent-squad #64), and stops when the base changed a file the PR changes too,
@@ -76,10 +76,14 @@ unsettled="$(gh api --paginate --slurp "repos/$repo/issues/$pr/comments" \
 [ "$unsettled" = "0" ] || fail "$unsettled body-only finding(s) without a Settled: line"
 
 # 4. The PR carries the approved status label, and no other of the three state labels: with two, a
-#    reader cannot tell which is current (agent-squad #99).
-states="$(gh api "repos/$repo/pulls/$pr" \
-  --jq '[.labels[].name | select(test("status:(in-review|in-progress|approved)$"))] | "\(length)\t\(join(", "))"')" \
+#    reader cannot tell which is current (agent-squad #99). It carries no needs-ceo either: that
+#    label says the PR waits for the CEO's decision, which a merge would take in the CEO's place
+#    (agent-squad #283). One call reads both: whether a label is needs-ceo, then the states.
+labels="$(gh api "repos/$repo/pulls/$pr" \
+  --jq '[.labels[].name] | [any(endswith("needs-ceo")), map(select(test("status:(in-review|in-progress|approved)$")))]
+    | "\(.[0])\t\(.[1] | length)\t\(.[1] | join(", "))"')" \
   || fail "cannot read the labels of PR #$pr"
+waits_for_ceo="${labels%%$'\t'*}" states="${labels#*$'\t'}"
 case "${states%%$'\t'*}" in
   0|1) ;;
   *) fail "PR carries ${states%%$'\t'*} state labels, where one is the rule: ${states#*$'\t'}. Keep only the current one (✅ status:approved, if QA approved the head) and remove the others" ;;
@@ -88,6 +92,8 @@ case ", ${states#*$'\t'}, " in
   *", ✅ status:approved, "*) ;;
   *) fail "PR does not carry ✅ status:approved" ;;
 esac
+[ "$waits_for_ceo" = false ] \
+  || fail "PR carries 👨🏻‍💼 needs-ceo: it waits for the CEO's decision, which a merge would take in the CEO's place. Write the CEO's answer on the PR (SQUAD.md §3, Decisions are recorded where they last), then remove the label and run the gate again"
 
 # 5. CI ran on the head and every check run succeeded; no runs at all is not green.
 runs="$(gh api "repos/$repo/commits/$head/check-runs" --jq '"\(.check_runs | length) \([.check_runs[] | select(.conclusion != "success")] | length)"')"

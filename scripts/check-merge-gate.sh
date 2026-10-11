@@ -195,6 +195,15 @@ export GATE_LABELS='["📝 docs","✅ status:approved","🟡 P2"]'
 run_gate
 unset GATE_LABELS
 result_unchanged "approved, with labels that are not states"
+#     A PR labelled needs-ceo waits for the CEO's decision, approved or not (#283): the gate stops
+#     it, saying how the label comes off. A label that only contains the name does not count.
+needs_ceo="PR carries 👨🏻‍💼 needs-ceo: it waits for the CEO's decision, which a merge would take in the CEO's place. Write the CEO's answer on the PR"
+labels_refused "approved, but waiting for the CEO" '["✅ status:approved","👨🏻‍💼 needs-ceo"]' "$needs_ceo"
+labels_refused "approved, and needs-ceo without its emoji" '["needs-ceo","✅ status:approved"]' "$needs_ceo"
+export GATE_LABELS='["✅ status:approved","needs-ceo-later"]'
+run_gate
+unset GATE_LABELS
+result_unchanged "approved, with a label that only contains needs-ceo"
 #     A label list that cannot be read stops the gate, and a state is a name that ends in one of the
 #     three: a bare one counts, a name that only contains one does not.
 labels_refused "unreadable label list" unreadable "cannot read the labels of PR #7"
