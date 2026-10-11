@@ -22,8 +22,9 @@ installer wrote outside git and nothing else, and it never touches a tracked fil
      - what it would remove: the hooks, the commands, the pre-push shim, the board's mods, the
        worktrees and `.agent-squad/`;
      - what it would keep: the records in `.agent-squad/` (the compaction snapshots, the review
-       evidence and the token history), which `--records` removes too, and any squad-named
-       command the project tracks;
+       evidence and the token history), what the worktrees hold that git ignores, such as a
+       `.env`, which it moves into `.agent-squad/kept/` and names on its `kept` lines, and any
+       squad-named command the project tracks. `--records` removes all of them but the command;
      - what git tracks and the uninstaller leaves, from its *By hand* list, which step 4 removes
        through a PR.
 2. **Ask the CEO to confirm**, as options with a recommendation and what each costs: remove the
