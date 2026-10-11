@@ -1420,7 +1420,8 @@ cases_uninstall() {
 }
 
 #   And what it refuses: work in a worktree, a place that is not the main checkout, bad usage. The
-#   hooks as releases before v49 wrote them are the squad's too.
+#   hooks as releases before v49 wrote them are the squad's too. What a worktree holds that git
+#   ignores, such as a key in a .env, is moved aside into .agent-squad/kept/ and kept.
 cases_uninstall_refusals() {
   target="$(new_project unremovable)" || exit 2
   "$install" "$target" "$tag_a" >/dev/null 2>&1
@@ -1453,6 +1454,19 @@ cases_uninstall_refusals() {
     code=$?
     check "'$args' is bad usage, exit 2" [ "$code" -eq 2 ]
   done
+  # What the dev worktree holds that git ignores, a .env with a key and a run's output: the dry run
+  # names it, the run moves it into .agent-squad/kept/dev/ and keeps it (QA's review of PR #288),
+  # and a second run leaves it there.
+  printf '.env\nout/\n' >> "$target/.git/info/exclude"
+  echo "SECRET=1" > "$target/.agent-squad/worktrees/dev/.env"
+  mkdir -p "$target/.agent-squad/worktrees/dev/out" && echo "a result" > "$target/.agent-squad/worktrees/dev/out/results.txt"
+  cp "$uninstall" "$lab/uninstall-again.sh"
+  before="$(state)"
+  out="$("$uninstall" --dry-run "$target" 2>&1)"
+  code=$?
+  check "a dry run names what a worktree holds that git ignores, and where it would go, and moves nothing" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "uninstall: kept       would move what worktrees/dev holds that git ignores into .agent-squad/kept/dev/: .env, out/" <<<"$2" && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$before" "$(state)"
   # The five hooks as v48 wrote them, beside nothing of the project's: the settings go entirely.
   old='f="$CLAUDE_PROJECT_DIR"/.agent-squad/playbook/scripts/squad-handoff.sh; if [ -x "$f" ]; then "$f" '
   jq --arg old "$old" '.hooks = {PreCompact: [{matcher: "manual", hooks: [{type: "command", command: ($old + "save; fi")}]},
@@ -1464,6 +1478,22 @@ cases_uninstall_refusals() {
   check "hooks as releases before v49 wrote them are the squad's too: with the mods, the settings go entirely" \
     bash -c '[ "$1" -eq 0 ] && [ ! -e "$2/.claude" ] && grep -qF "removed .claude/settings.local.json, which held only the squad'"'"'s hooks and mods" <<<"$3"' \
     _ "$code" "$target" "$out"
+  check "and what the worktree held that git ignores is in .agent-squad/kept/dev/, the .env with its key" \
+    bash -c '[ "$(cat "$1/.agent-squad/kept/dev/.env")" = SECRET=1 ] && [ "$(cat "$1/.agent-squad/kept/dev/out/results.txt")" = "a result" ] && [ ! -e "$1/.agent-squad/worktrees" ]' _ "$target"
+  check "kept like the records, as the output says" \
+    bash -c 'grep -qF "moved what worktrees/dev holds that git ignores into .agent-squad/kept/dev/: .env, out/" <<<"$1" && grep -qF "removed .agent-squad/ but for the records, kept" <<<"$1"' _ "$out"
+  out="$("$lab/uninstall-again.sh" "$target" 2>&1)"
+  code=$?
+  check "and a second run finds nothing left to remove, and leaves the kept files where they are" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "nothing of the squad'"'"'s is left to remove here; its records stay" <<<"$2" && [ "$(cat "$3/.agent-squad/kept/dev/.env")" = SECRET=1 ]' \
+    _ "$code" "$out" "$target"
+  # Installed again and removed again, with another .env: the first kept/dev/ stays as it was, and the
+  # new one goes beside it, under a name of its own.
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  echo "SECRET=2" > "$target/.agent-squad/worktrees/dev/.env"
+  "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" >/dev/null 2>&1
+  check "a later uninstall keeps what an earlier one kept, and puts its own beside it" \
+    bash -c '[ "$(cat "$1/.agent-squad/kept/dev/.env")" = SECRET=1 ] && [ "$(cat "$1"/.agent-squad/kept/dev.*/.env)" = SECRET=2 ]' _ "$target"
 }
 
 # Cases 18 and 18b on names.
