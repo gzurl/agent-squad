@@ -7,9 +7,14 @@
 # - a PR whose verdict on its head asks for changes: its author, to answer them;
 # - a PR approved on its head: its author, to merge it;
 # - a draft: its author, to finish it;
-# - an issue in progress: the role of its owner label, to carry on; with none, the CTO.
-# The author is the signature on the first line of the PR's description (§6), and only reviews by
-# the repository's owner, its organization's members and its collaborators count (§4.9). An item
+# - an issue in progress: the role of its owner label, to carry on; with none, the CTO;
+# - an issue or a PR opened from outside the squad and not triaged yet, labelled needs-triage or
+#   with no owner label: the CTO, to triage it (agent-squad #281).
+# Outside means an author whose association GitHub reports as neither the repository's owner, nor
+# a member of its organization, nor a collaborator (§3): the account decides, never a signature.
+# So the next steps above follow an issue or a PR from inside only. Inside, a PR's author is the
+# signature on the first line of its description (§6), and only reviews by inside accounts count
+# (§4.9). An outside item counts as quiet from the moment it was opened. An item
 # whose wait is already declared is left out, and nothing is reported about it: one labelled
 # needs-ceo, the CEO's inbox, or status:blocked, whose reason is in its last comment (§3), and a PR
 # whose closing issue is (agent-squad #174, PR #193).
@@ -68,6 +73,10 @@ prs="$(gh pr list --state open --limit 1000 --json number,title,isDraft,headRefO
   || die "cannot read the open pull requests"
 issues="$(gh issue list --state open --limit 1000 --json number,title,labels,updatedAt,url 2>/dev/null)" \
   || die "cannot read the open issues"
+# Who opened each open issue and PR, which only the REST API reports: one array per page.
+opened="$(gh api --paginate --slurp "repos/$repo/issues?state=open&per_page=100" 2>/dev/null)" \
+  || die "cannot read who opened the open issues and pull requests"
+opened="$(jq -ce 'add // []' <<<"$opened" 2>/dev/null)" || die "cannot read who opened the open issues and pull requests"
 verdicts='{}'
 for number in $(jq -r '.[] | select(.isDraft | not) | .number' <<<"$prs"); do
   reviews="$(gh api --paginate --slurp "repos/$repo/pulls/$number/reviews" 2>/dev/null)" \
@@ -84,8 +93,12 @@ done
 #    or with new activity, is forgotten.
 reported="$( [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . || echo '[]')"
 result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdicts "$verdicts" \
-  --argjson sessions "$sessions" --argjson reported "$reported" --argjson now "$now" '
+  --argjson opened "$opened" --argjson sessions "$sessions" --argjson reported "$reported" --argjson now "$now" '
   def local: strflocaltime("%Y-%m-%d %H:%M");
+  # The issues and PRs opened from outside the squad, by number.
+  ($opened | map(select(.author_association | IN("OWNER", "MEMBER", "COLLABORATOR") | not))
+   | map({key: (.number | tostring), value: .}) | from_entries) as $outside
+  | def inside: $outside[.number | tostring] == null;
   # A declared wait: needs-ceo or status:blocked on the item, or on the issue a PR closes, as
   # GitHub names it or as the description says ("Closes #N").
   def declared: any((.labels // [])[].name; endswith("needs-ceo") or endswith("status:blocked"));
@@ -111,9 +124,14 @@ result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdi
   def issue_step:
     ([.labels[].name | capture("owner:(?<role>cto|dev|qa)$").role | ascii_upcase] | first) as $owner
     | if $owner == null then {owner: "CTO", step: "give it an owner"} else {owner: $owner, step: "carry on with it"} end;
-  ([$prs | sort_by(.number)[] | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step]
-   + [$issues | sort_by(.number)[] | select(declared | not) | select(any(.labels[].name; endswith("status:in-progress")))
-      | {item: "#\(.number)", url, updatedAt} + issue_step])
+  # An outside item waits for its triage while it carries needs-triage or no owner label.
+  def untriaged: any(.labels[].name; endswith("needs-triage")) or (any(.labels[].name; test("owner:(cto|dev|qa)$")) | not);
+  ([$prs | sort_by(.number)[] | select(inside) | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step]
+   + [$issues | sort_by(.number)[] | select(inside) | select(declared | not) | select(any(.labels[].name; endswith("status:in-progress")))
+      | {item: "#\(.number)", url, updatedAt} + issue_step]
+   + [$outside | to_entries | sort_by(.key | tonumber)[] | .value | select(declared | not) | select(untriaged)
+      | {item: "\(if .pull_request then "PR " else "" end)#\(.number)", url: .html_url, updatedAt: .created_at,
+         owner: "CTO", step: "triage it: \(.user.login) opened it from outside the squad (\(.author_association))"}])
   | map(select($now - (.updatedAt | fromdateiso8601) >= 1800)
         | . + {since: (.updatedAt | fromdateiso8601 | local), key: "\(.item)|\(.owner)|\(.step)|\(.updatedAt)",
                session: ($sessions[.owner] // "none")}
