@@ -118,7 +118,8 @@ snapshot() {
 # The pre-compact gate. A manual /compact goes through when the last thing the user or another
 # agent did in this session was /squad-save-state, which has the agent write its state on GitHub
 # first; otherwise it is stopped with exit 2 and a line on stderr, which Claude Code shows the
-# user. An automatic compaction is never stopped. A second manual /compact within ten minutes of a
+# user after its own "Compaction blocked by PreCompact hook: [<the hook's command>]:". The line
+# says what to do, and nothing else (agent-squad #269). An automatic compaction is never stopped. A second manual /compact within ten minutes of a
 # stopped one goes through, so that the gate can always be passed. What it cannot read or
 # understand lets the compaction through, saying so: a gate that locks the user out is worse than
 # none. Claude Code gives the trigger in the hook's input, and the transcript's format is not
@@ -174,7 +175,7 @@ compact_gate() {
     return 0
   fi
   mkdir -p "$handoff_dir" 2>/dev/null && echo "$now" > "$blocked_file"
-  echo "squad: run /squad-save-state first, so that this session writes its state on GitHub; then type /compact again. A second /compact within 10 minutes goes ahead without it." >&2
+  echo "Save this session's state first: type /squad-save-state, then /compact." >&2
   exit 2
 }
 
