@@ -109,7 +109,8 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   with `scripts/squad-checks.sh`, and CI runs the same checks (shellcheck from apt instead of
   `uvx`). The pre-push gate and the session hooks are the installed release's, as in any
   project: the shim in `.git/hooks/pre-push` runs `.agent-squad/playbook/.githooks/pre-push`, and
-  the hooks in `.claude/settings.local.json` run `.agent-squad/playbook/scripts/squad-handoff.sh`.
+  the hooks in `.claude/settings.local.json` run `.agent-squad/playbook/scripts/squad-handoff.sh`,
+  through the wrapper `.agent-squad/squad-hook` from v49 on.
   The scripts at the root are the next version's; `scripts/check-*.sh` test them.
 - From the main checkout, `.agent-squad/playbook/scripts/squad-install.sh --check .` verifies this
   installation; after a release, upgrade it like a project does (README, *Upgrade*).
