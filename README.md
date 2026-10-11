@@ -344,8 +344,10 @@ nothing else for you to do; the CTO asks you to compact the sessions only after 
 rewrites much of the charter. The upgrade also moves the squad board to the new release, and
 keeps it off if you turned it off. The release notes are in [CHANGELOG.md](CHANGELOG.md).
 
-**To remove the squad from a project,** run `.agent-squad/playbook/scripts/squad-uninstall.sh .`
-from its main checkout, with `--dry-run` first to see what it would do.
+**To remove the squad from a project,** type `/squad-uninstall` in the CTO's session. The CTO shows
+you what would go and what would stay, removes it when you say yes, and opens the PR for what git
+tracks. With no squad session open, run `.agent-squad/playbook/scripts/squad-uninstall.sh .` from
+the project's main checkout, with `--dry-run` first to see what it would do.
 - **What it removes:** what the installer wrote outside git. That is the hooks, the commands, the pre-push shim (your own pre-push goes back in place), the board's mods, the worktrees and `.agent-squad/`.
 - **What it keeps:** the squad's records (compaction snapshots, review evidence, token history), unless you add `--records`.
 - **When it stops:** while a worktree holds work that is not committed or not pushed, it removes nothing.
@@ -377,7 +379,7 @@ the installer touches only the files listed before it:
 ├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
 ├── .claude/settings.local.json           ignored   the squad's five hooks and its board, next to your settings
-├── .claude/commands/squad-*.md           ignored   the squad's eleven commands
+├── .claude/commands/squad-*.md           ignored   the squad's twelve commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored
     ├── playbook/          the installed release: charter, scripts, templates, mods
@@ -421,6 +423,7 @@ squad on the machine.
 | 💾&nbsp;`/squad-save-state` | any session | Its agent writes its state on GitHub, before you type `/compact` ([When a session's context fills up](#when-a-sessions-context-fills-up)). |
 | 📊&nbsp;`/squad-usage`<br>`/squad-usage-all` | any session | The tokens each agent has used ([How many tokens the agents use](#how-many-tokens-the-agents-use)). |
 | 🔄&nbsp;`/squad-upgrade` | the CTO's session | What a new release changes; installs it when you say yes ([Upgrade](#-upgrade)). |
+| 🧹&nbsp;`/squad-uninstall` | the CTO's session | What removing the squad would do; removes it when you say yes, and opens the PR for the tracked files ([Upgrade](#-upgrade)). |
 
 
 ## ❓ FAQ

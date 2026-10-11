@@ -259,7 +259,7 @@ same_commands() {
     cmp -s "$file" "$1/.claude/commands/$(basename "$file")" || return 1
     count=$((count + 1))
   done
-  [ "$count" -ge 11 ]
+  [ "$count" -ge 12 ]
 }
 # The squad's hook entries run the hooks' wrapper (agent-squad #269); `ours` lists their matchers.
 ours='[.hooks[][] | select(any(.hooks[]; .command | contains("/.agent-squad/squad-hook"))) | .matcher]'
@@ -354,7 +354,7 @@ JSON
   check ".gitignore has .agent-squad/, .claude/settings.local.json and the command" \
     has_lines "$project/.gitignore" ".agent-squad/" ".claude/settings.local.json" \
     ".claude/commands/squad-*.md"
-  check "the squad's eleven commands are in .claude/commands/, as the playbook has them" same_commands "$project"
+  check "the squad's twelve commands are in .claude/commands/, as the playbook has them" same_commands "$project"
   check "the missing issue template was created from the playbook" \
     cmp -s "$squad/playbook/.github/ISSUE_TEMPLATE/task.md" "$project/.github/ISSUE_TEMPLATE/task.md"
   check "the project's own PR template was kept" \

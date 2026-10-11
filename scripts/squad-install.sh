@@ -619,7 +619,7 @@ for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squa
   scripts/squad-install.sh templates/AGENTS.md commands/squad-save-state.md commands/squad-pause.md \
   commands/squad-autopilot.md commands/squad-resume.md commands/squad-upgrade.md \
   commands/squad-pause-all.md commands/squad-autopilot-all.md commands/squad-resume-all.md \
-  commands/squad-usage.md commands/squad-usage-all.md commands/squad-watch.md; do
+  commands/squad-usage.md commands/squad-usage-all.md commands/squad-watch.md commands/squad-uninstall.md; do
   [ -f "$staging/$required" ] \
     || die "the tree of $tag has no $required, so this installer cannot install it (a tag older than this installer?); the installed playbook is unchanged"
 done
@@ -791,7 +791,7 @@ while IFS= read -r name; do
   fi
 done < <(squad_commands)
 total=$((${#wrote[@]} + ${#rewrote[@]} + same))
-# "The 11 squad commands", or "the other 10" when a NOT line has just named one (agent-squad #267).
+# "The 12 squad commands", or "the other 11" when a NOT line has just named one (agent-squad #267).
 counted="the $total squad commands"
 [ "$held" -eq 0 ] || counted="the other $total squad commands"
 [ "$total" -ne 1 ] || counted="${counted% commands} command"
