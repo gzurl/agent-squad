@@ -175,16 +175,29 @@ imports_charter() {
 }
 
 # The five session hooks as the installer writes them (D5 and D10 of agent-squad #23, and #164 for
-# resume). Each command checks that the playbook's script exists, so that a missing playbook is
-# reported to the session instead of failing it.
+# resume). Each runs the hooks' wrapper in .agent-squad/ with its event. Claude Code shows a hook's
+# command in brackets on every line about it, a blocked /compact included, so the command is the
+# shortest that keeps the guard: the guard lives in the wrapper (agent-squad #269).
 # shellcheck disable=SC2016 # expanded by the shell that runs the hook, not here
-handoff='"$CLAUDE_PROJECT_DIR"/.agent-squad/playbook/scripts/squad-handoff.sh'
-# shellcheck disable=SC2016 # same
-missing='echo "Squad: the charter is not installed ($f is missing). Stop and tell the CTO before doing anything else."'
-save_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" save; fi"
-restore_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" restore; else $missing; fi"
-startup_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" startup; else $missing; fi"
-resume_command="f=$handoff; if [ -x \"\$f\" ]; then \"\$f\" resume; else $missing; fi"
+hook='"$CLAUDE_PROJECT_DIR"/.agent-squad/squad-hook'
+save_command="$hook save" restore_command="$hook restore" startup_command="$hook startup" resume_command="$hook resume"
+# The wrapper runs the playbook's squad-handoff.sh, and reports a missing playbook to the session
+# instead of failing it: a save does nothing, and the other events tell the session. Every install
+# writes it into .agent-squad/, and --check requires it byte for byte, as it does the shim. A hook
+# entry is the squad's when its command runs the wrapper, or squad-handoff.sh as releases before
+# v49 wrote it, so that an install replaces both.
+hook_wrapper="$(cat <<'WRAPPER'
+#!/bin/sh
+# agent-squad's session hooks run this wrapper, which squad-install.sh writes on every install.
+# It runs the playbook's squad-handoff.sh with the hook's event. When the playbook is missing, a
+# save does nothing, and the other events tell the session that the charter is not installed.
+f="$(dirname "$0")/playbook/scripts/squad-handoff.sh"
+if [ -x "$f" ]; then exec "$f" "$@"; fi
+[ "${1:-}" = save ] || echo "Squad: the charter is not installed ($f is missing). Stop and tell the CTO before doing anything else."
+WRAPPER
+)"
+# shellcheck disable=SC2016 # a jq definition
+hook_ours='def ours: (.command // "") | (contains("squad-handoff.sh") or contains("/.agent-squad/squad-hook"));'
 
 # The pre-push shim (D8 of agent-squad #23), written into the common git directory so that every
 # worktree runs it. --check requires it byte for byte, comments included, as this installer writes
@@ -426,13 +439,16 @@ check_installation() {
     '[["PreCompact", "manual", $save], ["PreCompact", "auto", $save],
       ["SessionStart", "compact", $restore], ["SessionStart", "startup", $startup],
       ["SessionStart", "resume", $resume]] | sort')"
-  if ! actual="$(jq -c '[(.hooks // {}) | to_entries[] | .key as $event | .value[] | .matcher as $matcher
-      | .hooks[] | select((.command // "") | contains("squad-handoff.sh"))
-      | [$event, $matcher, .command]] | sort' "$settings" 2>/dev/null)"; then
+  if ! actual="$(jq -c "$hook_ours"'[(.hooks // {}) | to_entries[] | .key as $event | .value[] | .matcher as $matcher
+      | .hooks[] | select(ours) | [$event, $matcher, .command]] | sort' "$settings" 2>/dev/null)"; then
     why="cannot read .claude/settings.local.json"
   elif [ "$actual" != "$expected" ]; then
     why="$(jq -rn --argjson want "$expected" --argjson have "$actual" \
       '"missing: \([($want - $have)[] | .[1]] | join(", ") | if . == "" then "none" else . end); unexpected: \([($have - $want)[] | .[1]] | join(", ") | if . == "" then "none" else . end)"')"
+  elif [ ! -f "$squad/squad-hook" ]; then
+    why="their wrapper .agent-squad/squad-hook is missing; install again"
+  elif [ "$(cat "$squad/squad-hook")" != "$hook_wrapper" ] || [ ! -x "$squad/squad-hook" ]; then
+    why="their wrapper .agent-squad/squad-hook is not the one this installer writes; install again"
   fi
   verdict "the five hooks are in .claude/settings.local.json and point at the playbook" "$why"
 
@@ -689,7 +705,19 @@ elif [ "${#kept[@]}" -gt 0 ]; then
 fi
 
 # 3. Session hooks (D5 and D10 of agent-squad #23, #164), merged into .claude/settings.local.json:
-#    every other key and hook is kept, and only entries that run squad-handoff.sh are replaced.
+#    every other key and hook is kept, and only the squad's entries are replaced. Their wrapper is
+#    written into .agent-squad/ first (agent-squad #269).
+if [ ! -f "$squad/squad-hook" ]; then
+  wrapper="wrote"
+elif [ "$(cat "$squad/squad-hook")" != "$hook_wrapper" ] || [ ! -x "$squad/squad-hook" ]; then
+  wrapper="rewrote"
+else
+  wrapper=""
+fi
+if [ -n "$wrapper" ]; then
+  { printf '%s\n' "$hook_wrapper" > "$squad/squad-hook.$$" && chmod +x "$squad/squad-hook.$$" \
+    && mv "$squad/squad-hook.$$" "$squad/squad-hook"; } 2>/dev/null || { rm -f "$squad/squad-hook.$$"; wrapper="failed"; }
+fi
 # `one_object` passes when its input is exactly one JSON object: jq alone accepts an empty input,
 # and several values, without a word.
 one_object() { jq -e -s 'length == 1 and (.[0] | type == "object")' >/dev/null 2>&1; }
@@ -700,8 +728,7 @@ current="{}"
 # shellcheck disable=SC2016 # $save, $restore, $startup and $resume are jq variables
 if printf '%s' "$current" | one_object \
   && merged="$(printf '%s' "$current" | jq --arg save "$save_command" --arg restore "$restore_command" \
-  --arg startup "$startup_command" --arg resume "$resume_command" '
-  def ours: (.command // "") | contains("squad-handoff.sh");
+  --arg startup "$startup_command" --arg resume "$resume_command" "$hook_ours"'
   def entry($matcher; $command): {matcher: $matcher, hooks: [{type: "command", command: $command}]};
   .hooks = (.hooks // {})
   | .hooks |= with_entries(.value |= map(
@@ -711,11 +738,14 @@ if printf '%s' "$current" | one_object \
   | .hooks.SessionStart = (.hooks.SessionStart // [])
       + [entry("compact"; $restore), entry("startup"; $startup), entry("resume"; $resume)]')" \
   && printf '%s' "$merged" | one_object; then
-  if [ -f "$settings" ] && [ "$merged" = "$current" ]; then
-    say hooks "the five hooks are already in .claude/settings.local.json"
+  if [ "$wrapper" = failed ]; then
+    say hooks "NOT INSTALLED: cannot write the hooks' wrapper .agent-squad/squad-hook; the hooks were left as they are"
+    needs_decision=1
+  elif [ -f "$settings" ] && [ "$merged" = "$current" ]; then
+    say hooks "the five hooks are already in .claude/settings.local.json${wrapper:+; $wrapper their wrapper .agent-squad/squad-hook}"
   else
     mkdir -p "$project/.claude" && printf '%s\n' "$merged" > "$settings"
-    say hooks "wrote the five hooks into .claude/settings.local.json, other settings kept"
+    say hooks "wrote the five hooks into .claude/settings.local.json, other settings kept${wrapper:+, and $wrapper their wrapper .agent-squad/squad-hook}"
   fi
 else
   say hooks "NOT INSTALLED: .claude/settings.local.json is not one JSON object with a valid \"hooks\"; it is left as it is: fix it and run again"

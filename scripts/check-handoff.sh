@@ -357,8 +357,9 @@ gate() {
   code=$?
 }
 # `passes <case> <session> <trigger> <transcript> [<stderr text>]` expects exit 0, and that text on
-# stderr when one is given; `stopped <case> <session> <trigger> <transcript>` expects exit 2 and
-# the line that says what to do.
+# stderr when one is given; `stopped <case> <session> <trigger> <transcript>` expects exit 2 and,
+# on stderr, exactly the CEO's sentence, which Claude Code shows after its own words (#269).
+told="Save this session's state first: type /squad-save-state, then /compact."
 passes() {
   gate "$2" "$3" "$4"
   if [ "$code" -eq 0 ] && { [ -z "${5:-}" ] || grep -qF -- "$5" <<<"$err"; }; then
@@ -369,8 +370,8 @@ passes() {
 }
 stopped() {
   gate "$2" "$3" "$4"
-  if [ "$code" -eq 2 ] && grep -qF 'run /squad-save-state first' <<<"$err"; then
-    pass "$1: /compact is stopped, exit 2, saying to run /squad-save-state first"
+  if [ "$code" -eq 2 ] && [ "$err" = "$told" ]; then
+    pass "$1: /compact is stopped, exit 2, saying exactly what to do"
   else
     fail "$1: exit $code, stderr: $err"
   fi

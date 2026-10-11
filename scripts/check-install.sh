@@ -261,7 +261,15 @@ same_commands() {
   done
   [ "$count" -ge 11 ]
 }
-ours='[.hooks[][] | select(any(.hooks[]; .command | contains("squad-handoff.sh"))) | .matcher]'
+# The squad's hook entries run the hooks' wrapper (agent-squad #269); `ours` lists their matchers.
+ours='[.hooks[][] | select(any(.hooks[]; .command | contains("/.agent-squad/squad-hook"))) | .matcher]'
+# `hook_commands` lists each squad entry's event, matcher and command, in the installer's order.
+hook_commands='[.hooks | to_entries[] | .key as $e | .value[] | .matcher as $m | .hooks[]
+  | select(.command | contains("squad-hook") or contains("squad-handoff.sh")) | "\($e) \($m) \(.command)"]'
+# What they are, as the installer writes them: the wrapper and the event, nothing else.
+wrapper_commands="$(jq -nc --arg w '"$CLAUDE_PROJECT_DIR"/.agent-squad/squad-hook' '[
+  "PreCompact manual \($w) save", "PreCompact auto \($w) save", "SessionStart compact \($w) restore",
+  "SessionStart startup \($w) startup", "SessionStart resume \($w) resume"]')"
 five_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\"]"
 # `broken <file>` keeps a copy of a file about to be broken; `mended <file>` puts it back.
 broken() { cp -p "$1" "$lab/mend.me"; }
@@ -371,13 +379,18 @@ JSON
     ends_with_next_steps "$out" project
   check "--check after a fresh install fails only on what is left by hand, AGENTS.md" check_reports "$item_import"
 
-  # 2. The project's local settings are kept; only the entries that run squad-handoff.sh change.
+  # 2. The project's local settings are kept; only the squad's entries change.
   check "settings.local.json keeps the project's permissions" \
     jq_holds '.permissions.allow == ["Bash(ls:*)"]' "$settings"
   check "and the project's own hook" \
     jq_holds '.hooks.PreToolUse[0].hooks[0].command == "echo own hook"' "$settings"
   check "and has the five squad hooks once each, the older entry replaced" \
     jq_holds "$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\"]" "$settings"
+  # Each runs the wrapper with its event, the shortest command that keeps the guard for a missing
+  # playbook (#269): Claude Code shows it in brackets on every line about the hook.
+  check "each squad hook runs .agent-squad/squad-hook with its event, and no other command is the squad's" \
+    jq_holds "$hook_commands == $wrapper_commands" "$settings"
+  check "and the wrapper is in .agent-squad/, executable" [ -x "$squad/squad-hook" ]
 
   # 3. A second run changes nothing but the log, which gains one line.
   before="$(project_state "$project")"
@@ -418,7 +431,7 @@ JSON
   # `run_hook <matcher>` runs the command installed for that matcher as Claude Code would.
   run_hook() {
     local program command
-    program='[.hooks[][] | select(.matcher == $m) | .hooks[] | .command | select(contains("squad-handoff.sh"))][0]'
+    program='[.hooks[][] | select(.matcher == $m) | .hooks[] | .command | select(contains("/.agent-squad/squad-hook"))][0]'
     command="$(jq -r --arg m "$1" "$program" "$settings")"
     (cd "$project" && echo '{"session_id":"x"}' | CLAUDE_PROJECT_DIR="$project" sh -c "$command")
   }
@@ -526,6 +539,26 @@ JSON
 
 # Cases 7c to 7f: an upgrade without a reader, and the commands and .gitignore rewritten.
 cases_upgrade_output() {
+  # 7h. The hooks as releases before v49 wrote them, each command guarding the playbook's script
+  #     itself, become the wrapper's on the next install, once each (#269); a wrapper changed since
+  #     is rewritten, saying so.
+  target="$(new_project old-hooks)" || exit 2
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  old='f="$CLAUDE_PROJECT_DIR"/.agent-squad/playbook/scripts/squad-handoff.sh; if [ -x "$f" ]; then "$f" '
+  jq --arg old "$old" '.hooks = {PreToolUse: [{matcher: "Bash", hooks: [{type: "command", command: "echo own hook"}]}],
+    PreCompact: [{matcher: "manual", hooks: [{type: "command", command: ($old + "save; fi")}]},
+                 {matcher: "auto", hooks: [{type: "command", command: ($old + "save; fi")}]}],
+    SessionStart: ([["compact", "restore"], ["startup", "startup"], ["resume", "resume"]]
+      | map({matcher: .[0], hooks: [{type: "command", command: ($old + .[1] + "; else echo missing; fi")}]}))}' \
+    "$target/.claude/settings.local.json" > "$lab/old-hooks.json" && cp "$lab/old-hooks.json" "$target/.claude/settings.local.json"
+  echo "# an edit" >> "$target/.agent-squad/squad-hook"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  check "hooks written before v49 become the wrapper's, once each, and the project's own hook stays" \
+    jq_holds "$hook_commands == $wrapper_commands and .hooks.PreToolUse[0].hooks[0].command == \"echo own hook\"" "$target/.claude/settings.local.json"
+  check "and a wrapper changed since is rewritten, saying so" \
+    bash -c 'grep -qF "wrote the five hooks into .claude/settings.local.json, other settings kept, and rewrote their wrapper .agent-squad/squad-hook" <<<"$1" \
+      && ! grep -qF "# an edit" "$2"' _ "$out" "$target/.agent-squad/squad-hook"
+
   # 7c. An upgrade whose output loses its reader, as when it is piped into head, still completes:
   #     every step runs, install.log records it, and the exit status is what it would be (#96). The
   #     output goes to a FIFO whose only reader is closed before the installer starts, so its first
@@ -761,6 +794,18 @@ cases_check_settings() {
   check "a missing resume hook fails the hooks item" check_reports "$item_hooks"
   check "naming it" contains "$("$install" --check "$project" 2>&1)" "$item_hooks: missing: resume; unexpected: none"
   mended "$settings"
+  # The hooks' wrapper (#269), which --check requires as the installer writes it.
+  broken "$squad/squad-hook"
+  echo "# an edit" >> "$squad/squad-hook"
+  check "an edited hooks' wrapper fails the hooks item" check_reports "$item_hooks"
+  check "saying to install again" check_reason "$item_hooks" "their wrapper .agent-squad/squad-hook is not the one this installer writes; install again"
+  mended "$squad/squad-hook"
+  chmod -x "$squad/squad-hook"
+  check "and so does one that cannot run" check_reports "$item_hooks"
+  chmod +x "$squad/squad-hook"
+  mv "$squad/squad-hook" "$lab/hook-aside"
+  check "and a missing one, named" check_reason "$item_hooks" "their wrapper .agent-squad/squad-hook is missing; install again"
+  mv "$lab/hook-aside" "$squad/squad-hook"
 
   broken "$project/.gitignore"
   grep -vx ".claude/settings.local.json" "$lab/mend.me" > "$project/.gitignore"
