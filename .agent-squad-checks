@@ -15,3 +15,4 @@ scripts/check-ci.sh
 scripts/check-coverage.sh
 scripts/check-stalls.sh
 scripts/check-mods.sh
+scripts/check-triage.sh

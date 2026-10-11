@@ -1,0 +1,40 @@
+name: Triage
+
+# An issue or a pull request that an account outside the squad opens gets 📥 needs-triage, so that
+# it shows at once as waiting for the CTO's triage (agent-squad #281; SQUAD.md §3). The author
+# decides: an account is inside only when GitHub reports it as the repository's owner, a member of
+# the organization that owns it, or a collaborator, as the merge gate counts them.
+#
+# pull_request_target runs with write access even for a pull request from a fork, so three rules
+# keep it safe, and scripts/check-triage.sh pins each one: no step checks out any code; no command
+# is given the title or the body of what was opened, only its number and its author's association,
+# through the environment; and the token may write issues and pull requests, nothing else.
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: An outside author's issue or pull request gets 📥 needs-triage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          ASSOCIATION: ${{ github.event.issue.author_association || github.event.pull_request.author_association }}
+        run: |
+          [[ "$NUMBER" =~ ^[0-9]+$ ]] || { echo "not a number: $NUMBER" >&2; exit 1; }
+          case "$ASSOCIATION" in
+            OWNER | MEMBER | COLLABORATOR)
+              echo "#$NUMBER: its author is inside the squad ($ASSOCIATION); nothing to do" ;;
+            *)
+              gh api --method POST "repos/$REPO/issues/$NUMBER/labels" -f "labels[]=📥 needs-triage" >/dev/null
+              echo "#$NUMBER: its author is outside the squad ($ASSOCIATION); labelled 📥 needs-triage" ;;
+          esac
