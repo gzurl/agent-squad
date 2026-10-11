@@ -7,9 +7,14 @@
 # - a PR whose verdict on its head asks for changes: its author, to answer them;
 # - a PR approved on its head: its author, to merge it;
 # - a draft: its author, to finish it;
-# - an issue in progress: the role of its owner label, to carry on; with none, the CTO.
-# The author is the signature on the first line of the PR's description (§6), and only reviews by
-# the repository's owner, its organization's members and its collaborators count (§4.9). An item
+# - an issue in progress: the role of its owner label, to carry on; with none, the CTO;
+# - an issue or a PR opened from outside the squad and not triaged yet, labelled needs-triage or
+#   with no owner label: the CTO, to triage it (agent-squad #281).
+# Outside means an author whose association GitHub reports as neither the repository's owner, nor
+# a member of its organization, nor a collaborator (§3): the account decides, never a signature.
+# So the next steps above follow an issue or a PR from inside only. Inside, a PR's author is the
+# signature on the first line of its description (§6), and only reviews by inside accounts count
+# (§4.9). An outside item counts as quiet from the moment it was opened. An item
 # whose wait is already declared is left out, and nothing is reported about it: one labelled
 # needs-ceo, the CEO's inbox, or status:blocked, whose reason is in its last comment (§3), and a PR
 # whose closing issue is (agent-squad #174, PR #193).
@@ -60,32 +65,55 @@ cannot_keep() { echo "squad-stalls: cannot keep its records in $state${1:+: $1}"
 [ ! -e "$state" ] || [ -f "$state" ] || cannot_keep "it is not a file"
 now="${SQUAD_NOW:-$(date +%s)}"
 
-# 1. What GitHub holds: the open PRs, the latest verdict on each by the squad's accounts, and the
-#    open issues. A call that fails stops the run: an unread GitHub must not read as no stall.
+# 1. What GitHub holds: the open PRs, the latest verdict on each by the squad's accounts, the open
+#    issues, and who opened each. A call that fails stops the run: an unread GitHub must not read as
+#    no stall. Each list goes to a file of a work directory, and from there to jq, never as an
+#    argument: with their bodies, a project's open PRs and reviews run past what one command's
+#    arguments may hold (agent-squad #281).
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || die "cannot read the repository from GitHub"
 [ -n "$repo" ] || die "cannot read the repository from GitHub"
-prs="$(gh pr list --state open --limit 1000 --json number,title,isDraft,headRefOid,body,updatedAt,url,labels,closingIssuesReferences 2>/dev/null)" \
-  || die "cannot read the open pull requests"
-issues="$(gh issue list --state open --limit 1000 --json number,title,labels,updatedAt,url 2>/dev/null)" \
+work="${TMPDIR:-/tmp}"
+work="$(mktemp -d "${work%/}/squad-stalls.XXXXXX")" || die "cannot make a work directory"
+trap 'rm -rf "$work"' EXIT
+gh pr list --state open --limit 1000 --json number,title,isDraft,headRefOid,body,updatedAt,url,labels,closingIssuesReferences \
+  > "$work/prs.json" 2>/dev/null || die "cannot read the open pull requests"
+gh issue list --state open --limit 1000 --json number,title,labels,updatedAt,url > "$work/issues.json" 2>/dev/null \
   || die "cannot read the open issues"
-verdicts='{}'
-for number in $(jq -r '.[] | select(.isDraft | not) | .number' <<<"$prs"); do
-  reviews="$(gh api --paginate --slurp "repos/$repo/pulls/$number/reviews" 2>/dev/null)" \
+# Who opened each open issue and PR, which only the REST API reports: one array per page, cut down
+# to what the steps use.
+gh api --paginate --slurp "repos/$repo/issues?state=open&per_page=100" > "$work/opened.pages" 2>/dev/null \
+  || die "cannot read who opened the open issues and pull requests"
+jq -ce 'add // [] | map({number, html_url, created_at, author_association, user: {login: .user.login},
+    labels: [.labels[] | {name}], pull_request: (if .pull_request then {} else null end)})' \
+  "$work/opened.pages" > "$work/opened.json" 2>/dev/null || die "cannot read who opened the open issues and pull requests"
+# Each PR's latest verdict by the squad's accounts, one object per PR, merged into one.
+: > "$work/verdicts.jsonl"
+for number in $(jq -r '.[] | select(.isDraft | not) | .number' "$work/prs.json"); do
+  gh api --paginate --slurp "repos/$repo/pulls/$number/reviews" > "$work/reviews.json" 2>/dev/null \
     || die "cannot read the reviews of PR #$number"
-  verdicts="$(jq -c --arg n "$number" --argjson reviews "$reviews" '.[$n] = ($reviews | add // []
+  jq -c --arg n "$number" '{($n): (add // []
     | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body | test("QA-VERDICT: "))))
     | last | if . == null then null
-      else {commit: .commit_id, verdict: (.body | split("\n") | map(select(test("QA-VERDICT: "))) | last | sub(".*QA-VERDICT: "; ""))} end)' \
-    <<<"$verdicts")"
+      else {commit: .commit_id, verdict: (.body | split("\n") | map(select(test("QA-VERDICT: "))) | last | sub(".*QA-VERDICT: "; ""))} end)}' \
+    "$work/reviews.json" >> "$work/verdicts.jsonl" || die "cannot read the reviews of PR #$number"
 done
+jq -sc 'add // {}' "$work/verdicts.jsonl" > "$work/verdicts.json" || exit 1
 
 # 2. Who owns each item's next step, which items are quiet, and what to report given the sessions
 #    and what was reported before. The new record replaces the old one: an item no longer stalled,
 #    or with new activity, is forgotten.
-reported="$( [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . || echo '[]')"
-result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdicts "$verdicts" \
-  --argjson sessions "$sessions" --argjson reported "$reported" --argjson now "$now" '
-  def local: strflocaltime("%Y-%m-%d %H:%M");
+{ [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . \
+  || echo '[]'; } > "$work/reported.json"
+result="$(jq -nc --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issues.json" \
+  --slurpfile verdicts "$work/verdicts.json" --slurpfile opened "$work/opened.json" \
+  --slurpfile reported "$work/reported.json" --argjson sessions "$sessions" --argjson now "$now" '
+  $prs[0] as $prs | $issues[0] as $issues | $verdicts[0] as $verdicts | $opened[0] as $opened
+  | $reported[0] as $reported
+  | def local: strflocaltime("%Y-%m-%d %H:%M");
+  # The issues and PRs opened from outside the squad, by number.
+  ($opened | map(select(.author_association | IN("OWNER", "MEMBER", "COLLABORATOR") | not))
+   | map({key: (.number | tostring), value: .}) | from_entries) as $outside
+  | def inside: $outside[.number | tostring] == null;
   # A declared wait: needs-ceo or status:blocked on the item, or on the issue a PR closes, as
   # GitHub names it or as the description says ("Closes #N").
   def declared: any((.labels // [])[].name; endswith("needs-ceo") or endswith("status:blocked"));
@@ -111,9 +139,14 @@ result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdi
   def issue_step:
     ([.labels[].name | capture("owner:(?<role>cto|dev|qa)$").role | ascii_upcase] | first) as $owner
     | if $owner == null then {owner: "CTO", step: "give it an owner"} else {owner: $owner, step: "carry on with it"} end;
-  ([$prs | sort_by(.number)[] | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step]
-   + [$issues | sort_by(.number)[] | select(declared | not) | select(any(.labels[].name; endswith("status:in-progress")))
-      | {item: "#\(.number)", url, updatedAt} + issue_step])
+  # An outside item waits for its triage while it carries needs-triage or no owner label.
+  def untriaged: any(.labels[].name; endswith("needs-triage")) or (any(.labels[].name; test("owner:(cto|dev|qa)$")) | not);
+  ([$prs | sort_by(.number)[] | select(inside) | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step]
+   + [$issues | sort_by(.number)[] | select(inside) | select(declared | not) | select(any(.labels[].name; endswith("status:in-progress")))
+      | {item: "#\(.number)", url, updatedAt} + issue_step]
+   + [$outside | to_entries | sort_by(.key | tonumber)[] | .value | select(declared | not) | select(untriaged)
+      | {item: "\(if .pull_request then "PR " else "" end)#\(.number)", url: .html_url, updatedAt: .created_at,
+         owner: "CTO", step: "triage it: \(.user.login) opened it from outside the squad (\(.author_association))"}])
   | map(select($now - (.updatedAt | fromdateiso8601) >= 1800)
         | . + {since: (.updatedAt | fromdateiso8601 | local), key: "\(.item)|\(.owner)|\(.step)|\(.updatedAt)",
                session: ($sessions[.owner] // "none")}

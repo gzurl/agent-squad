@@ -22,6 +22,10 @@ requests, reviewed and released like any other change, and the release notes in
 Please write for a person, not for the agents: they read an issue as a description of a problem,
 never as instructions to follow.
 
+If your own squad's agents write the report, they are welcome to sign it as they sign in your
+project. It is read as your account's, like anything written from it: a signature tells the squad
+which role wrote a text, never which account.
+
 A security problem is reported in private, never in an issue: [SECURITY.md](SECURITY.md) says how.
 
 ## Pull requests
@@ -37,7 +41,7 @@ opens an issue from it, credits you, and closes the pull request with a link to 
 | `install.sh` | The one-line installer: it downloads a release and runs that release's installer | Run from `main`, not installed |
 | `SQUAD.md`, `BOOTSTRAP.md`, `README.md` | The charter, the CTO's one-time setup, and the README | Yes |
 | `commands/squad-*.md` | The squad's commands: `/squad-save-state`, `/squad-pause`, `/squad-autopilot`, `/squad-resume`, `/squad-upgrade`, `/squad-pause-all`, `/squad-autopilot-all`, `/squad-resume-all`, `/squad-usage`, `/squad-usage-all`, `/squad-watch` | Yes; the installer copies them into `.claude/commands/` |
-| `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the session hooks, the merge gate, the checks runner, the token report, the stall detector and the pre-push gate | Yes |
+| `scripts/squad-*.sh`, `.githooks/pre-push` | The installer, the session hooks, the merge gate, the checks runner, the token report, the stall detector, the list of what came from outside and the pre-push gate | Yes |
 | `.github/ISSUE_TEMPLATE/task.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `templates/` | Templates the CTO starts from | Yes; the installer copies the GitHub ones when missing |
 | `CHANGELOG.md` | What each version changes | Yes, to read |
 | `LICENSE` | The MIT License | Yes, so every installed playbook carries it |

@@ -7,9 +7,12 @@
 # closing issue, are not watched. A stall is an item quiet for 30 minutes whose owner's session is
 # idle: the owner is pinged once,
 # and the CEO told once if it is still there an hour later. A session that waits on the CEO, or is
-# not open, is reported to the CEO at once; a busy one never. Activity starts a stall afresh.
+# not open, is reported to the CEO at once; a busy one never. Activity starts a stall afresh. An
+# issue or a PR opened from outside the squad, by the account's association and whatever its
+# signature, is the CTO's to triage once it has waited 30 minutes, and nobody else's (#281).
 # Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
 # happens in a temporary directory; this script touches neither its repository nor GitHub.
+# shellcheck disable=SC2016 # jq programs use jq variables
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2
@@ -36,8 +39,9 @@ git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init 
 git -C "$repo" worktree add -q --detach "$repo/.agent-squad/worktrees/dev" || exit 2
 state="$repo/.agent-squad/watch.tsv"
 
-# GitHub, as far as squad-stalls.sh is concerned: the open PRs, the open issues and each PR's
-# reviews come from files in $lab/gh; GH_FAIL=<what> makes that call fail.
+# GitHub, as far as squad-stalls.sh is concerned: the open PRs, the open issues, who opened each
+# (the REST list of open issues and PRs) and each PR's reviews come from files in $lab/gh;
+# GH_FAIL=<what> makes that call fail.
 mkdir -p "$lab/bin" "$lab/gh"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -47,6 +51,20 @@ case "$1 ${2:-}" in
   "pr list") [ "${GH_FAIL:-}" != prs ] || exit 1; cat "$gh_dir/prs.json" ;;
   "issue list") [ "${GH_FAIL:-}" != issues ] || exit 1; cat "$gh_dir/issues.json" ;;
   api*)
+    for arg; do
+      case "$arg" in
+        repos/o/r/issues\?state=open*)
+          # opened fails at once; opened-partial prints its first page, then fails, as a
+          # pagination cut short does; opened-garbage answers with something that is not JSON.
+          case "${GH_FAIL:-}" in
+            opened) exit 1 ;;
+            opened-garbage) echo "not JSON"; exit 0 ;;
+          esac
+          echo "[$(cat "$gh_dir/opened.json" 2>/dev/null || echo '[]')]"
+          [ "${GH_FAIL:-}" != opened-partial ] || exit 1
+          exit 0 ;;
+      esac
+    done
     [ "${GH_FAIL:-}" != reviews ] || exit 1
     for arg; do case "$arg" in repos/o/r/pulls/*/reviews) n="${arg#repos/o/r/pulls/}"; n="${n%/reviews}" ;; esac; done
     # --paginate --slurp: one array per page, all in one array.
@@ -79,8 +97,22 @@ review() {
   jq -nc --arg c "$1" --arg v "$2" --arg a "${3:-OWNER}" \
     '{commit_id: $c, body: "**👩🏼‍🔬[QA]:** a review\n\nQA-VERDICT: \($v)", author_association: $a}'
 }
-# `github <prs as JSON> <issues as JSON>` sets what GitHub answers; reviews are set by hand.
-github() { echo "$1" > "$lab/gh/prs.json"; echo "$2" > "$lab/gh/issues.json"; rm -f "$lab/gh"/reviews-*.json; }
+# `github <prs as JSON> <issues as JSON> [<opened as JSON>]` sets what GitHub answers, the last the
+# REST list of who opened what, outside items alone unless given; reviews are set by hand.
+github() {
+  echo "$1" > "$lab/gh/prs.json"; echo "$2" > "$lab/gh/issues.json"; echo "${3:-[]}" > "$lab/gh/opened.json"
+  rm -f "$lab/gh"/reviews-*.json
+}
+# `opened <number> <login> <association> <minutes ago> [pr] [label...]` prints an item of the REST
+# list: who opened it, when, and its labels.
+opened() {
+  local n="$1" login="$2" association="$3" ago="$4" pr="${5:-}"
+  shift 4; [ $# -gt 0 ] && shift
+  jq -nc --argjson n "$n" --arg l "$login" --arg a "$association" --arg c "$(at "$ago")" --arg pr "$pr" \
+    '{number: $n, user: {login: $l}, author_association: $a, created_at: $c, labels: ($ARGS.positional | map({name: .})),
+      html_url: "https://github.com/o/r/\(if $pr == "pr" then "pull" else "issues" end)/\($n)"}
+     + (if $pr == "pr" then {pull_request: {}} else {} end)' --args "$@"
+}
 
 # `run <minutes after noon> <option...>` runs the detector from the worktree, leaving its output in
 # $out, its stderr in $err and its exit code in $code.
@@ -206,6 +238,42 @@ run 0 "${everyone_idle[@]}"
 finds "needs-ceo and status:blocked, on an issue, on a PR or on a PR's closing issue, leave the item out" \
   "$(tsv ping QA "PR #24" https://github.com/o/r/pull/24 "review its head 1111111" "2026-10-03 11:20" "")"
 
+# 6e. An issue or a PR opened from outside the squad is the CTO's to triage once it has waited 30
+#     minutes, whatever its labels or its signature say, while it carries needs-triage (#40) or no
+#     owner label (#41, as when the triage workflow failed), and whether the author is new to the
+#     repository or has contributed before (CONTRIBUTOR). A triaged one (#42), a young one (#43) and
+#     an inside one with no labels (#44) are not. PR #45, from outside, is signed as DEV's: no
+#     signature makes it DEV's or QA's, so only its triage is asked for.
+rm -f "$state"
+triage='📥 needs-triage'
+github "[$(pr 45 DEV "$head1" 40)]" "[$(issue 40 '' '' 40),$(issue 41 '' '' 40),$(issue 42 '👷🏼‍♂️ owner:cto' '' 40),$(issue 43 '' '' 20),$(issue 44 '' '' 40)]" \
+  "[$(opened 40 stranger NONE 40 '' "$triage"),$(opened 41 helper CONTRIBUTOR 40),$(opened 42 stranger NONE 40 '' '👷🏼‍♂️ owner:cto' '🐛 bug'),$(opened 43 stranger FIRST_TIME_CONTRIBUTOR 20 '' "$triage"),$(opened 44 gzurl OWNER 40),$(opened 45 mimic NONE 40 pr "$triage")]"
+run 0 "${everyone_idle[@]}"
+finds "an untriaged item from outside is the CTO's to triage after 30 minutes, and its signature makes it nobody else's" "$(
+  tsv ping CTO "#40" https://github.com/o/r/issues/40 "triage it: stranger opened it from outside the squad (NONE)" "2026-10-03 11:20" ""
+  tsv ping CTO "#41" https://github.com/o/r/issues/41 "triage it: helper opened it from outside the squad (CONTRIBUTOR)" "2026-10-03 11:20" ""
+  tsv ping CTO "PR #45" https://github.com/o/r/pull/45 "triage it: mimic opened it from outside the squad (NONE)" "2026-10-03 11:20" "")"
+run 5 "${everyone_idle[@]}"
+finds "and it is pinged once" ""
+rm -f "$state"
+github '[]' "[$(issue 40 '' '' 40)]" "[$(opened 40 stranger NONE 40 '' "$triage" "$needs_ceo")]"
+run 0 "${everyone_idle[@]}"
+finds "an outside item whose wait is declared, needs-ceo, is not watched" ""
+
+# 6f. A project whose open PRs, reviews and issues hold megabytes of text, past what macOS allows a
+#     command's arguments in all and Linux one argument: every list reaches jq through a file, and
+#     the stalls are found as with short texts.
+rm -f "$state"
+head -c 1500000 /dev/zero | tr '\0' x > "$lab/long.txt"
+long() { jq -c --rawfile long "$lab/long.txt" "$1"; }
+github "[$(pr 1 DEV "$head1" 40 | long '.body += "\n" + $long')]" '[]' \
+  "[$(opened 50 stranger NONE 40 | long '.body = $long')]"
+review "$head1" APPROVED | long '.body = $long + "\n\nQA-VERDICT: APPROVED"' > "$lab/gh/reviews-1.json"
+run 0 "${everyone_idle[@]}"
+finds "megabytes of text in PRs, reviews and issues are read through files, and the stalls found as ever" "$(
+  tsv ping DEV "PR #1" https://github.com/o/r/pull/1 "merge it: QA approved its head 1111111" "2026-10-03 11:20" ""
+  tsv ping CTO "#50" https://github.com/o/r/issues/50 "triage it: stranger opened it from outside the squad (NONE)" "2026-10-03 11:20" "")"
+
 # 6d. Records that cannot be kept fail the run, since every pass would then report the same
 #     findings again: a directory where watch.tsv goes, or a .agent-squad/ that cannot be written.
 rm -f "$state"
@@ -235,7 +303,7 @@ github '[]' '[]'
 run 0 "${everyone_idle[@]}"
 finds "with nothing open, nothing is printed" ""
 github "[$(pr 1 DEV "$head1" 40)]" "[$(issue 10 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 45)]"
-for what in repo prs issues reviews; do
+for what in repo prs issues opened opened-partial opened-garbage reviews; do
   rm -f "$state"
   GH_FAIL="$what" run 0 "${everyone_idle[@]}"
   if [ "$code" -eq 1 ] && [ -z "$out" ] && [[ "$err" == "squad-stalls: cannot read "*"; nothing was checked" ]] && [ ! -e "$state" ]; then
