@@ -35,6 +35,10 @@ jobs:
         run: scripts/check-coverage.sh
       - name: The stall detector finds who owns each stalled next step
         run: scripts/check-stalls.sh
+      - name: The triage workflow labels outside authors only, and keeps its three rules
+        run: scripts/check-triage.sh
+      - name: The outside list shows what outside accounts opened and wrote, by account
+        run: scripts/check-outside.sh
 
   install:
     runs-on: ubuntu-latest

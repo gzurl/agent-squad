@@ -68,6 +68,7 @@ Names are the ones SQUAD.md uses (§3); colors are pastel so that the leading em
 | `🟡 P2` | `FDF2B3` | Should do |
 | `🔵 P3` | `C5DEF5` | Nice to have |
 | `👨🏻‍💼 needs-ceo` | `E99695` | Waiting for a decision from the CEO |
+| `📥 needs-triage` | `BFDADC` | Opened from outside the squad; waiting for the CTO's triage |
 | `🚧 status:in-progress` | `FBD9A8` | Someone is actively working on it |
 | `👀 status:in-review` | `006B75` | A PR is open and waiting for QA |
 | `✅ status:approved` | `C3E6CB` | QA approved the last commit; the author may merge |
