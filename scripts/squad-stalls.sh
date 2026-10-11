@@ -65,36 +65,51 @@ cannot_keep() { echo "squad-stalls: cannot keep its records in $state${1:+: $1}"
 [ ! -e "$state" ] || [ -f "$state" ] || cannot_keep "it is not a file"
 now="${SQUAD_NOW:-$(date +%s)}"
 
-# 1. What GitHub holds: the open PRs, the latest verdict on each by the squad's accounts, and the
-#    open issues. A call that fails stops the run: an unread GitHub must not read as no stall.
+# 1. What GitHub holds: the open PRs, the latest verdict on each by the squad's accounts, the open
+#    issues, and who opened each. A call that fails stops the run: an unread GitHub must not read as
+#    no stall. Each list goes to a file of a work directory, and from there to jq, never as an
+#    argument: with their bodies, a project's open PRs and reviews run past what one command's
+#    arguments may hold (agent-squad #281).
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || die "cannot read the repository from GitHub"
 [ -n "$repo" ] || die "cannot read the repository from GitHub"
-prs="$(gh pr list --state open --limit 1000 --json number,title,isDraft,headRefOid,body,updatedAt,url,labels,closingIssuesReferences 2>/dev/null)" \
-  || die "cannot read the open pull requests"
-issues="$(gh issue list --state open --limit 1000 --json number,title,labels,updatedAt,url 2>/dev/null)" \
+work="${TMPDIR:-/tmp}"
+work="$(mktemp -d "${work%/}/squad-stalls.XXXXXX")" || die "cannot make a work directory"
+trap 'rm -rf "$work"' EXIT
+gh pr list --state open --limit 1000 --json number,title,isDraft,headRefOid,body,updatedAt,url,labels,closingIssuesReferences \
+  > "$work/prs.json" 2>/dev/null || die "cannot read the open pull requests"
+gh issue list --state open --limit 1000 --json number,title,labels,updatedAt,url > "$work/issues.json" 2>/dev/null \
   || die "cannot read the open issues"
-# Who opened each open issue and PR, which only the REST API reports: one array per page.
-opened="$(gh api --paginate --slurp "repos/$repo/issues?state=open&per_page=100" 2>/dev/null)" \
+# Who opened each open issue and PR, which only the REST API reports: one array per page, cut down
+# to what the steps use.
+gh api --paginate --slurp "repos/$repo/issues?state=open&per_page=100" > "$work/opened.pages" 2>/dev/null \
   || die "cannot read who opened the open issues and pull requests"
-opened="$(jq -ce 'add // []' <<<"$opened" 2>/dev/null)" || die "cannot read who opened the open issues and pull requests"
-verdicts='{}'
-for number in $(jq -r '.[] | select(.isDraft | not) | .number' <<<"$prs"); do
-  reviews="$(gh api --paginate --slurp "repos/$repo/pulls/$number/reviews" 2>/dev/null)" \
+jq -ce 'add // [] | map({number, html_url, created_at, author_association, user: {login: .user.login},
+    labels: [.labels[] | {name}], pull_request: (if .pull_request then {} else null end)})' \
+  "$work/opened.pages" > "$work/opened.json" 2>/dev/null || die "cannot read who opened the open issues and pull requests"
+# Each PR's latest verdict by the squad's accounts, one object per PR, merged into one.
+: > "$work/verdicts.jsonl"
+for number in $(jq -r '.[] | select(.isDraft | not) | .number' "$work/prs.json"); do
+  gh api --paginate --slurp "repos/$repo/pulls/$number/reviews" > "$work/reviews.json" 2>/dev/null \
     || die "cannot read the reviews of PR #$number"
-  verdicts="$(jq -c --arg n "$number" --argjson reviews "$reviews" '.[$n] = ($reviews | add // []
+  jq -c --arg n "$number" '{($n): (add // []
     | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body | test("QA-VERDICT: "))))
     | last | if . == null then null
-      else {commit: .commit_id, verdict: (.body | split("\n") | map(select(test("QA-VERDICT: "))) | last | sub(".*QA-VERDICT: "; ""))} end)' \
-    <<<"$verdicts")"
+      else {commit: .commit_id, verdict: (.body | split("\n") | map(select(test("QA-VERDICT: "))) | last | sub(".*QA-VERDICT: "; ""))} end)}' \
+    "$work/reviews.json" >> "$work/verdicts.jsonl" || die "cannot read the reviews of PR #$number"
 done
+jq -sc 'add // {}' "$work/verdicts.jsonl" > "$work/verdicts.json" || exit 1
 
 # 2. Who owns each item's next step, which items are quiet, and what to report given the sessions
 #    and what was reported before. The new record replaces the old one: an item no longer stalled,
 #    or with new activity, is forgotten.
-reported="$( [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . || echo '[]')"
-result="$(jq -nc --argjson prs "$prs" --argjson issues "$issues" --argjson verdicts "$verdicts" \
-  --argjson opened "$opened" --argjson sessions "$sessions" --argjson reported "$reported" --argjson now "$now" '
-  def local: strflocaltime("%Y-%m-%d %H:%M");
+{ [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . \
+  || echo '[]'; } > "$work/reported.json"
+result="$(jq -nc --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issues.json" \
+  --slurpfile verdicts "$work/verdicts.json" --slurpfile opened "$work/opened.json" \
+  --slurpfile reported "$work/reported.json" --argjson sessions "$sessions" --argjson now "$now" '
+  $prs[0] as $prs | $issues[0] as $issues | $verdicts[0] as $verdicts | $opened[0] as $opened
+  | $reported[0] as $reported
+  | def local: strflocaltime("%Y-%m-%d %H:%M");
   # The issues and PRs opened from outside the squad, by number.
   ($opened | map(select(.author_association | IN("OWNER", "MEMBER", "COLLABORATOR") | not))
    | map({key: (.number | tostring), value: .}) | from_entries) as $outside

@@ -12,6 +12,7 @@
 # signature, is the CTO's to triage once it has waited 30 minutes, and nobody else's (#281).
 # Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
 # happens in a temporary directory; this script touches neither its repository nor GitHub.
+# shellcheck disable=SC2016 # jq programs use jq variables
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2
@@ -258,6 +259,20 @@ rm -f "$state"
 github '[]' "[$(issue 40 '' '' 40)]" "[$(opened 40 stranger NONE 40 '' "$triage" "$needs_ceo")]"
 run 0 "${everyone_idle[@]}"
 finds "an outside item whose wait is declared, needs-ceo, is not watched" ""
+
+# 6f. A project whose open PRs, reviews and issues hold megabytes of text, past what macOS allows a
+#     command's arguments in all and Linux one argument: every list reaches jq through a file, and
+#     the stalls are found as with short texts.
+rm -f "$state"
+head -c 1500000 /dev/zero | tr '\0' x > "$lab/long.txt"
+long() { jq -c --rawfile long "$lab/long.txt" "$1"; }
+github "[$(pr 1 DEV "$head1" 40 | long '.body += "\n" + $long')]" '[]' \
+  "[$(opened 50 stranger NONE 40 | long '.body = $long')]"
+review "$head1" APPROVED | long '.body = $long + "\n\nQA-VERDICT: APPROVED"' > "$lab/gh/reviews-1.json"
+run 0 "${everyone_idle[@]}"
+finds "megabytes of text in PRs, reviews and issues are read through files, and the stalls found as ever" "$(
+  tsv ping DEV "PR #1" https://github.com/o/r/pull/1 "merge it: QA approved its head 1111111" "2026-10-03 11:20" ""
+  tsv ping CTO "#50" https://github.com/o/r/issues/50 "triage it: stranger opened it from outside the squad (NONE)" "2026-10-03 11:20" "")"
 
 # 6d. Records that cannot be kept fail the run, since every pass would then report the same
 #     findings again: a directory where watch.tsv goes, or a .agent-squad/ that cannot be written.
