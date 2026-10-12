@@ -3,14 +3,15 @@ import type { Register } from 'claude-code'
 
 import type { BoardAgent, BoardAgents, BoardItem, BoardRole, BoardState } from '../types'
 
-// The squad board (agent-squad #205, #212, #217, #222, #235, #240, #289). Every session of a squad
-// publishes its own state in this mod's store, under `<project>/<role>`, and only that key: what it
-// is doing, whether the CEO paused it, and the issue or PR its agent is focused on, which its own
-// gh calls declare (focusAfter, below). The
-// CTO's session reads its project's keys and draws them on one line above its prompt, after the
-// wordmark and the board's release, and shows a toast when an agent waits for the CEO. The band shows each session's own state, not GitHub's: nothing is read from
-// GitHub, and no command is run. A session whose name is not a squad role's does nothing. The
-// signals are the ones agent-squad #199 measured.
+// The squad board (agent-squad #205, #212, #217, #222, #235, #240, #244, #289). Every session of a
+// squad publishes its own state in this mod's store, under `<project>/<role>`, and only that key:
+// what it is doing, whether the CEO paused it or has it on autopilot, and the issue or PR its agent
+// is focused on, which its own gh calls declare (focusAfter, below). The CTO's session reads its
+// project's keys and draws them on one line above its prompt, with the wordmark and the board's
+// release on the right, and shows a toast when an agent waits for the CEO. The band shows each
+// session's own state, not GitHub's: nothing is read from GitHub, and no command is run; a newer
+// release is known from a file another script writes. A session whose name is not a squad role's
+// does nothing. The signals are the ones agent-squad #199 measured.
 
 const ROLES: readonly BoardRole[] = ['CTO', 'DEV', 'QA']
 // How often a session rewrites its key, and how old a key may grow before its part reads unknown.
@@ -34,10 +35,16 @@ const SIGNATURE: Record<BoardRole, string> = {
   DEV: '\u{1F468}\u{1F3FC}\u200D\u{1F4BB}',
   QA: '\u{1F469}\u{1F3FC}\u200D\u{1F52C}',
 }
+// The squad's part, on the right of the band (agent-squad #244): fast-forward first while the CEO
+// has the squad on autopilot, then the wordmark, then the notice of a newer release; at least GAP
+// cells between it and the agents, and no separator.
+const AUTOPILOT = '\u23E9'
+const GAP = 3
 // Every emoji the band draws takes two cells of a terminal, however many code points it has, as
 // Claude Code measures it; every other character one. The longest are matched first. A terminal
-// that draws the pause in one cell leaves the line one cell shorter, which the cut allows for.
-const WIDE = [...new Set([...Object.values(SIGNATURE), ...Object.values(MARK)])].sort((a, b) => b.length - a.length)
+// that draws the pause in one cell leaves the line one cell shorter, which the cut allows for, and
+// the squad's part one cell short of the edge.
+const WIDE = [...new Set([...Object.values(SIGNATURE), ...Object.values(MARK), AUTOPILOT])].sort((a, b) => b.length - a.length)
 // Between two agents, a light vertical bar; where the band is cut, an ellipsis; above the agents and
 // below them, a rule of light horizontal lines across the band. The bars and the rules are in the
 // blue of cmux's active pane.
@@ -74,7 +81,13 @@ let since = 0
 let isPaused = false
 // Whether the session's last turn ended with a background shell still running, as its Stop said.
 let hasShell = false
+// Whether the CEO has the squad on autopilot, from /squad-autopilot until /squad-resume or
+// /squad-pause; the CTO's session shows it on the band (agent-squad #244).
+let isAutopilot = false
 let repository: string | null = null
+// The session's repository on this machine, its main checkout for a squad's session; null outside
+// a git checkout.
+let checkout: string | null = null
 // The CTO's session only: the release its board belongs to, as `v42`, read once when the board starts.
 let release: string | null = null
 // The CTO's session only: the waits it has already shown a toast for.
@@ -301,13 +314,13 @@ function focusAfter(before: Focus[], command: string, output: string, home: stri
 
 // The step-away commands of SQUAD.md §6 a prompt carries, typed (the prompt starts with the
 // command) or relayed (the relay names it in parentheses, then a colon and its instruction, as
-// `(`/squad-pause`): follow`): a pause sets the session's pause; a resume, or autopilot, clears it.
-// A message that only quotes the form, with no colon after it, is no relay. Each command's own file
-// names only itself that way, so an expanded command reads the same. Null for any other prompt.
-function stepAwayOf(text: string): 'pause' | 'clear' | null {
+// `(`/squad-pause`): follow`): a pause sets the session's pause, and autopilot its autopilot, each
+// clearing the other; a resume clears both. A message that only quotes the form, with no colon
+// after it, is no relay. Each command's own file names only itself that way, so an expanded command
+// reads the same. Null for any other prompt.
+function stepAwayOf(text: string): 'pause' | 'resume' | 'autopilot' | null {
   const found = /^\s*\/squad-(pause|resume|autopilot)(?:-all)?\b/.exec(text) ?? /\(`\/squad-(pause|resume|autopilot)(?:-all)?`\):/.exec(text)
-  if (!found) return null
-  return found[1] === 'pause' ? 'pause' : 'clear'
+  return found ? found[1] as 'pause' | 'resume' | 'autopilot' : null
 }
 
 // One part of the band (agent-squad #235): an agent's role, its state mark, the CTO's context when
@@ -360,12 +373,25 @@ function widthOf(text: string): number {
   return width + [...rest].length
 }
 
-// The line's first part (agent-squad #240): the wordmark, then the board's release when it is known.
-function prefixOf(known: string | null): string {
+// The wordmark (agent-squad #240): `agent-squad`, then the board's release when it is known.
+function wordmarkOf(known: string | null): string {
   return known ? `agent-squad (${known})` : 'agent-squad'
 }
 
-// How many of the line's parts, given their widths, fit in `columns`, a bar between each two, and
+// The squad's part as a narrow terminal shortens it, longest first (agent-squad #244): with a newer
+// release, its notice whole, then its version alone, then none; then the fast-forward goes too.
+type SquadPart = { autopilot: boolean; notice: string }
+function squadPartsOf(known: string | null, latest: string | null, onAutopilot: boolean): SquadPart[] {
+  const isNewer = known !== null && latest !== null && Number(latest.slice(1)) > Number(known.slice(1))
+  const notices = isNewer ? [` \u2192 ${latest} available: /squad-upgrade`, ` \u2192 ${latest}`, ''] : ['']
+  const parts = notices.map(notice => ({ autopilot: onAutopilot, notice }))
+  return onAutopilot ? [...parts, { autopilot: false, notice: '' }] : parts
+}
+function squadWidthOf(part: SquadPart, known: string | null): number {
+  return (part.autopilot ? widthOf(`${AUTOPILOT} `) : 0) + widthOf(wordmarkOf(known)) + widthOf(part.notice)
+}
+
+// How many of the agents' parts, given their widths, fit in `columns`, a bar between each two, and
 // whether the ellipsis that marks a cut is drawn. The first part always shows, and the surface cuts
 // it at the edge if even it is too wide. Each later one shows only whole, and only if it leaves room
 // for the ellipsis, unless it is the last, after which nothing can be cut. The ellipsis is drawn
@@ -379,6 +405,38 @@ function fit(widths: number[], columns: number): { count: number; hasEllipsis: b
     used += step
   }
   return { count: widths.length, hasEllipsis: false }
+}
+
+// The band's line in `columns` cells (agent-squad #244): the agents on the left, and the squad's
+// part on the right, after at least GAP cells. While every agent fits whole, the squad's part takes
+// the longest form that fits; only then are the agents cut, as fit() cuts them, beside its shortest
+// form; and when not even the CTO's part fits beside that, the squad's part goes. It gives which of
+// the squad's forms shows (null: none), how many agents, whether the ellipsis does, and the cells
+// of space before the squad's part.
+function layoutOf(agentWidths: number[], squadWidths: number[], columns: number) {
+  const used = (count: number, hasEllipsis: boolean) => agentWidths.slice(0, count).reduce((sum, width) => sum + width, 0)
+    + widthOf(SEPARATOR) * Math.max(0, count - 1) + (hasEllipsis ? widthOf(ELLIPSIS) : 0)
+  const all = used(agentWidths.length, false)
+  const whole = squadWidths.findIndex(width => all + GAP + width <= columns)
+  if (whole >= 0) return { squad: whole, count: agentWidths.length, hasEllipsis: false, space: columns - all - squadWidths[whole] }
+  const last = squadWidths.length - 1
+  const room = columns - GAP - squadWidths[last]
+  if (agentWidths[0] > room) return { squad: null, ...fit(agentWidths, columns), space: 0 }
+  const cut = fit(agentWidths, room)
+  return { squad: last, ...cut, space: columns - used(cut.count, cut.hasEllipsis) - squadWidths[last] }
+}
+
+// The latest release as squad-latest.sh last found it (agent-squad #244, #302): the `tag` of
+// .agent-squad/latest-release, read with no host command; null when the file is missing,
+// unreadable, or holds no `vN` tag.
+async function latestOf($: any): Promise<string | null> {
+  if (checkout === null) return null
+  try {
+    const known = JSON.parse(await $.fs.read(`${checkout}/.agent-squad/latest-release`))
+    return typeof known?.tag === 'string' && /^v\d+$/.test(known.tag) ? known.tag : null
+  } catch {
+    return null
+  }
 }
 
 // The release this session's board belongs to, as `v42`: the major version of the plugin.json the
@@ -410,6 +468,7 @@ async function publish($: any) {
     at: await $.clock.now(),
     context: usage.context?.percent ?? null,
     paused: isPaused,
+    autopilot: isAutopilot,
     background: hasShell,
     item: itemNow(),
     focus,
@@ -444,6 +503,7 @@ async function recover($: any) {
       tool = value.tool
       since = value.since
       isPaused = value.paused === true
+      isAutopilot = value.autopilot === true
       hasShell = value.background === true
       focus = Array.isArray(value.focus) ? value.focus : value.item ? [value.item] : []
       toasted = value.toasted ?? []
@@ -475,7 +535,8 @@ async function readAgents($: any) {
     const value = await $.store.get(keyOf(me.project, role))
     if (isAgent(value) && value.project === me.project && value.role === role) byRole[role] = value
   }
-  await update($, agents, () => ({ byRole, now }))
+  const latest = await latestOf($)
+  await update($, agents, () => ({ byRole, now, latest }))
   const waits = ROLES.filter(role => role !== 'CTO')
     .map(role => byRole[role])
     .filter((agent): agent is BoardAgent => agent !== undefined && isWaiting(agent.state) && now - agent.at <= STALE_MS)
@@ -498,7 +559,9 @@ async function readAgents($: any) {
 async function activate($: any) {
   if (!me || !isStarted || isActive) return
   isActive = true
-  repository = webOf((await $.session.repo().catch(() => null))?.remote ?? null)
+  const repo = await $.session.repo().catch(() => null)
+  repository = webOf(repo?.remote ?? null)
+  checkout = repo?.root ?? null
   if (since === 0) since = await $.clock.now()
   await publish($)
   $.clock.every(HEARTBEAT_MS, () => void publish($))
@@ -525,11 +588,12 @@ export const register: Register = on => {
     await activate($)
     return next(e)
   })
-  // A prompt, typed or delivered by another session: a pause set or cleared by the CEO.
+  // A prompt, typed or delivered by another session: a pause or autopilot set or cleared by the CEO.
   on('prompt.submit', async ($, e, next) => {
     const step = stepAwayOf(e.text)
-    if (me && step !== null && isPaused !== (step === 'pause')) {
+    if (me && step !== null && (isPaused !== (step === 'pause') || isAutopilot !== (step === 'autopilot'))) {
       isPaused = step === 'pause'
+      isAutopilot = step === 'autopilot'
       await publish($)
     }
     return next(e)
@@ -588,19 +652,23 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The board, in the CTO's session: one line above the prompt between two blue rules. It opens
-  // with the wordmark and the board's release, `-squad` and the release in blue; then the agents,
-  // each after a blue bar, its state first, as the CTO's reports on the agents read, then the role's
-  // name in its colour. A narrow terminal cuts it at its end, the prefix first and the CTO's part
-  // whole next. A survey that holds the band goes first.
+  // The board, in the CTO's session: one line above the prompt between two blue rules. The agents
+  // come first, each after a blue bar but the first, its state first, as the CTO's reports on the
+  // agents read, then the role's name in its colour; then, on the right, the squad's part:
+  // fast-forward on autopilot, the wordmark and the board's release, `-squad` and the release in
+  // blue, and the notice of a newer release in the CTO's yellow (agent-squad #244). A narrow
+  // terminal shortens the squad's part first, then cuts the agents at their end, the CTO's part
+  // whole first (layoutOf). A survey that holds the band goes first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
     const seen = await read($, agents)
     const parts = ROLES.map(role => partOf(role, seen.byRole[role], seen.now))
-    const widths = [widthOf(prefixOf(release)), ...parts.map(part => widthOf(textOf(part)))]
-    const { count, hasEllipsis } = fit(widths, e.props.bodyColumns)
-    const shown = parts.slice(0, count - 1)
+    const squadParts = squadPartsOf(release, seen.latest ?? null, isAutopilot)
+    const { squad: chosen, count, hasEllipsis, space } = layoutOf(parts.map(part => widthOf(textOf(part))),
+      squadParts.map(part => squadWidthOf(part, release)), e.props.bodyColumns)
+    const squad = chosen === null ? null : squadParts[chosen]
+    const shown = parts.slice(0, count)
     const rule = RULE.repeat(Math.max(1, e.props.bodyColumns))
     return (
       <Box flexDirection="column">
@@ -608,14 +676,9 @@ export const register: Register = on => {
           <Text color={RULE_COLOR} wrap="truncate-end">{rule}</Text>
         </Box>
         <Box key="line" flexDirection="row" overflow="hidden">
-          <Box key="prefix">
-            <Text wrap="truncate-end">agent</Text>
-            <Text color={RULE_COLOR} wrap="truncate-end">-squad</Text>
-            {release !== null && <Text color={RULE_COLOR} wrap="truncate-end">{` (${release})`}</Text>}
-          </Box>
-          {shown.map(part => (
+          {shown.map((part, index) => (
             <Box key={part.key}>
-              <Text color={RULE_COLOR} wrap="truncate-end">{SEPARATOR}</Text>
+              {index > 0 && <Text color={RULE_COLOR} wrap="truncate-end">{SEPARATOR}</Text>}
               <Text wrap="truncate-end">{`${part.mark} ${SIGNATURE[part.key]}`}</Text>
               <Text color={ROLE_COLOR[part.key].plain} wrap="truncate-end">
                 <Text color={ROLE_COLOR[part.key].key}>{part.key}</Text>
@@ -628,6 +691,20 @@ export const register: Register = on => {
             </Box>
           ))}
           {hasEllipsis && <Text dimColor>{ELLIPSIS}</Text>}
+          {squad && <Text key="space">{' '.repeat(space)}</Text>}
+          {squad && (
+            <Box key="squad">
+              {squad.autopilot && <Text wrap="truncate-end">{`${AUTOPILOT} `}</Text>}
+              <Text wrap="truncate-end">agent</Text>
+              <Text color={RULE_COLOR} wrap="truncate-end">-squad</Text>
+              {release !== null && <Text color={RULE_COLOR} wrap="truncate-end">{` (${release})`}</Text>}
+              {squad.notice !== '' && (
+                <Text color={ROLE_COLOR.CTO.plain} wrap="truncate-end">
+                  <Text color={ROLE_COLOR.CTO.key}>{squad.notice}</Text>
+                </Text>
+              )}
+            </Box>
+          )}
         </Box>
         <Box key="rule-below">
           <Text color={RULE_COLOR} wrap="truncate-end">{rule}</Text>

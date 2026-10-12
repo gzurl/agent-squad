@@ -283,11 +283,10 @@ not cost: most of the input is read from the cache, which is billed far below fr
 
 ### The squad board
 
-Above the prompt of the CTO's session, between two blue rules, one line opens with `agent-squad`
-and the release of the board the CTO's session loaded, then shows every agent of the project, in
-the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its signature and
-role, then, while the agent has something in hand, a colon and a link to the issue (`#123`) or
-pull request (`PR #124`) it works on. The agent's own `gh` calls set that item: an issue it labels
+Above the prompt of the CTO's session, between two blue rules, one line shows every agent of the
+project, in the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its
+signature and role, then, while the agent has something in hand, a colon and a link to the issue
+(`#123`) or pull request (`PR #124`) it works on. The agent's own `gh` calls set that item: an issue it labels
 `status:in-progress`, a PR it creates, and a PR it checks out or reviews. Merging or closing the
 item ends it, and a PR the agent created takes its issue with it: the band then shows the item
 before it, or the role alone. Reading, commenting and other label edits change nothing. An idle
@@ -297,10 +296,22 @@ Only the CTO's session draws the band; DEV's and QA's sessions publish their sta
 nothing of it.
 
 ```
-───────────────────────────────────────────────────────────────────────────
-agent-squad (v44) │ 💤 👷🏼‍♂️CTO (ctx: 96%) │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124
-───────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────────────
+💤 👷🏼‍♂️CTO (ctx: 96%) │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124       agent-squad (v49) → v50 available: /squad-upgrade
+───────────────────────────────────────────────────────────────────────────────────────────────────────
 ```
+
+On the right of the line, the squad's part:
+- `agent-squad` and the release of the board the CTO's session loaded;
+- ⏩ before it while the squad is on autopilot, from `/squad-autopilot` until `/squad-resume` or
+  `/squad-pause`;
+- after it, in the CTO's yellow, `→ v50 available: /squad-upgrade` while a newer release than the
+  installed one is out. `/squad-upgrade` shows you what it changes and asks you; the board installs
+  nothing. It reads the latest release from `.agent-squad/latest-release`, a file the squad keeps,
+  and connects to nothing itself.
+
+On a narrow terminal the agents keep the room: the notice shortens to `→ v50`, then goes, then ⏩
+goes. Only then is the line cut at its end, after whole agents, with an ellipsis.
 
 Each role's name is in the colour *Quick start*, step 2, gives its session: the CTO yellow, DEV blue
 and QA green.
@@ -331,11 +342,12 @@ the main checkout; the same line with `enable` turns it back on.
   [squad board](#the-squad-board), which an older one goes without.
 - **A GitHub repository** for your project.
 - **The GitHub CLI, `gh`**, logged in with the `repo` and `workflow` scopes.
-- **bash**, **git** 2.31 or later, **jq** and **tar**.
+- **bash**, **git** 2.31 or later, **jq**, **tar**, and `sha256sum` or `shasum`, which macOS,
+  Linux and Git Bash already have.
 - **macOS or Linux.** The squad is tested on both, and on Linux in CI. Windows with Git Bash is
   best effort: it is untested in CI.
 
-Before it touches anything, the installer checks that `gh`, git, jq and tar are there, and that
+Before it touches anything, the installer checks that `gh`, git, jq, tar and a SHA-256 tool are there, and that
 `gh` is logged in and can read `gzurl/agent-squad`. If something is missing, it stops and says
 what; it does not install anything for you.
 
@@ -466,6 +478,12 @@ terminal, for a permission or a question.
 
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
+
+**Does it collect anything about me?** No. Nothing in **agent-squad** calls home, and nothing
+about you or your project is sent anywhere. Each release is published as a GitHub Release with
+its package attached, which the installer downloads and checks against its SHA-256. GitHub counts
+each package's downloads, one number per version, and that number is all the squad sees: nothing
+about who downloaded it, or from where.
 
 **What comes next?** Whatever the open issues say, with no date promised. Ideas are welcome as
 issues ([CONTRIBUTING.md](CONTRIBUTING.md)).

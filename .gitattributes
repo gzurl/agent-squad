@@ -6,6 +6,7 @@
 /.agent-squad-checks export-ignore
 /scripts/check-*.sh export-ignore
 /scripts/ci-*.sh export-ignore
+/scripts/release.sh export-ignore
 /mods/*/tests export-ignore
 /install.sh export-ignore
 /CONTRIBUTING.md export-ignore
