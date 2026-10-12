@@ -1596,8 +1596,9 @@ cases_uninstall() {
     bash -c '[ -f "$1/.claude/commands/squad-own.md" ] && grep -qF "kept /squad-own, which the project tracks" <<<"$2"' _ "$target" "$out"
   check "and of .agent-squad/ only the records" \
     [ "$(find "$target/.agent-squad" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort | tr '\n' ' ')" = "evidence handoff tokens.tsv " ]
-  check "and it lists the tracked files for the CTO: .gitignore's lines and the squad's issue template, not the project's own" \
-    bash -c 'grep -qF ".gitignore'"'"'s lines .agent-squad/, .claude/settings.local.json, .claude/commands/squad-*.md; keep .agent-squad/ while the records stay there" <<<"$1" \
+  # The project's own settings stay, so the line that ignores them is kept (agent-squad #291).
+  check "and it lists the tracked files for the CTO: .gitignore's lines but the settings', and the squad's issue template, not the project's own" \
+    bash -c 'grep -qF ".gitignore'"'"'s lines .agent-squad/, .claude/commands/squad-*.md; keep .agent-squad/ while the records stay there; keep .claude/settings.local.json'"'"'s line, since the project'"'"'s own settings stay" <<<"$1" \
       && grep -qF ".github/ISSUE_TEMPLATE/task.md, the squad'"'"'s template" <<<"$1" && ! grep -qF PULL_REQUEST_TEMPLATE <<<"$1"' _ "$out"
   check "and leaves no copy of itself behind" [ -z "$(ls -A "$lab/tmp-u")" ]
   state="$(uninstall_state)"
@@ -1665,6 +1666,10 @@ cases_uninstall_refusals() {
     {matcher: "auto", hooks: [{type: "command", command: ($old + "save; fi")}]}],
     SessionStart: [{matcher: "startup", hooks: [{type: "command", command: ($old + "startup; else echo missing; fi")}]}]}' \
     "$target/.claude/settings.local.json" > "$lab/v48-settings.json" && cp "$lab/v48-settings.json" "$target/.claude/settings.local.json"
+  # A dry run, which leaves the settings there, lists their line as the run that removes them does.
+  out="$("$uninstall" --dry-run "$target" 2>&1)"
+  check "a dry run whose settings would go lists their .gitignore line for the CTO, though the file is still there" \
+    bash -c '[ -f "$1/.claude/settings.local.json" ] && grep -qF ".gitignore'"'"'s lines .agent-squad/, .claude/settings.local.json, .claude/commands/squad-*.md" <<<"$2"' _ "$target" "$out"
   out="$("$uninstall" "$target" 2>&1)"
   code=$?
   check "hooks as releases before v49 wrote them are the squad's too: with the mods, the settings go entirely" \
@@ -1674,6 +1679,8 @@ cases_uninstall_refusals() {
     bash -c '[ "$(cat "$1/.agent-squad/kept/dev/.env")" = SECRET=1 ] && [ "$(cat "$1/.agent-squad/kept/dev/out/results.txt")" = "a result" ] && [ ! -e "$1/.agent-squad/worktrees" ]' _ "$target"
   check "kept like the records, as the output says" \
     bash -c 'grep -qF "moved what worktrees/dev holds that git ignores into .agent-squad/kept/dev/: .env, out/" <<<"$1" && grep -qF "removed .agent-squad/ but for the records, kept" <<<"$1"' _ "$out"
+  check "and with the settings gone, it lists their .gitignore line for the CTO too" \
+    bash -c 'grep -qF ".gitignore'"'"'s lines .agent-squad/, .claude/settings.local.json, .claude/commands/squad-*.md; keep .agent-squad/ while the records stay there" <<<"$1" && ! grep -qF "since the project'"'"'s own settings stay" <<<"$1"' _ "$out"
   out="$("$lab/uninstall-again.sh" "$target" 2>&1)"
   code=$?
   check "and a second run finds nothing left to remove, and leaves the kept files where they are" \

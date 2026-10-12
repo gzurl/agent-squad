@@ -125,16 +125,12 @@ done
 # 2. What the CTO removes through a PR: the tracked files the squad added, read now, while the
 #    playbook is there to compare the templates with.
 left_for_cto=()
+# .gitignore's lines of the squad's, listed once step 3 knows whether the settings file stays.
+squad_rules=()
 if [ -f "$project/.gitignore" ]; then
-  lines=()
   for rule in .agent-squad/ .claude/settings.local.json ".claude/commands/squad-*.md"; do
-    grep -qxF -- "$rule" "$project/.gitignore" && lines+=("$rule")
+    grep -qxF -- "$rule" "$project/.gitignore" && squad_rules+=("$rule")
   done
-  if [ "${#lines[@]}" -gt 0 ]; then
-    item=".gitignore's lines $(printf '%s, ' "${lines[@]}" | sed 's/, $//')"
-    $records || item="$item; keep .agent-squad/ while the records stay there"
-    left_for_cto+=("$item")
-  fi
 fi
 for template in .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md; do
   if [ -f "$project/$template" ] && [ -f "$playbook/$template" ] && cmp -s "$project/$template" "$playbook/$template"; then
@@ -169,7 +165,9 @@ cleaned='def hook_ours: (.command // "") | (contains("squad-handoff.sh") or cont
       .enabledPlugins |= with_entries(select((.key | split("@")) as $p | $p | length == 2 and ($p[1] | IN($markets[])) | not))
       | if .enabledPlugins == {} then del(.enabledPlugins) else . end
     else . end'
+settings_stays=false
 if [ -f "$settings" ]; then
+  settings_stays=true
   if ! after="$(jq -e -s 'length == 1 and (.[0] | type == "object")' "$settings" >/dev/null 2>&1 \
       && jq "$cleaned" "$settings" 2>/dev/null)"; then
     say hooks "NOT REMOVED: .claude/settings.local.json is not one JSON object; it is left as it is: remove the squad's hooks and mods by hand"
@@ -178,6 +176,7 @@ if [ -f "$settings" ]; then
     say hooks "none of the squad's hooks or mods are in .claude/settings.local.json"
   elif [ "$after" = "{}" ]; then
     found=true
+    settings_stays=false
     act rm -f "$settings"
     say hooks "$(did removed "would remove") .claude/settings.local.json, which held only the squad's hooks and mods"
   else
@@ -185,6 +184,23 @@ if [ -f "$settings" ]; then
     $dry_run || printf '%s\n' "$after" > "$settings"
     say hooks "$(did removed "would remove") the squad's hooks and mods from .claude/settings.local.json, other settings kept"
   fi
+fi
+
+# The .gitignore's lines for the CTO (agent-squad #291). The one for .claude/settings.local.json is
+# listed only when that file goes: while the project's own settings stay, the line keeps them out
+# of git, whoever wrote it.
+lines=() note=""
+for rule in ${squad_rules[@]+"${squad_rules[@]}"}; do
+  if [ "$rule" = .claude/settings.local.json ] && $settings_stays; then
+    note="; keep .claude/settings.local.json's line, since the project's own settings stay"
+  else
+    lines+=("$rule")
+  fi
+done
+if [ "${#lines[@]}" -gt 0 ]; then
+  item=".gitignore's lines $(printf '%s, ' "${lines[@]}" | sed 's/, $//')"
+  $records || item="$item; keep .agent-squad/ while the records stay there"
+  left_for_cto=("$item$note" ${left_for_cto[@]+"${left_for_cto[@]}"})
 fi
 
 # 4. The squad's commands, apart from one the project tracks: the project owns it.
