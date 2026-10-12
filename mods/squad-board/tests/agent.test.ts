@@ -551,6 +551,7 @@ describe('the pause (agent-squad #222)', () => {
     '/squad-pause-all',
     'The CEO needs the squad stopped at a safe point (`/squad-pause`): follow the part for every agent',
     'The CEO needs every squad stopped at a safe point (`/squad-pause-all`): follow the part for every agent',
+    'The CEO is upgrading the squad and needs it at a safe point (`/squad-pause`): follow the part for every agent',
   ]
   const clears = [
     '/squad-resume', '/squad-resume-all', '/squad-autopilot', '/squad-autopilot-all',
