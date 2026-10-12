@@ -259,12 +259,18 @@ function sameItem(a: BoardItem, b: BoardItem): boolean {
 }
 
 // The PR gh pr create made, from the command line's output: the first line that is a PR's address
-// alone, as gh pr create prints it. Other calls on the line print addresses too: gh issue edit the
-// issue's, and gh pr comment or gh issue comment the comment's, which goes on past the number (QA's
-// finding on PR #294).
-function createdIn(output: string): BoardItem | null {
-  const line = output.split('\n').find(text => /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(text.trim()))
-  return line ? itemAt(line) : null
+// alone, as gh pr create prints it, and not a PR another call of the line names. Other calls print
+// addresses too: gh issue edit the issue's, gh pr comment or gh issue comment the comment's, which
+// goes on past the number (QA's finding on PR #294), and gh pr edit its PR's, alone (agent-squad
+// #299). A PR the line names by number is never the one it creates, whose number nobody knew when
+// the line was written.
+function createdIn(output: string, named: BoardItem[]): BoardItem | null {
+  for (const line of output.split('\n')) {
+    if (!/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(line.trim())) continue
+    const found = itemAt(line)
+    if (found && !named.some(other => other.item === found.item && (other.url === null || other.url === found.url))) return found
+  }
+  return null
 }
 
 // What a command that worked does to the focus, each gh call in order (agent-squad #289):
@@ -281,13 +287,15 @@ function focusAfter(before: Focus[], command: string, output: string, home: stri
   const enter = (next: Focus) => {
     after = [...after.filter(entry => !sameItem(entry, next)), next].slice(-FOCUS_LIMIT)
   }
-  for (const words of commandsOf(command)) {
-    const call = words[0] === 'rtk' ? words.slice(1) : words
-    if (call[0] !== 'gh' || (call[1] !== 'issue' && call[1] !== 'pr')) continue
+  const calls = commandsOf(command)
+    .map(words => words[0] === 'rtk' ? words.slice(1) : words)
+    .filter(call => call[0] === 'gh' && (call[1] === 'issue' || call[1] === 'pr'))
+  const named = calls.flatMap(call => call[1] === 'pr' && call[2] !== 'create' ? [targetOf('pr', call.slice(3), home) ?? []].flat() : [])
+  for (const call of calls) {
     const [, noun, verb] = call
     const args = call.slice(3)
     if (noun === 'pr' && verb === 'create') {
-      const created = createdIn(output)
+      const created = createdIn(output, named)
       const top = after.at(-1)
       if (created) enter({ ...created, tied: top && !top.item.startsWith('PR ') ? { item: top.item, url: top.url } : null })
       continue
