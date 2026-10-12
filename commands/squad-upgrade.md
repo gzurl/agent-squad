@@ -23,16 +23,28 @@ Work from the main checkout. The upstream repository is the one named on the `up
    every entry above the version the project runs. Summarise it for the CEO, in the CEO's
    language, under three headings:
    - **Rules that change how the agents work**, with their § numbers. Once it is installed, the
-     agents re-read the sections that change (step 6), and the CEO has nothing to do for that.
-     Say whether the release rewrites much of the charter, the one case in which step 7
-     recommends a compaction. Scripts, hooks and commands take effect at once.
+     agents re-read the sections that change (step 7), and the CEO has nothing to do for that.
+     Say whether the release rewrites much of the charter, the one case in which step 8
+     recommends a compaction. Scripts and commands take effect at once; the squad board and any
+     hook the release adds, at the restart that step 8 asks for.
    - **What the project must do:** each *By hand* item, a `.gitignore` line to commit, or a
      setting to add to a tool.
    - **Anything else the CEO should know.**
 3. **Ask the CEO to confirm**, as options with a recommendation and what each costs: upgrade now
    to the latest release, upgrade later, or upgrade to a specific version (say which, and why).
    Install nothing until the CEO says yes. If the answer is no, stop there.
-4. **Install**, on the CEO's yes, from the main checkout:
+4. **Bring the squad to a safe point,** on the CEO's yes, before installing anything: the install
+   replaces the scripts that the hooks and the pre-push gate run, and the restart that step 8 asks
+   for ends whatever a session is doing. Send DEV and QA one message each: "The CEO is upgrading
+   the squad (`/squad-upgrade`): follow the part for every agent in `squad-pause.md`, in the main
+   checkout's `.claude/commands/`, now, and tell me when you are at a safe point." That part ends
+   with each agent waiting for `/squad-resume`, which the CEO types once the sessions have
+   restarted (step 8). Get to a safe point yourself too, as that part says, apart from this
+   upgrade. Install only once each agent has said so, its state is on GitHub or it has said it
+   works on neither, and `ListAgents` shows its session idle. A session that `ListAgents` shows as
+   **waiting** is held by a question or a permission prompt in its own terminal, and reads no
+   message until the CEO answers it there: name it to the CEO.
+5. **Install** from the main checkout:
    `gh api -H 'Accept: application/vnd.github.raw' repos/<upstream>/contents/install.sh | bash -s -- --tag <tag> . > <file> 2>&1`,
    with `<file>` in a temporary directory, and read the exit status of that line. Read the whole
    output, never through `head` or `tail`. The status alone does not prove an install: a download
@@ -47,19 +59,22 @@ Work from the main checkout. The upstream repository is the one named on the `up
      stop and report it.
 
    Delete the file when you are done.
-5. **Commit what the installer lists under *By hand*,** such as a `.gitignore` line or a
+6. **Commit what the installer lists under *By hand*,** such as a `.gitignore` line or a
    template it created, through the installer's PR (§3; `BOOTSTRAP.md`, *The installer's files*).
    That PR needs no issue of its own, and its description names the release and each *By hand*
    item it records.
-6. **Have the agents re-read what changed** (§7). Tell DEV and QA, one message each: the version
+7. **Have the agents re-read what changed** (§7). Tell DEV and QA, one message each: the version
    installed, the rules that changed with their § numbers, and to re-read those sections now in
    the main checkout's `.agent-squad/playbook/`, taking them as superseding the text their session
-   loaded. Re-read them yourself.
-7. **Report to the CEO**, in the CEO's language: the version installed, `--check`'s result, the
-   installer's PR, and what DEV and QA were told. Say that nothing else is needed from the CEO: the
-   agents have re-read the rules that changed, and each session loads the full text at its next
-   compaction. Only when the release rewrites much of the charter, recommend that the CEO type
-   `/squad-save-state` and then `/compact` in each session, the CTO's included, and say why. Say
-   also that each session loads the new release of the squad board, and any new hooks, at its next
-   start, so the CEO restarts the three sessions when it suits, with `/restart` in each, the CTO's
-   included.
+   loaded, and that they stay at their safe point until `/squad-resume`. Re-read the sections
+   yourself.
+8. **Report to the CEO**, in the CEO's language: the version installed, `--check`'s result, the
+   installer's PR, and what DEV and QA were told. Say that the rules need nothing more from the
+   CEO: the agents have re-read the rules that changed, and each session loads the full text at
+   its next compaction. Only when the release rewrites much of the charter, recommend that the CEO
+   type `/squad-save-state` and then `/compact` in each session, the CTO's included, and say why.
+   Then guide the CEO through the restart, which is the CEO's to type: a session loads the new
+   release of the squad board, and any hook the release adds, only when it starts, and a session
+   that restarts takes no turn until something writes to it. Ask the CEO to type `/restart` in
+   DEV's session, in QA's and, last, in yours, and then `/squad-resume` in yours, so that you tell
+   DEV and QA to carry on from the state they saved.
