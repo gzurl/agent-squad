@@ -178,6 +178,17 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     [`cd /work/proj && gh issue edit 33 --add-label ${IN_PROGRESS} </dev/null >/dev/null`, issue(33)],
     ['out=$(gh pr review 34 --comment -b ok)', pr(34)],
     ['gh issue edit 35 --add-label "🚧 status:in-progress" --body "see https://github.com/o/r/pull/9; gh pr checkout 9"', issue(35)],
+    ['rtk proxy gh pr checkout 36', pr(36)],
+    // QA's way of checking a PR out and reviewing it, with or without rtk proxy (agent-squad #334).
+    ['git -C /work/proj/.agent-squad/worktrees/qa fetch origin pull/70/head', pr(70)],
+    ['rtk proxy git -C /work/qa fetch -q origin pull/71/head && git -C /work/qa switch --detach abc1234', pr(71)],
+    ['git fetch origin +refs/pull/72/head:refs/remotes/origin/pr/72', pr(72)],
+    ['git fetch https://github.com/a/b.git pull/73/head', { item: 'PR #73', url: 'https://github.com/a/b/pull/73' }],
+    ['gh api repos/o/r/pulls/74/reviews --input review.json', pr(74)],
+    ['rtk proxy gh api repos/a/b/pulls/75/reviews -f event=COMMENT -f body=ok', { item: 'PR #75', url: 'https://github.com/a/b/pull/75' }],
+    ['gh api -X POST repos/{owner}/{repo}/pulls/76/reviews', pr(76)],
+    ['gh api --method=POST /repos/o/r/pulls/77/reviews --jq .html_url', pr(77)],
+    ['gh api repos/o/r/pulls/78/reviews -F event=COMMENT </dev/null >/dev/null', pr(78)],
   ]
   for (const [command, item] of forms) {
     test(`sets it: ${command}`, async ($, on) => {
@@ -264,6 +275,11 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     ['a gh call whose number comes on the line after a backslash', [
       'gh pr checkout --detach \\', '  248',
     ], pr(248)],
+    ['QA\'s review through gh api, its body in a heredoc that names another call (agent-squad #334)', [
+      'gh api repos/o/r/pulls/249/reviews --input - <<\'EOF\'',
+      '{"commit_id": "abc1234", "event": "COMMENT", "body": "QA\'s review; gh pr checkout 9"}',
+      'EOF',
+    ], pr(249)],
     ['gh pr create from a heredoc body: the PR gh prints', [
       'gh pr create --title "x" --body-file - <<\'EOF\'', 'Closes #5; gh pr checkout 6', 'EOF',
     ], pr(40)],
@@ -291,6 +307,13 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
       'echo "done; gh pr checkout 62"', "git commit -m 'x\ngh pr checkout 63'", 'gh pr checkout', 'gh pr merge --squash',
       // The shell reads #64 as a comment: the call names no number.
       'gh pr checkout #64', '# gh pr review 65',
+      // Reading a PR or its reviews through gh api, fetching anything but a PR's head, or a comment
+      // posted through gh api, is bookkeeping too (agent-squad #334).
+      'gh api repos/o/r/pulls/66/reviews', 'rtk proxy gh api repos/o/r/pulls/66/reviews --paginate --jq ".[].id"',
+      'gh api -X GET repos/o/r/pulls/66/reviews -f per_page=100', 'gh api repos/o/r/pulls/66 --jq .headRefOid',
+      'gh api repos/o/r/pulls/66/comments -f body=fixed', 'gh api repos/o/r/pulls/66/reviews/1/comments --input -',
+      'git fetch origin', 'rtk proxy git -C /work/qa fetch -q origin main', 'git log pull/67/head',
+      'echo "git fetch origin pull/68/head"', 'git -C /work/qa switch --detach origin/main',
     ]) {
       await runs($, w, command, '')
       focusIs(w, issue(50))
