@@ -11,10 +11,10 @@
   - **Taking an issue's in-progress or in-review label off,** with none put on, ends it, as §4.9's
     step after a merge does.
 - **An install over a `.agent-squad/squad-hook` that is not a file refuses, saying so** (#356,
-  found by DEV and QA while writing tests). Before, it moved the wrapper into it and reported
+  found by DEV while writing tests, filed by QA). Before, it moved the wrapper into it and reported
   success, and every hook then failed.
-- **The scripts' tests run every line** (#246, #348, #350, #352): 1,118 of 1,118. The installer's
-  two timing-only lines carry a comment that excuses them. This repository's coverage check had
+- **The scripts' tests run every line** (#246, #348, #350, #352), but the installer's two
+  timing-only lines, which carry a comment that excuses them. This repository's coverage check had
   read about 44% since v52's PR #322 while it passed, and it now fails when it cannot read a
   result.
 - No charter rule changes. As `/squad-upgrade` asks, restart the three sessions after the upgrade,
