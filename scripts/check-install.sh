@@ -1204,6 +1204,85 @@ cases_failure_installs() {
     contains "$out" "templates  .github/ISSUE_TEMPLATE/task.md is not in the playbook, skipped"
 }
 
+# Case 14b (agent-squad #296): this machine's own excludes, a global core.excludesFile or the
+# project's .git/info/exclude, that ignore the .claude/ directory. Git then hides every rule below
+# it, the project's own included, so the installer and --check read the project's rules alone.
+cases_machine_excludes() {
+  printf '.claude/\n' > "$lab/machine-excludes"
+  printf '[core]\n\texcludesFile = %s\n' "$lab/machine-excludes" > "$lab/excludes.gitconfig"
+  for kind in core.excludesFile info/exclude; do
+    target="$(new_project "excludes-${kind//[.\/]/-}")" || exit 2
+    # `with_machine <command...>` runs the command on this machine as the kind sets it.
+    if [ "$kind" = core.excludesFile ]; then
+      with_machine() { env GIT_CONFIG_GLOBAL="$lab/excludes.gitconfig" "$@"; }
+    else
+      printf '.claude/\n' >> "$target/.git/info/exclude"
+      with_machine() { "$@"; }
+    fi
+    out="$(with_machine "$install" "$target" "$tag_a" 2>&1)"
+    code=$?
+    check "with $kind ignoring .claude/, an install exits 0" [ "$code" -eq 0 ]
+    check "and adds the squad's lines, saying so" \
+      contains "$out" ".gitignore added .agent-squad/, .claude/settings.local.json, .claude/commands/squad-*.md"
+    check "with no NOT IGNORED" lacks "$out" "NOT IGNORED"
+    cp "$target/.gitignore" "$lab/gitignore-first"
+    out="$(with_machine "$install" "$target" "$tag_a" 2>&1)"
+    code=$?
+    check "and a second install exits 0 and adds nothing" \
+      bash -c '[ "$1" -eq 0 ] && cmp -s "$2" "$3"' _ "$code" "$lab/gitignore-first" "$target/.gitignore"
+    check "so each line is there once" has_lines "$target/.gitignore" .agent-squad/ .claude/settings.local.json ".claude/commands/squad-*.md"
+    out="$(with_machine "$install" --check "$target" 2>&1)"
+    check "and --check passes its .gitignore item" contains "$out" "check: ok      $item_ignore"
+  done
+
+  # A nested negation still decides below a directory the machine ignores: nothing is appended.
+  target="$(new_project excludes-nested)" || exit 2
+  mkdir -p "$target/.claude" && echo '!settings.local.json' > "$target/.claude/.gitignore"
+  out="$(env GIT_CONFIG_GLOBAL="$lab/excludes.gitconfig" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "with the machine ignoring .claude/, a nested negation of settings.local.json still exits 1" [ "$code" -eq 1 ]
+  check "and says which rule wins" contains "$out" ".gitignore NOT IGNORED: .claude/settings.local.json would lose to .claude/.gitignore:1:!settings.local.json"
+  check "and appends nothing" refused grep -qxF .claude/settings.local.json "$target/.gitignore"
+
+  # A .gitignore that cannot be written says so, and claims nothing added.
+  target="$(new_project readonly-gitignore)" || exit 2
+  echo build > "$target/.gitignore" && chmod a-w "$target/.gitignore"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  chmod u+w "$target/.gitignore"
+  check "a .gitignore that cannot be written makes the installer exit 1" [ "$code" -eq 1 ]
+  check "and says so, for each line" \
+    bash -c 'grep -qF "NOT IGNORED: .agent-squad/, because .gitignore cannot be written; fix it and run again" <<<"$1" \
+      && grep -qF "NOT IGNORED: .claude/settings.local.json, because .gitignore cannot be written" <<<"$1"' _ "$out"
+  check "and claims nothing added" lacks "$out" ".gitignore added"
+  check "and leaves it as it was" [ "$(cat "$target/.gitignore")" = build ]
+
+  # A .agent-squad that is a symbolic link: git takes it for a file, which .agent-squad/ does not
+  # match, so the added line does not ignore it, and the step says so.
+  target="$(new_project linked-squad)" || exit 2
+  mkdir -p "$lab/linked-squad.target" && ln -s "$lab/linked-squad.target" "$target/.agent-squad"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "a .agent-squad that is a symbolic link makes the installer exit 1" [ "$code" -eq 1 ]
+  check "saying the line it added does not ignore it" \
+    contains "$out" ".gitignore NOT IGNORED: .agent-squad/ was added, and still git does not ignore it; decide with the CEO"
+
+  # Without a temporary directory for its empty git directory, the installer still sets aside a
+  # global core.excludesFile, though not .git/info/exclude.
+  target="$(new_project excludes-no-tmpdir)" || exit 2
+  out="$(env GIT_CONFIG_GLOBAL="$lab/excludes.gitconfig" TMPDIR="$lab/no-such-directory" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "without a temporary directory, core.excludesFile ignoring .claude/ still lets an install exit 0" \
+    bash -c '[ "$1" -eq 0 ] && ! grep -qF "NOT IGNORED" <<<"$2"' _ "$code" "$out"
+  check "and makes no directory there" absent "$lab" no-such-directory
+  target="$(new_project own-tmpdir)" || exit 2
+  mkdir "$lab/own-tmpdir.tmp"
+  TMPDIR="$lab/own-tmpdir.tmp" "$install" "$target" "$tag_a" >/dev/null 2>&1
+  TMPDIR="$lab/own-tmpdir.tmp" "$install" --check "$target" >/dev/null 2>&1
+  check "and an install or a --check leaves nothing in the temporary directory" \
+    [ -z "$(ls -A "$lab/own-tmpdir.tmp")" ]
+}
+
 # Case 18.
 cases_leftover_commands() {
   # 18. A squad command the playbook no longer has, as after a rename (#188), is removed on the next
@@ -1556,6 +1635,7 @@ groups=(
   cases_default_branch
   cases_failure_paths
   cases_failure_installs
+  cases_machine_excludes
   cases_leftover_commands
   cases_mods
   cases_uninstall
