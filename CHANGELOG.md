@@ -1,5 +1,18 @@
 # Changelog
 
+## v54 — 2026-10-12
+- **The squad shows which sessions still run an older release** (#361, proposed by
+  rogue-trader's CEO). After an upgrade, a session keeps its old board and hooks until its
+  `/restart`, and nothing showed which ones had not restarted.
+  - **The band** marks each such session with both releases, as `DEV ⟳ v50→v53`, until its
+    `/restart` (#362).
+  - **`/squad-upgrade` and `/squad-resume` name the sessions still to restart,** from a record
+    that each session's board writes in `.agent-squad/sessions/`. The new `squad-sessions.sh`
+    reads it.
+- **The first upgrade into v54** names every open session as having no record, to restart, since
+  v53's boards write none. From then on, only the sessions on an older release are named.
+- No charter rule changes. Restart the three sessions after the upgrade, as `/squad-upgrade` asks.
+
 ## v53 — 2026-10-12
 - **The band keeps an agent's item through its work** (#354, seen by the CEO). DEV's item vanished
   while it worked on a parent issue through sub-issues.
