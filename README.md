@@ -378,8 +378,8 @@ the installer touches only the files listed before it:
 ├── .agent-squad-checks                   in git    the checks the pre-push gate runs
 ├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
-├── .claude/settings.local.json           ignored   the squad's five hooks and its board, next to your settings
-├── .claude/commands/squad-*.md           ignored   the squad's twelve commands
+├── .claude/settings.local.json           ignored   the squad's hooks and its board, next to your settings
+├── .claude/commands/squad-*.md           ignored   the squad's commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored
     ├── playbook/          the installed release: charter, scripts, templates, mods
@@ -390,6 +390,9 @@ the installer touches only the files listed before it:
     ├── install.log        one line per install or upgrade
     ├── tokens.tsv         the history of the tokens each agent used, kept by /squad-usage
     ├── watch.tsv          what /squad-watch has reported, so that each stall is reported once
+    ├── triage.since       when the CTO last triaged what came from outside
+    ├── kept/              what the worktrees held that git ignores, kept by the uninstaller
+    ├── squad-hook         the small wrapper the squad's hooks run
     └── playbook.manifest  the checksums that --check compares the playbook against
 ```
 
