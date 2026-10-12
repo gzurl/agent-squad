@@ -1294,19 +1294,25 @@ cases_failure_installs() {
   code=$?
   check "a worktree git cannot make makes the installer exit 1, with git's reason" \
     bash -c '[ "$1" -eq 1 ] && grep -qF "worktrees  NOT CREATED: .agent-squad/worktrees/dev: " <<<"$2"' _ "$code" "$out"
-  # A hooks' wrapper it cannot write, here because the path is a directory it cannot write into,
-  # leaves the hooks as they are; a marketplace it cannot write leaves the mods off. Each says so
-  # and needs a decision, and the rest of the install goes on (agent-squad #246).
+  # A hooks' wrapper it cannot write, because .agent-squad/squad-hook is a directory, leaves the
+  # hooks as they are and that directory untouched, says so and needs a decision, and --check names
+  # it; mv alone would move the wrapper into it and report success (agent-squad #356). A marketplace
+  # it cannot write leaves the mods off. The rest of the install goes on (agent-squad #246).
   target="$(new_project no-wrapper)" || exit 2
-  mkdir -p "$target/.agent-squad/squad-hook" && chmod a-w "$target/.agent-squad/squad-hook"
-  out="$("$install" "$target" "$tag_a" 2>&1)"
-  code=$?
-  chmod u+w "$target/.agent-squad/squad-hook"
-  check "a hooks' wrapper that cannot be written makes the installer exit 1, saying so" \
-    bash -c '[ "$1" -eq 1 ] && grep -qF "NOT INSTALLED: cannot write the hooks'"'"' wrapper .agent-squad/squad-hook; the hooks were left as they are" <<<"$2"' \
-    _ "$code" "$out"
+  mkdir -p "$target/.agent-squad/squad-hook"
+  for run in first second; do
+    out="$("$install" "$target" "$tag_a" 2>&1)"
+    code=$?
+    check "a squad-hook that is a directory makes the $run install exit 1, saying so and what to do" \
+      bash -c '[ "$1" -eq 1 ] && grep -qF "NOT INSTALLED: cannot write the hooks'"'"' wrapper .agent-squad/squad-hook, which is not a file: remove it, then run again; the hooks were left as they are" <<<"$2"' \
+      _ "$code" "$out"
+    check "and leaves nothing in that directory or beside it" \
+      bash -c '[ -z "$(ls -A "$1/squad-hook")" ] && [ -z "$(find "$1" -maxdepth 1 -name "squad-hook.*")" ]' _ "$target/.agent-squad"
+  done
   check "and writes none of the squad's hooks" \
     jq_holds '[.hooks // {} | .. | .command? // empty | select(contains("squad-hook"))] == []' "$target/.claude/settings.local.json"
+  check "and --check names it" \
+    contains "$("$install" --check "$target" 2>&1)" "their wrapper .agent-squad/squad-hook is not a file; remove it, then install again"
   target="$(new_project no-marketplace)" || exit 2
   mkdir -p "$target/.agent-squad" && echo "not a directory" > "$target/.agent-squad/.claude-plugin"
   out="$("$install" "$target" "$tag_a" 2>&1)"

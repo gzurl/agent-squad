@@ -485,6 +485,9 @@ check_installation() {
   if ! actual="$(jq -c "$hook_ours"'[(.hooks // {}) | to_entries[] | .key as $event | .value[] | .matcher as $matcher
       | .hooks[] | select(ours) | [$event, $matcher, .command]] | sort' "$settings" 2>/dev/null)"; then
     why="cannot read .claude/settings.local.json"
+  elif [ -e "$squad/squad-hook" ] && [ ! -f "$squad/squad-hook" ]; then
+    # Named before the hooks, since no install writes them over it (agent-squad #356).
+    why="their wrapper .agent-squad/squad-hook is not a file; remove it, then install again"
   elif elsewhere="$(jq -r --arg wrapper "$hook " '[.[][2] | select(startswith($wrapper) | not)] | first // empty' <<<"$actual")" \
       && [ -n "$elsewhere" ]; then
     why="the hooks run ${elsewhere% *}, not this checkout's wrapper $hook: the checkout moved, or another release wrote them; install again"
@@ -798,7 +801,13 @@ elif [ "$(cat "$squad/squad-hook")" != "$hook_wrapper" ] || [ ! -x "$squad/squad
 else
   wrapper=""
 fi
-if [ -n "$wrapper" ]; then
+# A path there that is not a file, such as a directory, is left as it is and fails the step: mv
+# would move the new wrapper into it and report success, and every hook would then fail
+# (agent-squad #356).
+wrapper_why=""
+if [ -n "$wrapper" ] && [ -e "$squad/squad-hook" ] && [ ! -f "$squad/squad-hook" ]; then
+  wrapper="failed" wrapper_why=", which is not a file: remove it, then run again"
+elif [ -n "$wrapper" ]; then
   { printf '%s\n' "$hook_wrapper" > "$squad/squad-hook.$$" && chmod +x "$squad/squad-hook.$$" \
     && mv "$squad/squad-hook.$$" "$squad/squad-hook"; } 2>/dev/null || { rm -f "$squad/squad-hook.$$"; wrapper="failed"; }
 fi
@@ -824,7 +833,7 @@ if printf '%s' "$current" | one_object \
   | .hooks.Stop = (.hooks.Stop // []) + [entry(""; $turn)]')" \
   && printf '%s' "$merged" | one_object; then
   if [ "$wrapper" = failed ]; then
-    say hooks "NOT INSTALLED: cannot write the hooks' wrapper .agent-squad/squad-hook; the hooks were left as they are"
+    say hooks "NOT INSTALLED: cannot write the hooks' wrapper .agent-squad/squad-hook$wrapper_why; the hooks were left as they are"
     needs_decision=1
   elif [ -f "$settings" ] && [ "$merged" = "$current" ]; then
     say hooks "the squad's hooks are already in .claude/settings.local.json${wrapper:+; $wrapper their wrapper .agent-squad/squad-hook}"
