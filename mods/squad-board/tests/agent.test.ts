@@ -24,13 +24,13 @@ describe('a session outside the squad', () => {
 })
 
 describe("a squad session's key", () => {
-  test('names the project and the role, and holds the state, pause, item, context, id, name and time', async ($, on) => {
+  test('names the project and the role, and holds the state, pause, autopilot, item, context, id, name and time', async ($, on) => {
     const w = world(on)
     await start($, 'DEV:proj')
     expect([...w.store.keys()]).toEqual(['proj/DEV'])
     expect(w.store.get('proj/DEV')).toEqual({
       project: 'proj', role: 'DEV', name: 'DEV:proj', sessionId: 'sid-1',
-      state: 'idle', tool: null, since: START, at: START, context: 42, paused: false, background: false, item: null, focus: [],
+      state: 'idle', tool: null, since: START, at: START, context: 42, paused: false, autopilot: false, background: false, item: null, focus: [],
     })
   })
 
@@ -71,7 +71,7 @@ describe("a squad session's key", () => {
     const w = world(on, { 'proj/DEV': kept, 'other/DEV': { ...kept, project: 'other', name: 'DEV:other', sessionId: 'sid-9' } })
     // A reload runs session.start again, without the SessionStart hook that gave the name.
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
-    expect(w.store.get('proj/DEV')).toEqual({ ...kept, at: START, context: 42, paused: false, background: false, item: null, focus: [] })
+    expect(w.store.get('proj/DEV')).toEqual({ ...kept, at: START, context: 42, paused: false, autopilot: false, background: false, item: null, focus: [] })
   })
 
   test('after a reload, keeps its pause and its item', async ($, on) => {
@@ -82,7 +82,7 @@ describe("a squad session's key", () => {
     }
     const w = world(on, { 'proj/QA': kept })
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
-    expect(w.store.get('proj/QA')).toEqual({ ...kept, at: START, context: 42, background: false, focus: [item] })
+    expect(w.store.get('proj/QA')).toEqual({ ...kept, at: START, context: 42, autopilot: false, background: false, focus: [item] })
   })
 })
 
@@ -501,6 +501,39 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     await runs($, w, 'gh pr checkout 90')
     await w.clock.advance(600_000)
     expect(w.runs).toEqual([])
+  })
+})
+
+describe('the autopilot (agent-squad #244)', () => {
+  // Set by /squad-autopilot, typed or relayed; cleared by a resume or a pause; a pause and the
+  // autopilot clear each other.
+  for (const [set, clear] of [['/squad-autopilot', '/squad-resume'], ['/squad-autopilot-all', '/squad-pause'],
+    ['The CEO is away and the machine stays on (`/squad-autopilot`): follow the part for every agent.', '/squad-resume-all']]) {
+    test(`set by "${set.slice(0, 40)}", cleared by "${clear}"`, async ($, on) => {
+      const w = world(on)
+      await start($, 'DEV:proj')
+      await says($, set, set.startsWith('/') ? 'composer' : 'peer')
+      expect(w.store.get('proj/DEV')).toMatchObject({ autopilot: true, paused: false })
+      await says($, clear)
+      expect(w.store.get('proj/DEV')).toMatchObject({ autopilot: false, paused: clear === '/squad-pause' })
+    })
+  }
+
+  test('a pause clears the autopilot, and the autopilot the pause', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await says($, '/squad-pause')
+    await says($, '/squad-autopilot')
+    expect(w.store.get('proj/DEV')).toMatchObject({ autopilot: true, paused: false })
+    await says($, '/squad-pause')
+    expect(w.store.get('proj/DEV')).toMatchObject({ autopilot: false, paused: true })
+  })
+
+  test('a message that only quotes the command sets nothing', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await says($, 'The CTO may relay (`/squad-autopilot`) later.', 'peer')
+    expect(w.store.get('proj/DEV')).toMatchObject({ autopilot: false })
   })
 })
 
