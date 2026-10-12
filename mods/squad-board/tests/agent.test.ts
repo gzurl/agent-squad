@@ -343,6 +343,13 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
       'https://github.com/o/r/pull/50#issuecomment-2\nhttps://github.com/o/r/pull/120\n'],
     ['before gh issue edit', 'gh pr create --fill && gh issue edit 117 --add-label "👀 status:in-review"',
       'Creating pull request for x into main in o/r\n\nhttps://github.com/o/r/pull/120\nhttps://github.com/o/r/issues/117\n'],
+    // agent-squad #299: gh pr edit prints its PR's address alone, as gh pr create does (QA-F10).
+    ['after gh pr edit of another PR (QA-F10)', 'gh pr edit 50 --add-label "superseded" && gh pr create --fill',
+      'https://github.com/o/r/pull/50\nhttps://github.com/o/r/pull/120\n'],
+    ['before gh pr edit of another PR', 'gh pr create --fill && gh pr edit 50 --add-label "superseded"',
+      'https://github.com/o/r/pull/120\nhttps://github.com/o/r/pull/50\n'],
+    ['after gh pr edit of another repository\'s PR', 'gh pr edit https://github.com/a/b/pull/50 --add-label x && gh pr create --fill',
+      'https://github.com/a/b/pull/50\nhttps://github.com/o/r/pull/120\n'],
   ]
   for (const [name, command, output] of created) {
     test(`gh pr create ${name}: the PR it made, tied to the issue, and its merge ends both`, async ($, on) => {
