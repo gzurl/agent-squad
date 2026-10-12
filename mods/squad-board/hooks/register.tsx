@@ -3,15 +3,15 @@ import type { Register } from 'claude-code'
 
 import type { BoardAgent, BoardAgents, BoardItem, BoardRole, BoardState } from '../types'
 
-// The squad board (agent-squad #205, #212, #217, #222, #235, #240, #244, #289). Every session of a squad
-// publishes its own state in this mod's store, under `<project>/<role>`, and only that key: what it
-// is doing, whether the CEO paused it, and the issue or PR its agent is focused on, which its own
-// gh calls declare (focusAfter, below). The
-// CTO's session reads its project's keys and draws them on one line above its prompt, with the
-// wordmark and the board's release on the right, and shows a toast when an agent waits for the CEO.
-// The band shows each session's own state, not GitHub's: nothing is read from GitHub, and no
-// command is run; a newer release is known from a file another script writes. A session whose name is not a squad role's does nothing. The
-// signals are the ones agent-squad #199 measured.
+// The squad board (agent-squad #205, #212, #217, #222, #235, #240, #244, #289). Every session of a
+// squad publishes its own state in this mod's store, under `<project>/<role>`, and only that key:
+// what it is doing, whether the CEO paused it or has it on autopilot, and the issue or PR its agent
+// is focused on, which its own gh calls declare (focusAfter, below). The CTO's session reads its
+// project's keys and draws them on one line above its prompt, with the wordmark and the board's
+// release on the right, and shows a toast when an agent waits for the CEO. The band shows each
+// session's own state, not GitHub's: nothing is read from GitHub, and no command is run; a newer
+// release is known from a file another script writes. A session whose name is not a squad role's
+// does nothing. The signals are the ones agent-squad #199 measured.
 
 const ROLES: readonly BoardRole[] = ['CTO', 'DEV', 'QA']
 // How often a session rewrites its key, and how old a key may grow before its part reads unknown.
@@ -35,10 +35,16 @@ const SIGNATURE: Record<BoardRole, string> = {
   DEV: '\u{1F468}\u{1F3FC}\u200D\u{1F4BB}',
   QA: '\u{1F469}\u{1F3FC}\u200D\u{1F52C}',
 }
+// The squad's part, on the right of the band (agent-squad #244): fast-forward first while the CEO
+// has the squad on autopilot, then the wordmark, then the notice of a newer release; at least GAP
+// cells between it and the agents, and no separator.
+const AUTOPILOT = '\u23E9'
+const GAP = 3
 // Every emoji the band draws takes two cells of a terminal, however many code points it has, as
 // Claude Code measures it; every other character one. The longest are matched first. A terminal
-// that draws the pause in one cell leaves the line one cell shorter, which the cut allows for.
-const WIDE = [...new Set([...Object.values(SIGNATURE), ...Object.values(MARK), '\u23E9'])].sort((a, b) => b.length - a.length)
+// that draws the pause in one cell leaves the line one cell shorter, which the cut allows for, and
+// the squad's part one cell short of the edge.
+const WIDE = [...new Set([...Object.values(SIGNATURE), ...Object.values(MARK), AUTOPILOT])].sort((a, b) => b.length - a.length)
 // Between two agents, a light vertical bar; where the band is cut, an ellipsis; above the agents and
 // below them, a rule of light horizontal lines across the band. The bars and the rules are in the
 // blue of cmux's active pane.
@@ -46,11 +52,6 @@ const SEPARATOR = ' \u2502 '
 const ELLIPSIS = ' \u2026'
 const RULE = '\u2500'
 const RULE_COLOR = '#0A84FF'
-// The squad's part, on the right of the band (agent-squad #244): fast-forward first while the CEO
-// has the squad on autopilot, then the wordmark, then the notice of a newer release; at least GAP
-// cells between it and the agents, and no separator.
-const AUTOPILOT = '\u23E9'
-const GAP = 3
 // Each role's name in the colour its session gets with /color (agent-squad #222): the theme key
 // Claude Code paints that colour with, in every theme, inside the plain colour of the same name. The
 // keys are undocumented and may change in any release; a key Claude Code does not know paints
