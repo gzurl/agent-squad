@@ -1,5 +1,36 @@
 # Changelog
 
+## v50 — 2026-10-12
+- **The band follows each agent's focus** (#289, from trivial-tape's CTO), not its last `gh` call.
+  - **Declaring work sets the item:** an issue marked `🚧 status:in-progress`, a PR the agent
+    creates, or a PR it checks out or reviews.
+  - **Bookkeeping does not:** viewing, commenting, other labels.
+  - **A merge or a close** goes back to the focus before it.
+  - **Every `gh` call** on a command line counts, in order (#299).
+  - Each key gains a `focus` list, and a key written before v50 comes back as a focus of its item.
+- **The band's squad part moves to the right** (#244). The agents come first, on the left; on the right
+  go ⏩ while the squad is on autopilot, the wordmark and the release, and the notice of a newer one:
+  `agent-squad (v49) → v50 available: /squad-upgrade`. On a narrow terminal the squad's part
+  shortens first, and a narrower band never shows more than a wider one (#304).
+- **The latest release is checked at most once a day** (#302, #309): at session start, at the end of
+  a turn once a day has passed, and in `/squad-resume` and `/squad-watch`.
+  - The new `squad-latest.sh` writes `.agent-squad/latest-release` for the band. Offline, it retries
+    at most once an hour, and a time ahead of now counts as never.
+  - An upgrade adds a hook at the end of each turn, through the same wrapper as the others, and
+    `--check` requires it.
+- **Each release is a GitHub Release with its package** (#295), so that GitHub counts its downloads,
+  one number per version, and nothing about who.
+  - From v50 on, the installer downloads the Release's package and checks its SHA-256, with
+    `sha256sum` or `shasum`.
+  - A tag without a Release still installs from its tarball.
+- **The installer reads the project's own `.gitignore` rules,** whatever the machine's excludes say
+  (#296). An install no longer asks for a decision there, and `--check` passes. Lines an earlier
+  install appended twice are harmless, and can be removed by hand.
+- **The uninstaller** lists the `.claude/settings.local.json` ignore line only when that file goes
+  (#291).
+- No charter rule changes. Restart the three sessions after the upgrade, to load the new board and
+  the new hook.
+
 ## v49 — 2026-10-12
 - **What comes from outside: the author decides, and a label only shows it** (#281, after #276).
   - **§3:** an issue, pull request, review or comment is inside only when its account is the
