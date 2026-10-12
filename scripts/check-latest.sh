@@ -5,7 +5,8 @@
 # after the last that worked, and an hour after a failed attempt; it writes the attempt before it
 # asks; it writes the file in the format the board reads; a failure, a wrong answer or a gh that
 # takes too long keeps the tag; a file that is not that format counts as no check; --due only
-# answers; without an upstream it asks nothing; bad usage exits 2.
+# answers; --now, a session start's, asks whatever the last check's age (agent-squad #336); without
+# an upstream it asks nothing; bad usage exits 2.
 # shellcheck disable=SC2016 # the checks' bash -c bodies take their values as arguments
 set -u
 
@@ -59,7 +60,7 @@ known() {
   jq -cn --argjson tag "$1" --argjson checked "$((now - $2))" --argjson attempted "$((now - $3))" \
     '{tag: $tag, checkedAt: $checked, attemptedAt: $attempted}' > "$file"
 }
-# `run [--due] ...` runs the copy on the checkout, into out and code, with a fresh gh.log.
+# `run [--due | --now] ...` runs the copy on the checkout, into out and code, with a fresh gh.log.
 run() {
   rm -f "$lab/gh.log"
   out="$("$latest" "$@" "$checkout" 2>&1)"
@@ -113,6 +114,30 @@ check "checked a day and a minute ago, a check is due" [ "$code" -eq 0 ]
 GH_ANSWER=v51 run
 check "and a run asks, and writes the newer tag" bash -c 'grep -q releases/latest "$1"' _ "$lab/gh.log"
 check "with the time of the check" holds '.tag == "v51" and (now - .checkedAt) < 5'
+
+# 2b. --now, as a session start runs it, asks whatever the last check's age (agent-squad #336): a
+#     minute after a check that worked, and right after a failed attempt, with a tag known or not.
+# `now_asks <what> <tag or null> <seconds since checked> <seconds since attempted>` runs --now with
+# the file as of then, and expects GitHub asked and its answer written.
+now_asks() {
+  known "$2" "$3" "$4"
+  GH_ANSWER=v51 run --now
+  check "--now asks GitHub after $1, says what it found, and writes it" \
+    bash -c '[ "$1" -eq 0 ] && [ "$2" = "latest release: v51, checked now" ] && grep -q releases/latest "$3"' _ "$code" "$out" "$lab/gh.log"
+  check "and the file holds v51, checked and attempted now" holds '.tag == "v51" and (now - .checkedAt) < 5 and .attemptedAt == .checkedAt'
+}
+now_asks "a check a minute ago" '"v50"' 60 60
+now_asks "a failed attempt a minute ago" '"v50"' $((day + 60)) 60
+now_asks "a failed attempt a minute ago, with no check that worked yet" null $((day + 60)) 60
+#     Every other moment keeps its rule: a minute after that check, none is due.
+run --due
+check "after a --now check, none is due for the turn's end, /squad-resume or /squad-watch" [ "$code" -eq 1 ]
+#     A --now that fails records the attempt, as any check does.
+known '"v50"' 60 60
+GH_FAILS=1 run --now
+check "a --now that fails keeps the tag and records the attempt" \
+  bash -c '[ "$1" = "latest release: GitHub did not tell it; the next attempt is in an hour" ]' _ "$out"
+check "and its file still names v50, with the attempt now" holds '.tag == "v50" and (now - .attemptedAt) < 5'
 
 # 3. A failure keeps the tag and its time, records the attempt, and waits an hour.
 known '"v50"' $((day + 60)) $((day + 60))
@@ -188,13 +213,13 @@ check "with no squad-install.sh beside it, it asks nothing and says why" \
 check "and records the attempt, so that it tries again in an hour" holds '.tag == "v50" and (now - .attemptedAt) < 5'
 
 # 8. Bad usage exits 2, and asks nothing.
-for args in "" "--due" "$checkout $checkout" "$lab/playbook"; do
+for args in "" "--due" "--now" "$checkout $checkout" "$lab/playbook"; do
   rm -f "$lab/gh.log"
   # shellcheck disable=SC2086 # the arguments are split on purpose
   out="$("$latest" $args 2>&1)"
   code=$?
   check "'${args//$lab/<lab>}' is bad usage, exit 2" \
-    bash -c '[ "$1" -eq 2 ] && [ "$2" = "usage: squad-latest.sh [--due] <main checkout>" ] && [ ! -e "$3" ]' \
+    bash -c '[ "$1" -eq 2 ] && [ "$2" = "usage: squad-latest.sh [--due | --now] <main checkout>" ] && [ ! -e "$3" ]' \
     _ "$code" "$out" "$lab/gh.log"
 done
 

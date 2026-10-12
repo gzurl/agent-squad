@@ -409,9 +409,10 @@ else
   fail "a snapshot is missing: $(find "$handoff_dir" -name '*.md' | tr '\n' ' ')"
 fi
 
-# 10. The check of the latest release (agent-squad #302): startup, resume and the turn's end start
-#     it, in the background, when the playbook's squad-latest.sh says one is due; restore does not;
-#     and none of them prints a word about it, nor waits for it. A stand-in for squad-latest.sh
+# 10. The check of the latest release (agent-squad #302): startup and resume, which are session
+#     starts, start it every time, with --now (agent-squad #336); the turn's end starts it when the
+#     playbook's squad-latest.sh says one is due; each in the background; restore does not; and none
+#     of them prints a word about it, nor waits for it. A stand-in for squad-latest.sh
 #     answers --due with 0 when the file due is there, and holds a check until the case lets it
 #     end, so that what it logs, not a clock, tells whether a hook waited for it: under load, a
 #     hook run can take longer than any delay a clock would allow it (agent-squad #329). Each case
@@ -477,24 +478,28 @@ checks "the turn's end starts a check that is due, for the main checkout, in the
   "$nested" turn yes "--due $main_p $main_p checked "
 checks "and starts none when none is due" "$nested" turn no "--due $main_p "
 none_due=$latest_case
-checks "startup starts one when it is due" "$beside" startup yes "--due $main_p $main_p checked "
+checks "startup checks the latest release when one is due" "$beside" startup yes "--now $main_p checked "
+checks "and when none is due, since a session start always asks (agent-squad #336)" "$beside" startup no "--now $main_p checked "
 #    restore prints the snapshot, and starts no check: its log is read once the cases below have
 #    run, so that a check it started late would be there by then.
 next_case yes
 run "$main" restore '{"session_id":"x"}' >/dev/null
 restored=$latest_case
 touch "$main/go-$latest_case"
-#    resume prints its re-orientation, which `checks` does not expect: its own case, then.
-next_case yes
-out="$(run "$main" resume '{"session_id":"x","source":"resume"}')"
-held="$(case_log)"
-end_check checked
-if [[ "$out" == "Squad: this session was resumed."* ]] && [[ "$held" != *checked* && "$held" != *"gave up"* ]] \
-  && [ "$(case_log)" = "--due $main_p $main_p checked " ]; then
-  pass "resume re-orients, then starts a check that is due"
-else
-  fail "resume printed '$out', and the stand-in logged '$held', then '$(case_log)'"
-fi
+#    resume prints its re-orientation, which `checks` does not expect: its own cases, then. It is a
+#    session start, a /restart's too, so it checks whether one is due or not.
+for due in yes no; do
+  next_case "$due"
+  out="$(run "$main" resume '{"session_id":"x","source":"resume"}')"
+  held="$(case_log)"
+  end_check checked
+  if [[ "$out" == "Squad: this session was resumed."* ]] && [[ "$held" != *checked* && "$held" != *"gave up"* ]] \
+    && [ "$(case_log)" = "--now $main_p checked " ]; then
+    pass "resume re-orients, then checks the latest release, with a check due: $due"
+  else
+    fail "resume, with a check due: $due, printed '$out', and the stand-in logged '$held', then '$(case_log)'"
+  fi
+done
 #    Without the playbook's squad-latest.sh, or with one that cannot run, nothing happens.
 chmod -x "$latest"
 checks "a squad-latest.sh that cannot run is left alone" "$main" turn yes ""
