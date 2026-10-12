@@ -370,6 +370,11 @@ it keeps the board it started with, and a hook the release adds waits for it too
 line shows the previous release, with the new one's notice. The release notes are in
 [CHANGELOG.md](CHANGELOG.md).
 
+If `/restart` refuses with *this session belongs to `<directory>` but is running in `<checkout>`*,
+the session was started or resumed from another directory, a subdirectory included. Its memory is
+not the squad's, and the squad's hooks say so at its start. Exit it and start a new session from
+the main checkout, without `--resume`.
+
 **To remove the squad from a project,** type `/squad-uninstall` in the CTO's session. The CTO shows
 you what would go and what would stay. When you say yes, it first merges a PR for what git tracks,
 then removes the rest. With no squad session open, run `.agent-squad/playbook/scripts/squad-uninstall.sh .` from

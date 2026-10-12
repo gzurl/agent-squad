@@ -287,11 +287,14 @@ ours='[.hooks[][] | select(any(.hooks[]; .command | contains("/.agent-squad/squa
 # `hook_commands` lists each squad entry's event, matcher and command, in the installer's order.
 hook_commands='[.hooks | to_entries[] | .key as $e | .value[] | .matcher as $m | .hooks[]
   | select(.command | contains("squad-hook") or contains("squad-handoff.sh")) | "\($e) \($m) \(.command)"]'
-# What they are, as the installer writes them: the wrapper and the event, nothing else.
-# The turn's end has no matcher (agent-squad #302).
-wrapper_commands="$(jq -nc --arg w '"$CLAUDE_PROJECT_DIR"/.agent-squad/squad-hook' '[
-  "PreCompact manual \($w) save", "PreCompact auto \($w) save", "SessionStart compact \($w) restore",
-  "SessionStart startup \($w) startup", "SessionStart resume \($w) resume", "Stop  \($w) turn"]')"
+# `wrapper_commands <project>` is what they are, as the installer writes them for that project: its
+# wrapper, by its physical absolute path in single quotes (agent-squad #319), and the event, nothing
+# else. The turn's end has no matcher (agent-squad #302).
+wrapper_commands() {
+  jq -nc --arg w "'$(cd "$1" && pwd -P)/.agent-squad/squad-hook'" '[
+    "PreCompact manual \($w) save", "PreCompact auto \($w) save", "SessionStart compact \($w) restore",
+    "SessionStart startup \($w) startup", "SessionStart resume \($w) resume", "Stop  \($w) turn"]'
+}
 squad_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\", \"\"]"
 # `broken <file>` keeps a copy of a file about to be broken; `mended <file>` puts it back.
 broken() { cp -p "$1" "$lab/mend.me"; }
@@ -409,9 +412,10 @@ JSON
   check "and has the squad's hooks once each, the older entry replaced" \
     jq_holds "$squad_hooks" "$settings"
   # Each runs the wrapper with its event, the shortest command that keeps the guard for a missing
-  # playbook (#269): Claude Code shows it in brackets on every line about the hook.
-  check "each squad hook runs .agent-squad/squad-hook with its event, and no other command is the squad's" \
-    jq_holds "$hook_commands == $wrapper_commands" "$settings"
+  # playbook (#269): Claude Code shows it in brackets on every line about the hook. The wrapper is
+  # named by its absolute path, so that a session whose $CLAUDE_PROJECT_DIR is elsewhere reaches it.
+  check "each squad hook runs .agent-squad/squad-hook, by its absolute path, with its event, and no other command is the squad's" \
+    jq_holds "$hook_commands == $(wrapper_commands "$project")" "$settings"
   check "and the wrapper is in .agent-squad/, executable" [ -x "$squad/squad-hook" ]
 
   # 3. A second run changes nothing but the log, which gains one line.
@@ -450,12 +454,19 @@ JSON
   printf './records.sh\n' > "$dev/.agent-squad-checks"
 
   # 6. Without the playbook, the shim refuses every push and the hooks warn the session.
-  # `run_hook <matcher>` runs the command installed for that matcher as Claude Code would.
+  # `run_hook <matcher> [<project directory> [<directory>]]` runs the command installed for that
+  # matcher as Claude Code would, its $CLAUDE_PROJECT_DIR the directory given, the main checkout when
+  # none is, from the last directory given, the main checkout when none is, and passes when it exits
+  # 0. "" for the project directory leaves the variable unset.
   run_hook() {
     local program command
     program='[.hooks[][] | select(.matcher == $m) | .hooks[] | .command | select(contains("/.agent-squad/squad-hook"))][0]'
     command="$(jq -r --arg m "$1" "$program" "$settings")"
-    (cd "$project" && echo '{"session_id":"x"}' | CLAUDE_PROJECT_DIR="$project" sh -c "$command")
+    if [ "${2-$project}" = "" ]; then
+      (cd "${3:-$project}" && echo '{"session_id":"x"}' | env -u CLAUDE_PROJECT_DIR sh -c "$command")
+    else
+      (cd "${3:-$project}" && echo '{"session_id":"x"}' | CLAUDE_PROJECT_DIR="${2-$project}" sh -c "$command")
+    fi
   }
   mv "$squad/playbook" "$lab/playbook-aside"
   check "the shim refuses a push when the playbook is missing" refused push_from "$dev" no-playbook
@@ -468,6 +479,48 @@ JSON
   check "with the playbook back, the startup hook prints nothing" prints_nothing run_hook startup
   check "and the compact hook re-orients the session" prints "Context was compacted" run_hook compact
   check "and the resume hook says where the shell is" prints "Squad: this session was resumed" run_hook resume
+
+  # 6b. A session whose $CLAUDE_PROJECT_DIR is not the main checkout, as one started or resumed from a
+  #     subdirectory (agent-squad #319), reaches the wrapper all the same, and is told so at its
+  #     start, its resume and each compaction, naming both directories; then the event runs as for
+  #     any session. It is never told that the charter is not installed while it is. Each exits 0.
+  mkdir -p "$project/harness"
+  checkout_p="$(cd "$project" && pwd -P)"
+  misplaced="Squad: this session belongs to $project/harness, not to $checkout_p: it was started or resumed from there, so its memory directory is not the squad's (SQUAD.md §2.1). Exit it, start a new session from $checkout_p without --resume, and tell the CTO."
+  # `told_misplaced <matcher>` passes when that hook, run for the subdirectory, exits 0 and prints
+  # the message, and nothing about the charter.
+  told_misplaced() {
+    local out
+    out="$(run_hook "$1" "$project/harness")" && grep -qxF -- "$misplaced" <<<"$out" && lacks "$out" "charter is not installed"
+  }
+  # `saves_quietly`: the save hook, run for the subdirectory, exits 0, prints nothing, and saves.
+  saves_quietly() {
+    local out
+    rm -f "$squad/handoff/x.md"
+    out="$(run_hook manual "$project/harness")" && [ -z "$out" ] && [ -s "$squad/handoff/x.md" ]
+  }
+  # `told_both`: with the playbook missing, the startup hook prints the message, then the charter's.
+  told_both() {
+    local out
+    out="$(run_hook startup "$project/harness")" && grep -qxF -- "$misplaced" <<<"$out" \
+      && contains "$out" "charter is not installed ($checkout_p/.agent-squad/playbook/scripts/squad-handoff.sh is missing)"
+  }
+  for matcher in startup compact resume; do
+    check "a session started in a subdirectory gets, from its $matcher hook, the message that names both directories" \
+      told_misplaced "$matcher"
+  done
+  check "and after it, the compact hook still re-orients the session" prints "Context was compacted" run_hook compact "$project/harness"
+  check "and the resume hook still says where the shell is" prints "Squad: this session was resumed" run_hook resume "$project/harness"
+  check "its save hook still saves the snapshot, and says nothing" saves_quietly
+  check "and its turn's end says nothing" prints_nothing run_hook "" "$project/harness"
+  mv "$squad/playbook" "$lab/playbook-aside"
+  check "with the playbook missing too, it is told both, the charter's path named" told_both
+  mv "$lab/playbook-aside" "$squad/playbook"
+  #    The same directory under another name, and no $CLAUDE_PROJECT_DIR at all, are no misplaced session.
+  ln -s "$project" "$lab/linked-checkout"
+  check "a \$CLAUDE_PROJECT_DIR that is a symbolic link to the checkout gets no warning" prints_nothing run_hook startup "$lab/linked-checkout"
+  check "and neither does a hook run with no \$CLAUDE_PROJECT_DIR, from a subdirectory" \
+    prints_nothing run_hook startup "" "$project/harness"
 
   # 7. An upgrade replaces the playbook whole and leaves the rest of .agent-squad/ alone. It is run
   #    as the README says, by the installed installer, which replaces the directory it runs from.
@@ -576,7 +629,7 @@ cases_upgrade_output() {
   echo "# an edit" >> "$target/.agent-squad/squad-hook"
   out="$("$install" "$target" "$tag_a" 2>&1)"
   check "hooks written before v49 become the wrapper's, once each, and the project's own hook stays" \
-    jq_holds "$hook_commands == $wrapper_commands and .hooks.PreToolUse[0].hooks[0].command == \"echo own hook\"" "$target/.claude/settings.local.json"
+    jq_holds "$hook_commands == $(wrapper_commands "$target") and .hooks.PreToolUse[0].hooks[0].command == \"echo own hook\"" "$target/.claude/settings.local.json"
   check "and a wrapper changed since is rewritten, saying so" \
     bash -c 'grep -qF "wrote the squad'"'"'s hooks into .claude/settings.local.json, other settings kept, and rewrote their wrapper .agent-squad/squad-hook" <<<"$1" \
       && ! grep -qF "# an edit" "$2"' _ "$out" "$target/.agent-squad/squad-hook"
@@ -1396,6 +1449,25 @@ cases_machine_excludes() {
     [ -z "$(ls -A "$lab/own-tmpdir.tmp")" ]
 }
 
+# Case 14c (agent-squad #319): a main checkout that moved. Its hooks still name the wrapper at the
+# old path, so --check's hooks item says so and to install again, and an install from the new place
+# rewrites them.
+cases_moved_checkout() {
+  target="$(new_project before-move)" || exit 2
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  local old_p new_p
+  old_p="$(cd "$target" && pwd -P)"
+  mv "$target" "$lab/after-move" || exit 2
+  target="$lab/after-move" new_p="$(cd "$lab/after-move" && pwd -P)"
+  out="$("$install" --check "$target" 2>&1)"
+  check "after the checkout moved, --check's hooks item says that the hooks run the old wrapper, and to install again" \
+    contains "$out" "check: FAILED  $item_hooks: the hooks run '$old_p/.agent-squad/squad-hook', not this checkout's wrapper '$new_p/.agent-squad/squad-hook': the checkout moved, or another release wrote them; install again"
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  out="$("$install" --check "$target" 2>&1)"
+  check "and an install from the new place rewrites them, so the hooks item passes again" contains "$out" "check: ok      $item_hooks"
+  check "naming the wrapper where it is now" jq_holds "$hook_commands == $(wrapper_commands "$target")" "$target/.claude/settings.local.json"
+}
+
 # Case 18.
 cases_leftover_commands() {
   # 18. A squad command the playbook no longer has, as after a rename (#188), is removed on the next
@@ -1703,6 +1775,14 @@ cases_quoted_names() {
   odd='odd "one" $HOME `x`'
   target="$(new_project "$odd")" || exit 2
   out="$("$install" "$target" "$tag_a" 2>&1)"
+  # `hook_reached <project>` runs its compact hook as Claude Code would, and passes when it reaches
+  # the wrapper, whose path the command quotes for sh (agent-squad #319): it re-orients, and exits 0.
+  hook_reached() {
+    local command out
+    command="$(jq -r '[.hooks.SessionStart[] | select(.matcher == "compact") | .hooks[].command][0]' "$1/.claude/settings.local.json")"
+    out="$(cd "$1" && echo '{"session_id":"x"}' | CLAUDE_PROJECT_DIR="$1" sh -c "$command")" && contains "$out" "Context was compacted"
+  }
+  check "its hooks' command, the wrapper's path quoted for sh, reaches the wrapper" hook_reached "$target"
   check "a project whose name the shell would expand gets it quoted in the next steps" \
     ends_with_next_steps "$out" 'odd \"one\" \$HOME \`x\`'
   # `named_by <line>` runs a printed `claude -n` line with a claude that prints the name it is given;
@@ -1728,6 +1808,7 @@ cases_quoted_names() {
   target="$(new_project "$bang")" || exit 2
   out="$("$install" "$target" "$tag_a" 2>&1)"
   dev_line="$(grep -F '    claude -n ' <<<"$out" | grep -F 'DEV:')"
+  check "its hooks' command, an apostrophe in the path written '\\'', reaches the wrapper" hook_reached "$target"
   check "a name with a ! is printed in single quotes" \
     [ "$dev_line" = "    claude -n 'DEV:it'\\''s a!b'" ]
   check "and the line pasted into an interactive bash names the session after the project, as it is" \
@@ -1757,6 +1838,7 @@ groups=(
   cases_failure_paths
   cases_failure_installs
   cases_machine_excludes
+  cases_moved_checkout
   cases_leftover_commands
   cases_mods
   cases_uninstall

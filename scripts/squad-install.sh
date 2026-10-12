@@ -199,26 +199,43 @@ imports_charter() {
 
 # The squad's session hooks as the installer writes them (D5 and D10 of agent-squad #23, #164 for
 # resume, and #302 for the turn's end, which starts the check of the latest release when one is
-# due). Each runs the hooks' wrapper in .agent-squad/ with its event. Claude Code shows a hook's
+# due). Each runs the hooks' wrapper in .agent-squad/ with its event, the wrapper named by its
+# absolute path (agent-squad #319): Claude Code's $CLAUDE_PROJECT_DIR is the directory a session
+# started in, which for a session started or resumed from a subdirectory is not the main checkout,
+# and a command built on it then found no wrapper and failed, telling the session nothing. The
+# settings file is this machine's, which git ignores; --check verifies that the path is this
+# checkout's, and an install rewrites it once the checkout has moved. Claude Code shows a hook's
 # command in brackets on every line about it, a blocked /compact included, so the command is the
-# shortest that keeps the guard: the guard lives in the wrapper (agent-squad #269).
-# shellcheck disable=SC2016 # expanded by the shell that runs the hook, not here
-hook='"$CLAUDE_PROJECT_DIR"/.agent-squad/squad-hook'
+# shortest that keeps the guard, the path and the event: the guard lives in the wrapper (#269).
+# `sh_quoted <text>` is the text in single quotes, for sh.
+sh_quoted() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+hook="$(sh_quoted "$squad/squad-hook")"
 save_command="$hook save" restore_command="$hook restore" startup_command="$hook startup" resume_command="$hook resume"
 turn_command="$hook turn"
 # The wrapper runs the playbook's squad-handoff.sh, and reports a missing playbook to the session
-# instead of failing it: a save does nothing, and the other events tell the session. Every install
+# instead of failing it: a save does nothing, and the other events tell the session. A session
+# whose $CLAUDE_PROJECT_DIR is not the wrapper's own checkout is told so first, at its start, its
+# resume and each compaction, then the event runs as for any session (agent-squad #319). Every install
 # writes it into .agent-squad/, and --check requires it byte for byte, as it does the shim. A hook
 # entry is the squad's when its command runs the wrapper, or squad-handoff.sh as releases before
 # v49 wrote it, so that an install replaces both.
 hook_wrapper="$(cat <<'WRAPPER'
 #!/bin/sh
 # agent-squad's session hooks run this wrapper, which squad-install.sh writes on every install.
-# It runs the playbook's squad-handoff.sh with the hook's event. When the playbook is missing, a
-# save does nothing, and the other events tell the session that the charter is not installed.
-f="$(dirname "$0")/playbook/scripts/squad-handoff.sh"
+# It runs the playbook's squad-handoff.sh with the hook's event. A session whose project directory
+# is not this checkout, as one started or resumed from a subdirectory, is told so first: its memory
+# is not the squad's. When the playbook is missing, a save does nothing, and the other events tell
+# the session that the charter is not installed. Every event exits 0, so the session reads it.
+here="$(cd "$(dirname "$0")/.." && pwd -P)"
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ "$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)" != "$here" ]; then
+  case "${1:-}" in
+    startup|resume|restore) echo "Squad: this session belongs to $CLAUDE_PROJECT_DIR, not to $here: it was started or resumed from there, so its memory directory is not the squad's (SQUAD.md §2.1). Exit it, start a new session from $here without --resume, and tell the CTO." ;;
+  esac
+fi
+f="$here/.agent-squad/playbook/scripts/squad-handoff.sh"
 if [ -x "$f" ]; then exec "$f" "$@"; fi
 [ "${1:-}" = save ] || echo "Squad: the charter is not installed ($f is missing). Stop and tell the CTO before doing anything else."
+exit 0
 WRAPPER
 )"
 # shellcheck disable=SC2016 # a jq definition
@@ -467,6 +484,9 @@ check_installation() {
   if ! actual="$(jq -c "$hook_ours"'[(.hooks // {}) | to_entries[] | .key as $event | .value[] | .matcher as $matcher
       | .hooks[] | select(ours) | [$event, $matcher, .command]] | sort' "$settings" 2>/dev/null)"; then
     why="cannot read .claude/settings.local.json"
+  elif elsewhere="$(jq -r --arg wrapper "$hook " '[.[][2] | select(startswith($wrapper) | not)] | first // empty' <<<"$actual")" \
+      && [ -n "$elsewhere" ]; then
+    why="the hooks run ${elsewhere% *}, not this checkout's wrapper $hook: the checkout moved, or another release wrote them; install again"
   elif [ "$actual" != "$expected" ]; then
     why="$(jq -rn --argjson want "$expected" --argjson have "$actual" \
       '"missing: \([($want - $have)[] | .[1]] | join(", ") | if . == "" then "none" else . end); unexpected: \([($have - $want)[] | .[1]] | join(", ") | if . == "" then "none" else . end)"')"

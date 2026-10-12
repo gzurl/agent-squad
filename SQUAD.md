@@ -40,6 +40,7 @@ Each agent runs in its own session, named `CTO:<project-name>`, `DEV:<project-na
 ### 2.1 Sessions and memory
 - **All three sessions are launched from the main checkout `<repo>/`**, never from a worktree.
   *Why:* in Claude Code the persistent memory directory is keyed by the launch directory; launching from the same place on the same machine is what makes the three sessions share it. Sessions on different machines do not share it, and nothing warns about it.
+- **A session started or resumed from another directory is told so.** Claude Code keeps the directory a session started in, a subdirectory of the checkout included, even when it is resumed from the main checkout. The squad's hooks then say, at its start, at each compaction and when it resumes, that its memory is not the squad's. Its agent exits it and starts a new session from the main checkout, without `--resume`, and tells the CTO. *A QA session started in a subdirectory once worked for a week with the subdirectory's memory, warned only that the charter was not installed, which it was (agent-squad #319).*
 - The persistent memory is shared by the three sessions: nothing written there is private to a role (see §7).
 
 ### 2.2 GitHub account
