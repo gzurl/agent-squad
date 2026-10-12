@@ -352,6 +352,10 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     await runs($, w, 'gh pr edit 120 --add-label "👀 status:in-review" && gh issue edit 117 --add-label "👀 status:in-review" --remove-label "🚧 status:in-progress"')
     focusIs(w, pr(120))
     await runs($, w, 'head=$(squad-merge-gate.sh 120) && gh pr merge 120 --squash --match-head-commit "$head"')
+    // pr.md is a relative path, so the board read no body: the PR is tied to nothing, and #117 ends
+    // with the author's next step, its status label removed (agent-squad #354).
+    focusIs(w, issue(117))
+    await runs($, w, 'gh issue edit 117 --remove-label "👀 status:in-review" --remove-label "🚧 status:in-progress"')
     focusIs(w, null)
   })
 
@@ -375,14 +379,14 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
       'https://github.com/a/b/pull/50\nhttps://github.com/o/r/pull/120\n'],
   ]
   for (const [name, command, output] of created) {
-    test(`gh pr create ${name}: the PR it made, tied to the issue, and its merge ends both`, async ($, on) => {
+    test(`gh pr create ${name}: the PR it made, tied to nothing with no body to read; its merge gives the issue back`, async ($, on) => {
       const w = world(on)
       await start($, 'DEV:proj')
       await runs($, w, `gh issue edit 117 --add-label ${IN_PROGRESS}`)
       await runs($, w, command, output)
-      expect(w.store.get('proj/DEV')).toMatchObject({ item: pr(120), focus: [{ ...issue(117), tied: null }, { ...pr(120), tied: issue(117) }] })
+      expect(w.store.get('proj/DEV')).toMatchObject({ item: pr(120), focus: [{ ...issue(117), tied: null }, { ...pr(120), tied: null }] })
       await runs($, w, 'gh pr merge 120 --squash')
-      focusIs(w, null)
+      focusIs(w, issue(117))
     })
   }
 
@@ -391,7 +395,7 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     const w = world(on)
     await start($, 'DEV:proj')
     await runs($, w, `gh issue edit 117 --add-label ${IN_PROGRESS}`)
-    await runs($, w, 'gh pr create --fill', 'https://github.com/o/r/pull/120\n')
+    await runs($, w, 'gh pr create --title "fix: x" --body "Closes #117"', 'https://github.com/o/r/pull/120\n')
     await runs($, w, 'gh pr checkout 120')
     await runs($, w, 'gh pr review 120 --comment -b "self-review"')
     focusIs(w, pr(120))
@@ -431,9 +435,9 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     await runs($, w, 'gh pr merge 50 --squash')
     focusIs(w, issue(10))
     await runs($, w, `gh issue edit 11 --add-label ${IN_PROGRESS}`)
-    await runs($, w, 'gh pr create --fill', 'https://github.com/o/r/pull/60\n')
+    await runs($, w, 'gh pr create --title "fix: y" --body "Fixes #11"', 'https://github.com/o/r/pull/60\n')
     focusIs(w, pr(60))
-    // PR #60 was created with #11 in focus: closing it ends #11 too, and #10 shows again.
+    // PR #60's body fixes #11: closing it ends #11 too, and #10 shows again.
     await runs($, w, 'gh pr close 60 --comment "superseded"')
     focusIs(w, issue(10))
     // Ending something not in the focus changes nothing.
@@ -441,6 +445,135 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     focusIs(w, issue(10))
     await runs($, w, 'gh issue close 10')
     focusIs(w, null)
+  })
+
+  // agent-squad #354: an issue created already in progress is a focus, as gh issue edit adding the
+  // label is; the issue is the one gh issue create prints, not one another call of the line names.
+  const createdIssues: [string, string, string, { item: string; url: string | null }][] = [
+    ['--label', `gh issue create --title "x" --label ${IN_PROGRESS} --body "y"`, 'https://github.com/o/r/issues/90\n', issue(90)],
+    ['-l in a comma list', 'gh issue create -t x -l "🐛 bug,🚧 status:in-progress" -b y', 'https://github.com/o/r/issues/91\n', issue(91)],
+    ['--label=', 'gh issue create --title x --label="🚧 status:in-progress" --body y', 'https://github.com/o/r/issues/92\n', issue(92)],
+    ['in another repository', `gh issue create --repo a/b --title x --label ${IN_PROGRESS} --body y`,
+      'https://github.com/a/b/issues/93\n', { item: '#93', url: 'https://github.com/a/b/issues/93' }],
+    ['in a $( ), its body from a heredoc that names another call, after an edit that prints #5', [
+      `gh issue edit 5 --add-label "🐛 bug" && url=$(gh issue create --title "x" --label ${IN_PROGRESS} --body-file - </dev/null 2>&1 <<'EOF' | tail -1`,
+      'It names gh issue edit 6 --add-label "🚧 status:in-progress".', 'EOF', ')', 'echo "$url"',
+    ].join('\n'), 'https://github.com/o/r/issues/5\nhttps://github.com/o/r/issues/94\n', issue(94)],
+  ]
+  for (const [name, command, output, item] of createdIssues) {
+    test(`gh issue create with the in-progress label, ${name}: the issue it made`, async ($, on) => {
+      const w = world(on)
+      await start($, 'DEV:proj')
+      await runs($, w, command, output)
+      focusIs(w, item)
+    })
+  }
+  test('gh issue create without the in-progress label, or a label set through a variable, is no focus', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, 'gh issue create --title x --label "🐛 bug" --body y', 'https://github.com/o/r/issues/95\n')
+    await runs($, w, `n=96; gh issue edit "$n" --add-label ${IN_PROGRESS}`, '')
+    focusIs(w, null)
+  })
+
+  // agent-squad #354: a PR is tied to the issue its body closes, when the board can read the body:
+  // inline, or in a file whose absolute path is written out; otherwise to none.
+  const bodies: [string, string, Record<string, string>, { item: string; url: string | null } | null][] = [
+    ['--body "Closes #117"', 'gh pr create --title "fix: x" --body "Closes #117"', {}, issue(117)],
+    ['-b "fixes #117"', 'gh pr create -t x -b "It fixes #117."', {}, issue(117)],
+    ['--body="Resolves: #117"', 'gh pr create --title x --body="Resolves: #117"', {}, issue(117)],
+    ['a --body-file with an absolute path', 'gh pr create --title x --body-file /tmp/pr.md', { '/tmp/pr.md': 'What it does.\n\nCloses #117\n' }, issue(117)],
+    ['-F with an absolute path', 'gh pr create --title x -F /tmp/pr.md', { '/tmp/pr.md': 'closed #117' }, issue(117)],
+    ['a --body-file through a variable', 'S=/tmp; gh pr create --title x --body-file "$S/pr.md"', { '/tmp/pr.md': 'Closes #117' }, null],
+    // An absolute path that holds a variable is the shell's to expand: the board reads none.
+    ['an absolute --body-file that holds a variable', 'gh pr create --title x --body-file "/scratch/$S/pr.md"',
+      { '/scratch/$S/pr.md': 'Closes #117' }, null],
+    // A relative path is the shell's, not the session's: the board, which would read it from the
+    // session's root, reads none.
+    ['a --body-file with a relative path', 'gh pr create --title x --body-file pr.md',
+      { 'pr.md': 'Closes #117', '/work/proj/pr.md': 'Closes #117' }, null],
+    ['a body that closes nothing', 'gh pr create --title x --body "Part of #117"', {}, null],
+    ['--fill', 'gh pr create --fill', {}, null],
+  ]
+  for (const [name, command, files, tied] of bodies) {
+    test(`gh pr create with ${name}: tied to ${tied ? 'the issue it closes' : 'nothing'}`, async ($, on) => {
+      const w = world(on)
+      w.files = files
+      await start($, 'DEV:proj')
+      await runs($, w, `gh issue edit 117 --add-label ${IN_PROGRESS}`)
+      await runs($, w, command, 'https://github.com/o/r/pull/120\n')
+      expect(w.store.get('proj/DEV')).toMatchObject({ item: pr(120), focus: [{ ...issue(117), tied: null }, { ...pr(120), tied }] })
+      await runs($, w, 'gh pr merge 120 --squash')
+      focusIs(w, tied ? null : issue(117))
+    })
+  }
+  test('a PR whose body closes another issue than the one in focus leaves that one in focus when it merges', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, `gh issue edit 246 --add-label ${IN_PROGRESS}`)
+    await runs($, w, 'gh pr create --title x --body "Closes #348"', 'https://github.com/o/r/pull/349\n')
+    expect(w.store.get('proj/DEV')).toMatchObject({ focus: [{ ...issue(246), tied: null }, { ...pr(349), tied: issue(348) }] })
+    await runs($, w, 'gh pr merge 349 --squash')
+    focusIs(w, issue(246))
+  })
+
+  // agent-squad #354: removing an issue's in-progress or in-review label, and adding no status
+  // label, ends the work on it, as the author does once its PR is merged (SQUAD.md §4.9).
+  test('an issue whose status label is removed, with none added, leaves the focus; a label swap does not', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, `gh issue edit 10 --add-label ${IN_PROGRESS} && gh issue edit 11 --add-label ${IN_PROGRESS}`)
+    await runs($, w, 'gh issue edit 11 --add-label "👀 status:in-review" --remove-label "🚧 status:in-progress"')
+    await runs($, w, 'gh issue edit 11 --remove-label "⛔ status:blocked"')
+    focusIs(w, issue(11))
+    await runs($, w, 'gh issue edit 11 --remove-label "👀 status:in-review" --remove-label "🚧 status:in-progress" </dev/null >/dev/null')
+    focusIs(w, issue(10))
+    await runs($, w, 'gh issue edit 10 --remove-label="🚧 status:in-progress"')
+    focusIs(w, null)
+  })
+
+  // agent-squad #354's criterion: a parent issue whose sub-issues' PRs merge one by one stays in
+  // focus, and the last PR, which closes the parent, takes it with it.
+  test('a parent issue stays in focus while its sub-issues merge one by one, and goes with the PR that closes it', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, `gh issue edit 246 --add-label ${IN_PROGRESS}`)
+    for (const [sub, n] of [[350, 351], [352, 353]]) {
+      await runs($, w, `gh issue create --title "part of #246" --label ${IN_PROGRESS} --body "Part of #246."`, `https://github.com/o/r/issues/${sub}\n`)
+      focusIs(w, issue(sub))
+      await runs($, w, `gh pr create --title "test: part (#${sub})" --body "Closes #${sub}, part of #246."`, `https://github.com/o/r/pull/${n}\n`)
+      focusIs(w, pr(n))
+      await runs($, w, `gh pr merge ${n} --squash && gh issue edit ${sub} --remove-label "👀 status:in-review" --remove-label "🚧 status:in-progress"`)
+      focusIs(w, issue(246))
+    }
+    await runs($, w, 'gh pr create --title "test: the last part (#246)" --body "Closes #246."', 'https://github.com/o/r/pull/355\n')
+    await runs($, w, 'gh pr merge 355 --squash')
+    focusIs(w, null)
+  })
+
+  // agent-squad #354, point 3: DEV's own commands of 2026-10-12, word for word but for the paths,
+  // from #246 in progress to PR #349's merge. Its body file was named through a variable, so the
+  // PR was tied to nothing; #348 was set in progress through a variable too. #246 stays.
+  test("DEV's sequence of 2026-10-12 keeps #246 in focus through PR #349's merge", async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    const sequence: [string, string][] = [
+      [`gh issue edit 246 --add-label "🚧 status:in-progress" --remove-label "👀 status:in-review" --remove-label "⛔ status:blocked" </dev/null >/dev/null; gh issue view 246 --json title,labels,milestone,body,comments --jq '.title, ([.labels[].name]|join(",")) + " | " + (.milestone.title // "none"), "", .body, (.comments[] | "--- " + .createdAt + " " + .author.login + "\\n" + .body)' </dev/null`, 'title\n'],
+      [[`url=$(gh issue create --title "The coverage job has read 44% since PR #322" --label "👨🏼‍💻 owner:dev" --label "🐛 bug" --label "🟡 P2" --milestone "v53 — every script line covered or excused" --body-file - </dev/null 2>&1 <<'EOF' | tail -1`,
+        '**DEV:** Found while refreshing #246.', 'EOF',
+        `); echo "$url"; case "$url" in https://github.com/o/r/issues/[0-9]*) n=\${url##*/}; gh issue edit "$n" --add-label "🚧 status:in-progress" </dev/null >/dev/null; echo "labelled #$n";; esac`].join('\n'),
+        'https://github.com/o/r/issues/348\nlabelled #348\n'],
+      [`cd "/work/proj/.agent-squad/worktrees/dev" && S=/scratch; cat > "$S/pr-348.md" <<'EOF'\nCloses #348.\nEOF\ngh pr create --title "fix: the coverage summary reads kcov's records (#348)" --body-file "$S/pr-348.md" --base main </dev/null 2>&1 | tail -1; sleep 30; for i in $(seq 1 36); do s=$(gh pr checks fix/coverage-unescaped-paths --json name,bucket </dev/null 2>/dev/null); if [ -n "$s" ] && echo "$s" | jq -e '([.[] | select(.name != "label")] | length) >= 5 and all(.bucket != "pending")' >/dev/null; then break; fi; sleep 15; done; echo "$s" | jq -r '.[] | "\\(.name) \\(.bucket)"'; gh pr view fix/coverage-unescaped-paths --json number,headRefOid --jq '"\\(.number) \\(.headRefOid)"' </dev/null`,
+        'https://github.com/o/r/pull/349\nchecks pass\n349 a590dfd8eee7bc69699e95d879e9b2ff89c30885\n'],
+      [`cd "/work/proj/.agent-squad/worktrees/dev" && gh pr edit 349 --add-label "👀 status:in-review" --remove-label "🚧 status:in-progress" --remove-label "✅ status:approved" </dev/null >/dev/null && gh issue edit 348 --add-label "👀 status:in-review" --remove-label "🚧 status:in-progress" --remove-label "⛔ status:blocked" </dev/null >/dev/null; now=$(date '+%H:%M'); gh pr comment 349 --body "**DEV:** Waiting for QA's review since $now." </dev/null >/dev/null`, ''],
+      [`cd "/work/proj/.agent-squad/worktrees/dev" && p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" && head=$("$p/scripts/squad-merge-gate.sh" 349 </dev/null 2>/dev/null) && gh pr merge 349 --squash --match-head-commit "$head" </dev/null && git fetch -q origin && git branch -D fix/coverage-unescaped-paths && git push origin --delete fix/coverage-unescaped-paths </dev/null 2>&1 | tail -1; gh pr view 349 --json state,mergeCommit --jq '.state + " " + .mergeCommit.oid' </dev/null; gh issue view 348 --json state --jq .state </dev/null; gh issue edit 348 --remove-label "👀 status:in-review" --remove-label "🚧 status:in-progress" </dev/null >/dev/null; gh issue view 348 --json labels --jq '[.labels[].name]|join(",")' </dev/null`,
+        ' - [deleted]         fix/coverage-unescaped-paths\nMERGED 48f3597\nCLOSED\n'],
+    ]
+    for (const [command, output] of sequence) {
+      await runs($, w, command, output)
+      expect(w.store.get('proj/DEV').focus.map((entry: any) => entry.item)).toContain('#246')
+    }
+    focusIs(w, issue(246))
   })
 
   test('it holds five at most: a sixth drops the oldest', async ($, on) => {

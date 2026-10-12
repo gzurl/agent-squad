@@ -293,9 +293,12 @@ Above the prompt of the CTO's session, between two blue rules, one line shows ev
 project, in the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its
 signature and role, then, while the agent has something in hand, a colon and a link to the issue
 (`#123`) or pull request (`PR #124`) it works on. The agent's own `gh` calls set that item: an issue it labels
-`status:in-progress`, a PR it creates, and a PR it checks out or reviews. Merging or closing the
-item ends it, and a PR the agent created takes its issue with it: the band then shows the item
-before it, or the role alone. Reading, commenting and other label edits change nothing. An idle
+`status:in-progress`, when it edits the issue or creates it so, a PR it creates, and a PR it
+checks out or reviews. Merging or closing the item ends it, and so does taking an issue's status
+label off with none put on, the author's step once the issue's PR is merged. A PR the agent
+created takes with it the issue its body closes (`Closes #123`), when the board can read that
+body: given inline, or in a file named by its absolute path. The band then shows the item before
+it, or the role alone. Reading, commenting and other label edits change nothing. An idle
 agent shows its role alone, with no colon; its session keeps the item, which shows again once it
 works. The board shows what each session does, not what GitHub says: it reads nothing from GitHub.
 Only the CTO's session draws the band; DEV's and QA's sessions publish their state for it and show
