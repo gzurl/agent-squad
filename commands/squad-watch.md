@@ -35,7 +35,9 @@ nothing else.
    - for a session waiting in its own terminal: answer it there;
    - for a role with no session open: open it;
    - for a ping an hour old with nothing since: look at that session, or tell its agent what to
-     do.
+     do;
+   - for a PR that waits for a review requested on GitHub, from someone who is none of the
+     squad's sessions: ask that reviewer, or remove the request once it is no longer wanted.
 5. **What came from outside since the last triage.** Run
    `"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-outside.sh"`
    too, and read its exit status first, as above. If it prints anything, triage it as

@@ -5,7 +5,8 @@
 # - a PR whose head has no verdict, or one bound to an earlier commit: its reviewer, QA, or DEV on
 #   a PR that QA authors (SQUAD.md §4), to review the head;
 # - a PR whose verdict on its head asks for changes: its author, to answer them;
-# - a PR approved on its head: its author, to merge it;
+# - a PR approved on its head: its author, to merge it; but while a review it requests on GitHub is
+#   pending, the reviewer it was requested from, whom the watch never pings (agent-squad #306);
 # - a draft: its author, to finish it;
 # - an issue in progress: the role of its owner label, to carry on; with none, the CTO;
 # - an issue or a PR opened from outside the squad and not triaged yet, labelled needs-triage or
@@ -21,7 +22,9 @@
 #
 # An item has stalled when GitHub shows no activity on it (its updatedAt) for 30 minutes and its
 # owner's session is idle: the owner is to be pinged, once. When the same stall is still there an
-# hour after that, the CEO is to be told, once. A session that waits on the CEO in its own
+# hour after that, the CEO is to be told, once. A PR that waits for a reviewer requested on GitHub,
+# often a person outside the squad's sessions, is told to the CEO, once, when it has been quiet for
+# an hour, since only the CEO can reach that reviewer. A session that waits on the CEO in its own
 # terminal, or that is not open, is reported to the CEO at once and never pinged; a busy one is
 # working, and nothing is reported for it. The session states come from the CTO, who reads them
 # with ListAgents, which a script cannot. What was reported is kept in .agent-squad/watch.tsv of
@@ -31,7 +34,7 @@
 # Usage: squad-stalls.sh [--session <role>=<state>]...
 #   <role> is CTO, DEV or QA, and <state> idle, busy or waiting; a role not given has no session.
 # Output: one line per finding, tab-separated: what to do ("ping" the role, or tell the "ceo"),
-#   the role, the item ("PR #12" or "#34"), its URL, the next step, since when it has been quiet
+#   the role, or the requested reviewers, the item ("PR #12" or "#34"), its URL, the next step, since when it has been quiet
 #   (local time), and, for the CEO, why. Nothing when there is nothing to report.
 # Exit: 0 checked; 1 GitHub could not be read, so nothing was checked; 2 bad usage, or not run from
 #   a checkout of a project the squad is installed in.
@@ -75,7 +78,7 @@ repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || d
 work="${TMPDIR:-/tmp}"
 work="$(mktemp -d "${work%/}/squad-stalls.XXXXXX")" || die "cannot make a work directory"
 trap 'rm -rf "$work"' EXIT
-gh pr list --state open --limit 1000 --json number,title,isDraft,headRefOid,body,updatedAt,url,labels,closingIssuesReferences \
+gh pr list --state open --limit 1000 --json number,title,isDraft,headRefOid,body,updatedAt,url,labels,closingIssuesReferences,reviewRequests \
   > "$work/prs.json" 2>/dev/null || die "cannot read the open pull requests"
 gh issue list --state open --limit 1000 --json number,title,labels,updatedAt,url > "$work/issues.json" 2>/dev/null \
   || die "cannot read the open issues"
@@ -126,6 +129,8 @@ result="$(jq -nc --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issu
         | select($line | startswith({QA: "👩🏼‍🔬", DEV: "👨🏼‍💻", CTO: "👷🏼‍♂️"}[$role] + "[\($role)]:")) | $role) // null;
   # A PR: the reviewer reviews a head with no verdict on it; the author answers changes asked on
   # the head, merges an approved head, and finishes a draft. Without an author, the CTO finds one.
+  # An approved head with a review still requested on GitHub, from a user or a team, waits for
+  # that reviewer instead, who is none of the squad sessions.
   def pr_step:
     author as $author | (if $author == "QA" then "DEV" else "QA" end) as $reviewer
     | .headRefOid[0:7] as $head | $verdicts[.number | tostring] as $v
@@ -133,6 +138,9 @@ result="$(jq -nc --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issu
       elif .isDraft then {owner: $author, step: "finish the draft"}
       elif $v == null or $v.commit != .headRefOid then {owner: $reviewer, step: "review its head \($head)"}
       elif $v.verdict == "CHANGES-REQUESTED" then {owner: $author, step: "answer the changes requested on \($head)"}
+      elif $v.verdict == "APPROVED" and (.reviewRequests // []) != [] then
+        ([.reviewRequests[] | .login // .slug // .name] | join(", ")) as $who
+        | {owner: "requested", reviewers: $who, step: "wait for the review requested from \($who) on GitHub, before the merge"}
       elif $v.verdict == "APPROVED" then {owner: $author, step: "merge it: QA approved its head \($head)"}
       else {owner: $reviewer, step: "review its head \($head)"} end;
   # An issue in progress: its owner label names the role; without one, the CTO gives it an owner.
@@ -147,12 +155,19 @@ result="$(jq -nc --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issu
    + [$outside | to_entries | sort_by(.key | tonumber)[] | .value | select(declared | not) | select(untriaged)
       | {item: "\(if .pull_request then "PR " else "" end)#\(.number)", url: .html_url, updatedAt: .created_at,
          owner: "CTO", step: "triage it: \(.user.login) opened it from outside the squad (\(.author_association))"}])
-  | map(select($now - (.updatedAt | fromdateiso8601) >= 1800)
+  # A wait for a requested reviewer comes to the CEO once it is an hour quiet, whatever the
+  # sessions, and no one is pinged for it.
+  | map(select($now - (.updatedAt | fromdateiso8601) >= (if .owner == "requested" then 3600 else 1800 end))
         | . + {since: (.updatedAt | fromdateiso8601 | local), key: "\(.item)|\(.owner)|\(.step)|\(.updatedAt)",
-               session: ($sessions[.owner] // "none")}
+               session: (if .owner == "requested" then "reviewer" else $sessions[.owner] // "none" end)}
         | select(.session != "busy")
         | (.key as $k | $reported | map(select(.key == $k)) | first) as $before
-        | if .session == "idle" then
+        | if .session == "reviewer" then
+            if $before == null then
+              . + {action: "ceo", record: {key, at: $now, told: true},
+                   why: "a review is requested from \(.reviewers) on GitHub, whom only the CEO can reach"}
+            else . + {record: $before} end
+          elif .session == "idle" then
             if $before == null then . + {action: "ping", record: {key, at: $now, told: false}}
             elif ($before.told | not) and $now - $before.at >= 3600 then
               . + {action: "ceo", why: "pinged at \($before.at | local), and nothing since", record: ($before + {told: true})}
@@ -161,7 +176,7 @@ result="$(jq -nc --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issu
             . + {action: "ceo", record: {key, at: $now, told: true},
                  why: (if .session == "waiting" then "its session waits on the CEO in its own terminal" else "it has no session open" end)}
           else . + {record: $before} end)
-  | {findings: [.[] | select(.action) | [.action, .owner, .item, .url, .step, .since, (.why // "")] | @tsv],
+  | {findings: [.[] | select(.action) | [.action, (.reviewers // .owner), .item, .url, .step, .since, (.why // "")] | @tsv],
      records: [.[] | .record | [.key, (.at | tostring), (if .told then "1" else "0" end)] | @tsv]}')" || exit 1
 
 # 3. Keep the records, then print the findings.
