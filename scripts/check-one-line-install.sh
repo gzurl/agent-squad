@@ -238,6 +238,21 @@ else
   fail "cut short, the script acted at byte(s):$acted (of $count cuts)"
 fi
 
+#    Run as a file and cut short inside its last line, as a download that stopped early leaves it,
+#    the script says so, exits 2, and does nothing (agent-squad #246). The copy's path ends in
+#    /install.sh, so that the coverage counts it.
+mkdir -p "$lab/cut"
+head -c "$((size - 6))" "$script" > "$lab/cut/install.sh"
+rm -f "$lab/calls" "$lab/installer-args"
+out="$(cd "$project" && PATH="$lab/bin:$PATH" TMPDIR="$lab/tmp" bash "$lab/cut/install.sh" --tag v16 "$project" 2>&1)"
+code=$?
+if [ "$code" -eq 2 ] && [ "$out" = "install.sh: this copy of install.sh is incomplete, so it did nothing; download it again" ] \
+    && [ ! -e "$lab/calls" ] && [ ! -e "$lab/installer-args" ]; then
+  pass "a copy cut short inside its last line, run as a file, says so, exits 2, and does nothing"
+else
+  fail "cut short and run as a file: exit $code, said: $out"
+fi
+
 #    Output whose reader has gone, as when the one-line install is piped into head, stops neither
 #    install.sh nor the installer it runs, which inherits the ignored SIGPIPE (#96). The output
 #    goes to a FIFO whose only reader is closed before install.sh starts, so every write fails.

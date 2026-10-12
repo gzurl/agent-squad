@@ -893,6 +893,12 @@ cases_check_settings() {
   check "so does a missing clear hook, which a /clear runs (agent-squad #336), naming it" \
     contains "$("$install" --check "$project" 2>&1)" "$item_hooks: missing: clear; unexpected: none"
   mended "$settings"
+  broken "$settings"
+  echo 'not json' > "$settings"
+  check "a settings file that is not JSON fails the hooks and the mods items" check_reports "$item_hooks" "$item_mods"
+  check "the hooks item saying it cannot read the file" check_reason "$item_hooks" "cannot read .claude/settings.local.json"
+  check "and so does the mods item" check_reason "$item_mods" "cannot read .claude/settings.local.json"
+  mended "$settings"
   # The hooks' wrapper (#269), which --check requires as the installer writes it.
   broken "$squad/squad-hook"
   echo "# an edit" >> "$squad/squad-hook"
@@ -1288,6 +1294,37 @@ cases_failure_installs() {
   code=$?
   check "a worktree git cannot make makes the installer exit 1, with git's reason" \
     bash -c '[ "$1" -eq 1 ] && grep -qF "worktrees  NOT CREATED: .agent-squad/worktrees/dev: " <<<"$2"' _ "$code" "$out"
+  # A hooks' wrapper it cannot write, here because the path is a directory it cannot write into,
+  # leaves the hooks as they are; a marketplace it cannot write leaves the mods off. Each says so
+  # and needs a decision, and the rest of the install goes on (agent-squad #246).
+  target="$(new_project no-wrapper)" || exit 2
+  mkdir -p "$target/.agent-squad/squad-hook" && chmod a-w "$target/.agent-squad/squad-hook"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  chmod u+w "$target/.agent-squad/squad-hook"
+  check "a hooks' wrapper that cannot be written makes the installer exit 1, saying so" \
+    bash -c '[ "$1" -eq 1 ] && grep -qF "NOT INSTALLED: cannot write the hooks'"'"' wrapper .agent-squad/squad-hook; the hooks were left as they are" <<<"$2"' \
+    _ "$code" "$out"
+  check "and writes none of the squad's hooks" \
+    jq_holds '[.hooks // {} | .. | .command? // empty | select(contains("squad-hook"))] == []' "$target/.claude/settings.local.json"
+  target="$(new_project no-marketplace)" || exit 2
+  mkdir -p "$target/.agent-squad" && echo "not a directory" > "$target/.agent-squad/.claude-plugin"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "a marketplace that cannot be written makes the installer exit 1, saying so" \
+    bash -c '[ "$1" -eq 1 ] && grep -qE "mods +NOT ENABLED: cannot write .*/\.agent-squad/\.claude-plugin/marketplace\.json; fix it and run again" <<<"$2"' \
+    _ "$code" "$out"
+  check "and enables none of the squad's mods, its hooks installed" \
+    jq_holds "(.extraKnownMarketplaces // {}) == {} and (.enabledPlugins // {}) == {} and $squad_hooks" "$target/.claude/settings.local.json"
+  # A checks list with no command in it gets the CTO's item to write it, in the list a squad that
+  # is set up gets: its AGENTS.md imports the charter.
+  target="$(new_project no-checks)" || exit 2
+  printf '# no command yet\n' > "$target/.agent-squad-checks"
+  printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$target/AGENTS.md"
+  git -C "$target" add AGENTS.md .agent-squad-checks && git -C "$target" commit -qm "no checks yet" || exit 2
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  check "a checks list with no command gets the CTO's item to write it" \
+    contains "$out" "Write .agent-squad-checks: the commands the project's CI runs, one per line; until it lists one the gate refuses every push"
   target="$(new_project no-base)" || exit 2
   git -C "$target" update-ref -d refs/remotes/origin/main
   out="$("$install" "$target" "$tag_a" 2>&1)"

@@ -201,6 +201,16 @@ run
 check "a file whose tag is not vN knows no release, though no check is due" \
   bash -c '[ "$1" = "latest release: not known yet; GitHub was asked 0 h ago" ] && [ ! -e "$2" ]' _ "$out" "$lab/gh.log"
 
+# 6b. A file it cannot replace, here a directory in its place that it cannot write into, is left
+#     as it is, and the temporary file it wrote is not left beside it (agent-squad #246).
+rm -f "$file" && mkdir "$file" && chmod a-w "$file"
+GH_ANSWER=v51 run
+chmod u+w "$file"
+check "with a latest-release it cannot replace, a check says what it found, and leaves no file of its own" \
+  bash -c '[ "$1" = "latest release: v51, checked now" ] && [ -d "$2" ] && [ -z "$(ls -A "$2")" ] \
+    && [ "$(ls -A "$3")" = latest-release ]' _ "$out" "$file" "$checkout/.agent-squad"
+rmdir "$file"
+
 # 7. Without an upstream to ask, it asks nothing, says so, and still records the attempt.
 alone="$lab/alone"
 mkdir -p "$alone" && cp "$latest" "$alone/"
