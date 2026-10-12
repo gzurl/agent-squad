@@ -45,6 +45,8 @@ jobs:
         run: scripts/check-latest.sh
       - name: The commands only the CEO types cannot be run by the model
         run: scripts/check-commands.sh
+      - name: The sessions still on an older release than the installed one are named
+        run: scripts/check-sessions.sh
 
   install:
     runs-on: ubuntu-latest
