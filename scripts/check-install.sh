@@ -1680,7 +1680,8 @@ cases_uninstall() {
     extraKnownMarketplaces: {"agent-squad-tools": {source: {source: "directory", path: "/more-tools"}}}}' \
     > "$target/.claude/settings.local.json"
   echo "the project's own command" > "$target/.claude/commands/squad-own.md"
-  git -C "$target" add -f .claude/commands/squad-own.md && git -C "$target" commit -qm "a command of the project's own" || exit 2
+  printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$target/AGENTS.md"
+  git -C "$target" add -f .claude/commands/squad-own.md AGENTS.md && git -C "$target" commit -qm "a command of the project's own" || exit 2
   printf '#!/bin/sh\necho the project pre-push\n' > "$target/.git/hooks/pre-push" && chmod +x "$target/.git/hooks/pre-push"
   # `outside_squad <project>` lists its files as tree_state does, but for the squad's directory,
   # the settings, which installs rewrite as jq prints JSON, and the tracked files the squad adds.
@@ -1721,6 +1722,8 @@ cases_uninstall() {
   check "and it lists the tracked files for the CTO: .gitignore's lines but the settings', and the squad's issue template, not the project's own" \
     bash -c 'grep -qF ".gitignore'"'"'s lines .agent-squad/, .claude/commands/squad-*.md; keep .agent-squad/ while the records stay there; keep .claude/settings.local.json'"'"'s line, since the project'"'"'s own settings stay" <<<"$1" \
       && grep -qF ".github/ISSUE_TEMPLATE/task.md, the squad'"'"'s template" <<<"$1" && ! grep -qF PULL_REQUEST_TEMPLATE <<<"$1"' _ "$out"
+  check "and the Squad section of AGENTS.md, which imports the charter" \
+    contains "$out" "the Squad section of AGENTS.md, which imports the charter"
   check "and leaves no copy of itself behind" [ -z "$(ls -A "$lab/tmp-u")" ]
   state="$(uninstall_state)"
   out="$(TMPDIR="$lab/tmp-u" "$lab/uninstall-copy.sh" "$target" 2>&1)"
@@ -1731,6 +1734,39 @@ cases_uninstall() {
   out="$(TMPDIR="$lab/tmp-u" "$lab/uninstall-copy.sh" --records "$target" 2>&1)"
   check "--records removes the records, and .agent-squad/ with them" \
     bash -c '[ ! -e "$1/.agent-squad" ] && grep -qF "uninstall: squad      removed .agent-squad/" <<<"$2"' _ "$target" "$out"
+  #     Once the CTO's PR has removed the tracked files it listed, as /squad-uninstall orders it, a
+  #     run finds nothing of the squad's, and nothing left for the CTO.
+  sed -i.bak -e '/^\.agent-squad\/$/d' -e '/^\.claude\/commands\/squad-\*\.md$/d' "$target/.gitignore" && rm -f "$target/.gitignore.bak"
+  sed -i.bak '/^@\.agent-squad\/playbook\/SQUAD\.md$/d' "$target/AGENTS.md" && rm -f "$target/AGENTS.md.bak"
+  rm -f "$target/.github/ISSUE_TEMPLATE/task.md" "$target/.agent-squad-checks"
+  out="$(TMPDIR="$lab/tmp-u" "$lab/uninstall-copy.sh" "$target" 2>&1)"
+  code=$?
+  check "after the CTO's PR, a run exits 0, finds nothing of the squad's, and leaves nothing for the CTO" \
+    bash -c '[ "$1" -eq 0 ] && grep -qxF "uninstall: nothing    nothing of the squad'"'"'s is left to remove here" <<<"$2" \
+      && [ "$(sed -n "/^By hand, for the CTO/,\$p" <<<"$2")" = "$(printf "By hand, for the CTO, through a PR: the tracked files the squad added\n  nothing")" ]' \
+    _ "$code" "$out"
+
+  # 20b. A worktree git refuses to remove, as a locked one, stays, and so does .agent-squad/, which
+  #      would take it along; the run needs a decision. Then, with it unlocked, a settings file that
+  #      is not one JSON object is left as it is, saying so, and needs one too.
+  target="$(new_project stuck)" || exit 2
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  git -C "$target" worktree lock "$target/.agent-squad/worktrees/dev" || exit 2
+  out="$(TMPDIR="$lab/tmp-u" "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" 2>&1)"
+  code=$?
+  check "a worktree git refuses to remove stays, and so does .agent-squad/, saying so, with exit 1" \
+    bash -c '[ "$1" -eq 1 ] && grep -qF "NOT REMOVED: worktrees/dev: git refused it; .agent-squad/ is left as it is" <<<"$2" \
+      && [ -d "$3/.agent-squad/worktrees/dev" ] && [ -f "$3/.agent-squad/playbook/SQUAD.md" ]' _ "$code" "$out" "$target"
+  git -C "$target" worktree unlock "$target/.agent-squad/worktrees/dev" || exit 2
+  #      That first run removed the settings, which held only the squad's: a broken one comes back.
+  mkdir -p "$target/.claude" && printf '{"hooks": {}} {"hooks": {}}\n' > "$target/.claude/settings.local.json"
+  cp "$target/.claude/settings.local.json" "$lab/stuck-settings"
+  out="$(TMPDIR="$lab/tmp-u" "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" 2>&1)"
+  code=$?
+  check "a settings file that is not one JSON object is left as it is, saying so, with exit 1" \
+    bash -c '[ "$1" -eq 1 ] && grep -qF "NOT REMOVED: .claude/settings.local.json is not one JSON object; it is left as it is" <<<"$2" \
+      && cmp -s "$3" "$4"' _ "$code" "$out" "$lab/stuck-settings" "$target/.claude/settings.local.json"
+  check "and the rest is removed: no worktree is left" [ "$(git -C "$target" worktree list | wc -l | tr -d ' ')" -eq 1 ]
 }
 
 #   And what it refuses: work in a worktree, a place that is not the main checkout, bad usage. The
