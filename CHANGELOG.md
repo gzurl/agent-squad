@@ -1,5 +1,36 @@
 # Changelog
 
+## v49 — 2026-10-12
+- **What comes from outside: the author decides, and a label only shows it** (#281, after #276).
+  - **§3:** an issue, pull request, review or comment is inside only when its account is the
+    repository's owner, a member or a collaborator, `CONTRIBUTOR` included among the outside ones.
+  - **§3, credit:** an accepted report is credited in the CHANGELOG. Code reused from an outside
+    pull request is credited with a `Co-authored-by:` trailer, which puts its author in the
+    repository's *Contributors*. That code is written again, or read line by line, before anything
+    runs it.
+  - **§6:** a signature proves nothing; only the account does.
+  - **`📥 needs-triage`** is a new label (`BOOTSTRAP.md`, *Labels*). A project creates it by hand.
+    This repository sets it with a workflow of its own.
+  - **`squad-outside.sh`** lists, for `/squad-resume` and `/squad-watch`, the outside items waiting
+    for triage and the outside comments since the last one, each with its account. The stall watch
+    asks the CTO for a triage that has waited half an hour.
+- **The merge gate refuses a PR labelled `👨🏻‍💼 needs-ceo`** (#283, from rogue-trader's CTO). §4.9's
+  checklist lists it: a merge would take the CEO's decision in the CEO's place.
+- **A blocked `/compact` says what to do** (#269): *Save this session's state first: type
+  /squad-save-state, then /compact.*
+  - The five hooks now run a small wrapper, `.agent-squad/squad-hook`, which keeps the warning when
+    the playbook is missing. `--check` verifies it.
+  - **An upgrade rewrites the five hooks' commands and writes the wrapper.** Restart the sessions to
+    load them.
+- **Removing the squad** (#263, #287): `/squad-uninstall`, the twelfth command, in the CTO's
+  session. It runs `squad-uninstall.sh`, which ships in the playbook and can also be run by hand,
+  with `--dry-run` first.
+  - **It removes** what the installer wrote outside git, after a PR for what git tracks.
+  - **It keeps** the records, and moves what a worktree held that git ignores, such as a `.env`,
+    into `.agent-squad/kept/`.
+  - **It refuses** while a worktree holds unsaved or unpushed work.
+  - A known gap is #291.
+
 ## v48 — 2026-10-10
 - **`--check` works on Windows with Git Bash** (#277, from #276 by @lauverrec, the first report from
   outside the squad).
