@@ -104,12 +104,29 @@ manifest() {
   done)
 }
 
+# `own_rules <check-ignore arguments...>` runs git check-ignore with the project's own .gitignore
+# files alone (agent-squad #296). This machine's excludes, core.excludesFile and .git/info/exclude,
+# are set aside: one that ignores a directory such as .claude/ hides every rule below it, the
+# project's included. git reads .git/info/exclude from the git directory, so the check runs with an
+# empty one of its own, made here by hand and removed at the end. Without a temporary directory,
+# only core.excludesFile is set aside.
+own_rules_dir="${TMPDIR:-/tmp}"
+if ! own_rules_dir="$(mktemp -d "${own_rules_dir%/}/squad-own-rules.XXXXXX" 2>/dev/null)" \
+    || ! mkdir "$own_rules_dir/objects" "$own_rules_dir/refs" 2>/dev/null \
+    || ! echo 'ref: refs/heads/main' 2>/dev/null > "$own_rules_dir/HEAD"; then
+  rm -rf "$own_rules_dir"
+  own_rules_dir=""
+fi
+trap 'rm -rf "$own_rules_dir"' EXIT
+own_rules() {
+  local own_git=()
+  [ -z "$own_rules_dir" ] || own_git=(--git-dir="$own_rules_dir" --work-tree="$project")
+  git -C "$project" -c core.excludesFile=/dev/null ${own_git[@]+"${own_git[@]}"} check-ignore --no-index "$@" 2>/dev/null
+}
 # `ignored_by_project <path>` passes when the path is ignored in fact (a negation such as
-# !.agent-squad/ counts) and by a rule of the project's own .gitignore, not only by this machine's
-# excludes.
+# !.agent-squad/ counts) and by a rule of the project's own root .gitignore.
 ignored_by_project() {
-  git -C "$project" check-ignore -q --no-index "$1" 2>/dev/null \
-    && [ "$(git -C "$project" check-ignore -v --no-index "$1" 2>/dev/null | cut -d: -f1)" = .gitignore ]
+  own_rules -q "$1" && [ "$(own_rules -v "$1" | cut -d: -f1)" = .gitignore ]
 }
 # `uses_lfs` passes when the project routes files through Git LFS: a .gitattributes of its own, at
 # the root or tracked anywhere below it, has filter=lfs outside a comment.
@@ -597,7 +614,7 @@ staging="$(mktemp -d "$squad/playbook.new.XXXXXX")" || die "cannot create a dire
 tarball=""
 # shellcheck disable=SC2317,SC2329 # invoked by the trap below
 cleanup() {
-  rm -rf "$staging"
+  rm -rf "$staging" "$own_rules_dir"
   [ -z "$tarball" ] || rm -f "$tarball"
 }
 trap cleanup EXIT
@@ -652,7 +669,8 @@ printf '%s %s -> %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$previous" "$tag" >> 
 say log "appended '$previous -> $tag' to .agent-squad/install.log"
 
 # 2. .gitignore: the squad's directory, Claude Code's local settings and the commands stay out of
-#    git. A line is added unless the project's own .gitignore already ignores the path. A rule in a
+#    git. A line is added unless the project's own .gitignore already ignores the path, whatever
+#    this machine's own excludes say (own_rules, agent-squad #296). A rule in a
 #    nested .gitignore outranks the root one, so when such a rule (a negation) decides, appending
 #    cannot help: the step appends nothing, says so, and needs a decision. A .gitignore that is a
 #    symbolic link gets nothing either: git 2.32 and later do not read one, and its target may be
@@ -675,21 +693,24 @@ for path in "${ignored_paths[@]}"; do
     needs_decision=1
     continue
   fi
-  # The rule that decides today, as source:line:pattern; its source is absolute for this machine's
-  # excludes, relative for the project's own files.
-  winner="$(git -C "$project" check-ignore -v --no-index "$path" 2>/dev/null | cut -f1)"
+  # The project's own rule that decides today, as source:line:pattern, if any.
+  winner="$(own_rules -v "$path" | cut -f1)"
   case "${winner%%:*}" in
-    /*) ;;
     */.gitignore)
       say .gitignore "NOT IGNORED: $line would lose to $winner, a nested .gitignore; decide with the CEO how to reconcile them"
       needs_decision=1
       continue
       ;;
   esac
-  if [ -s "$gitignore" ] && [ -n "$(tail -c 1 "$gitignore")" ]; then
-    echo >> "$gitignore"
+  # The line goes on a line of its own, after a newline if the file does not end with one, in one
+  # command: bash takes a redirection that fails on a { } group for a success.
+  text="$line"
+  if [ -s "$gitignore" ] && [ -n "$(tail -c 1 "$gitignore")" ]; then text=$'\n'"$line"; fi
+  if ! printf '%s\n' "$text" 2>/dev/null >> "$gitignore"; then
+    say .gitignore "NOT IGNORED: $line, because .gitignore cannot be written; fix it and run again"
+    needs_decision=1
+    continue
   fi
-  echo "$line" >> "$gitignore"
   added+=("$line")
   if ! ignored_by_project "$path"; then
     say .gitignore "NOT IGNORED: $line was added, and still git does not ignore it; decide with the CEO"
