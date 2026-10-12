@@ -5,9 +5,11 @@
 # a different script of that name does not; a line counts once however many tests ran it; kcov's
 # "hits/total" counts the hits; a statement over several lines counts once, run if kcov recorded
 # any of its lines, and is left out if it recorded none; an empty case branch counts only if it
-# ran. The summary names a test that failed, lists the thinnest script first, rounds its shares,
-# lists the lines no test ran, and --summary-only writes it again from the records alone. Without
-# kcov, or with nothing recorded, it exits 1. This script runs none of the tests and touches
+# ran. A path that holds a double quote or a backslash, which kcov writes as it is, is read, and
+# a record that cannot be read even so stops the summary (agent-squad #348). The summary names a
+# test that failed, lists the thinnest script first, rounds its shares, lists the lines no test
+# ran, and --summary-only writes it again from the records alone. Without kcov, with nothing
+# recorded, or with a record it cannot read, it exits 1. This script runs none of the tests and touches
 # neither the repository it is run from nor GitHub.
 # shellcheck disable=SC2016 # the summary's backticks are Markdown, and the fixtures are code
 set -u
@@ -83,10 +85,12 @@ EOF
 # runs after it, with the scripts' directory as its source: line 5 of squad-checks.sh run and 4
 # not; and it fails. For check-merge-gate.sh, with the root as its source: squad-merge-gate.sh,
 # whose program ran on its last line, whose first $( ) ran on its first line, whose second $( )
-# was recorded nowhere, whose \ line ran on its second; install.sh, two lines of three run; and
-# squad-install.sh, recorded on the first line of each heredoc's statement, on 11 and on the
-# here-string, with 13 unrun.
-# KCOV_RECORDS=none makes it record nothing; --merge writes an index.
+# was recorded nowhere, whose \ line ran on its second; install.sh, two lines of three run, and a
+# copy of it whose path holds a double quote and a backslash, written as kcov writes it, with no
+# escape, which ran the third; and squad-install.sh, recorded on the first line of each heredoc's
+# statement, on 11 and on the here-string, with 13 unrun.
+# KCOV_RECORDS=none makes it record nothing, and KCOV_RECORDS=broken writes check-gate.sh's record
+# cut short; --merge writes an index.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/kcov" <<'KCOV'
 #!/usr/bin/env bash
@@ -95,6 +99,11 @@ out="$2" test="$3" root="$(git rev-parse --show-toplevel)"
 [ "${KCOV_RECORDS:-}" != none ] || exit 0
 dir="$out/$(basename "$test").0123456789abcdef"
 mkdir -p "$dir"
+if [ "${KCOV_RECORDS:-}" = broken ] && [[ "$test" == *check-gate.sh ]]; then
+  echo '<sources><source>/</source></sources>' > "$dir/cobertura.xml"
+  printf '{\n  "coverage": {\n    "scripts/squad-checks.sh": {\n' > "$dir/codecov.json"
+  exit 0
+fi
 case "$test" in
   *check-gate.sh) echo '<sources><source>/</source></sources>' > "$dir/cobertura.xml"
     jq -n --arg r "${root#/}" '{coverage: {
@@ -110,7 +119,9 @@ case "$test" in
       "scripts/squad-merge-gate.sh": {"2": 0, "3": 0, "4": 1, "5": 0, "6": 2, "7": 0, "8": 0, "9": 0,
                                       "10": 0, "11": 1, "13": 0, "14": 0},
       "install.sh": {"2": 1, "3": 1, "4": 0},
-      "scripts/squad-install.sh": {"2": 1, "6": 0, "7": 1, "8": 1, "9": 0, "11": 1, "12": 1, "13": 0}}}' ;;
+      "scripts/squad-install.sh": {"2": 1, "6": 0, "7": 1, "8": 1, "9": 0, "11": 1, "12": 1, "13": 0}}}' \
+      | awk 'NR == 2 { print; print "    \"tmp/lab/odd \"one\" \\x/playbook/install.sh\": {";
+                        print "      \"2\": 0,"; print "      \"3\": 0,"; print "      \"4\": 1"; print "    },"; next } 1' ;;
   *) exit 0 ;;
 esac > "$dir/codecov.json"
 KCOV
@@ -140,9 +151,10 @@ summary_of "a statement over several lines counts once, as run if any line of it
   '| `scripts/squad-merge-gate.sh` | 3 | 5 | 60 % |'
 summary_of "a heredoc belongs to its statement, its apostrophe and parenthesis read as text, and so does the end of a \$( ) around it; a here-string opens none" \
   '| `scripts/squad-install.sh` | 5 | 6 | 83.3 % |'
-summary_of "a share is rounded, not cut: two of three is 66.7 %" '| `install.sh` | 2 | 3 | 66.7 % |'
+summary_of "a copy whose path holds a double quote and a backslash, which kcov writes with no escape, is read, and counts" \
+  '| `install.sh` (and 1 copy) | 3 | 3 | 100 % |'
 summary_of "a script no test ran" '| `scripts/squad-tokens.sh` | 0 | 0 | not run |'
-summary_of "the total adds up the scripts: 15 of 21 is 71.4 %" '| **Total** | **15** | **21** | **71.4 %** |'
+summary_of "the total adds up the scripts: 16 of 21 is 76.2 %" '| **Total** | **16** | **21** | **76.2 %** |'
 summary_of "a test that failed under kcov is named" 'Tests that failed under kcov, so their figures may be short: `check-handoff`.'
 if grep -qF 'kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out.' "$lab/out/summary.md" \
    && grep -qF 'so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back' "$lab/out/summary.md"; then
@@ -157,10 +169,9 @@ if grep -q '^- `scripts/squad-checks.sh`' "$lab/out/summary.md"; then
 else
   pass "a script whose lines all ran has no line in the list"
 fi
-#    The thinnest scripts come first: the one no test ran, then 33.3 %, 60 %, 66.7 %, 83.3 % and
-#    100 %.
+#    The thinnest scripts come first: the one no test ran, then 33.3 %, 60 %, 83.3 % and 100 %.
 order="$(grep -o '^| `[^`]*`' "$lab/out/summary.md" | sed 's/^| `//; s/`$//' | tr '\n' ' ')"
-if [ "$order" = "scripts/squad-tokens.sh .githooks/pre-push scripts/squad-merge-gate.sh install.sh scripts/squad-install.sh scripts/squad-checks.sh " ]; then
+if [ "$order" = "scripts/squad-tokens.sh .githooks/pre-push scripts/squad-merge-gate.sh scripts/squad-install.sh scripts/squad-checks.sh install.sh " ]; then
   pass "the thinnest script comes first"
 else
   fail "the order of the scripts: $order"
@@ -197,6 +208,9 @@ refused() {
 refused "without kcov" 1 "ci-coverage: kcov is not installed" env PATH="/usr/bin:/bin" "$coverage" "$lab/none"
 refused "with nothing recorded" 1 "ci-coverage: kcov recorded nothing in " \
   env KCOV_RECORDS=none PATH="$lab/bin:$PATH" "$coverage" "$lab/empty"
+refused "with a record that cannot be read even so, which it names" 1 \
+  "ci-coverage: kcov wrote records that cannot be read: runs/check-gate/check-gate.sh.0123456789abcdef/codecov.json" \
+  env KCOV_RECORDS=broken PATH="$lab/bin:$PATH" "$coverage" "$lab/broken"
 refused "--summary-only where no run was" 1 "ci-coverage: $lab/nothing/runs holds no run of this script" \
   "$coverage" --summary-only "$lab/nothing"
 refused "without a directory" 2 "usage: ci-coverage.sh" "$coverage"

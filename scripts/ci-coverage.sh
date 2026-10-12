@@ -17,10 +17,12 @@
 # It writes there summary.md, which CI adds to the job's summary: the total, one line per script,
 # thinnest first, and the lines no test ran in each. Also report/, kcov's HTML report of every test
 # merged into one, and runs/, each test's records, output and exit status, and the root it ran
-# in. No figure fails it, and a test that fails under kcov is named in the summary.
+# in. No figure fails it, and a test that fails under kcov is named in the summary; a record it
+# cannot read fails it, since a summary without it would count every line it records as not run.
 # --summary-only rewrites summary.md from runs/, without kcov: from CI's artifact, in a checkout of
 # the commit it measured.
-# Exit: 0 measured; 1 kcov is missing, or recorded nothing; 2 bad usage.
+# Exit: 0 measured; 1 kcov is missing, recorded nothing, or wrote a record that cannot be read; 2
+# bad usage.
 set -u
 summary_only=false
 [ "${1:-}" != --summary-only ] || { summary_only=true; shift; }
@@ -78,11 +80,17 @@ while IFS= read -r file; do recorded+=("$file"); done < <(find "$out/runs" -name
 #    It names each file by its path past the part all the run's files share, which it gives as the
 #    <source> of the cobertura.xml beside each record: "/" when a test ran files from both the
 #    repository and a temporary directory, the scripts' directory when it ran only those.
-# `with_source <codecov.json>` prints the record with that common part.
+#    kcov writes each file's path into the record as it is, with no escape, on a line of its own
+#    that opens the file's lines: a path that holds a double quote or a backslash, as the install
+#    test's quoted names do (agent-squad #319), leaves a record jq cannot read. Those two are
+#    escaped on such a line before jq reads it (agent-squad #348).
+# `with_source <codecov.json>` prints the record with that common part, and fails when jq cannot
+# read it even so.
 with_source() {
   local source
   source="$(sed -n 's|.*<source>\(.*\)</source>.*|\1|p' "$(dirname "$1")/cobertura.xml" 2>/dev/null | head -n 1)"
-  jq -c --arg source "$source" '{source: $source, coverage}' "$1"
+  perl -pe 's/^(\s*")(.*)(": \{\s*)$/my ($open, $path, $close) = ($1, $2, $3); $open . ($path =~ s{(["\\])}{\\$1}gr) . $close/e' "$1" \
+    | jq -c --arg source "$source" '{source: $source, coverage}'
 }
 # `continued <script>` prints, one per line, "c <n>" for each line after which the statement goes
 # on (inside a quote or a $( ), from a heredoc's first line to its end, after a trailing \, | or
@@ -140,7 +148,20 @@ shape="$(for script in "${measured[@]}"; do
     | {($s): {continued: [$marks[] | select(.[0] == "c") | .[1] | tonumber],
               empty: [$marks[] | select(.[0] == "e") | .[1] | tonumber]}}'
 done | jq -s 'add')"
-for record in "${recorded[@]}"; do with_source "$record"; done \
+# Every record, read; one that cannot be read stops the summary, named.
+records="" unreadable=()
+for record in "${recorded[@]}"; do
+  if read_one="$(with_source "$record" 2>/dev/null)" && [ -n "$read_one" ]; then
+    records+="$read_one"$'\n'
+  else
+    unreadable+=("${record#"$out"/}")
+  fi
+done
+if [ ${#unreadable[@]} -gt 0 ]; then
+  echo "ci-coverage: kcov wrote records that cannot be read: ${unreadable[*]}" >&2
+  exit 1
+fi
+printf '%s' "$records" \
   | jq -s -r --arg root "$run_root" --arg failed "${failed[*]}" --argjson shape "$shape" '
   def hits: if type == "number" then . else tostring | split("/")[0] | tonumber end;
   def basename: split("/") | last;
