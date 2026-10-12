@@ -3,17 +3,19 @@
 # counts the package's downloads, one number per version, and nothing else: no telemetry, and nothing
 # about who downloads. Run by agent-squad's CTO, once the release's tag is pushed (AGENTS.md,
 # Releases). The package, agent-squad-vN.tar.gz, is the tag's tree as `git archive` writes it, the
-# tree GitHub's own tarball of the tag holds; its SHA-256 goes beside it, in
-# agent-squad-vN.tar.gz.sha256, which the installer checks before it extracts anything. The
-# Release's title is the tag's message, and its notes are the version's CHANGELOG entry, read from
-# the tag.
+# tree GitHub's own tarball of the tag holds. It is the Release's one asset, so that each install,
+# which downloads it alone, counts once (agent-squad #330): GitHub computes its SHA-256 and keeps
+# it as the asset's digest, which the installer checks before it extracts anything, and which this
+# script checks against its own once the asset is up. The Release's title is the tag's message, and
+# its notes are the version's CHANGELOG entry, read from the tag.
 #
 # Usage: release.sh [--dry-run] vN    publish vN's Release
 #        release.sh --downloads         print each Release's downloads of its package
-# --dry-run builds the package, its checksum and the notes in a directory it names, says what it
-# would create, and creates nothing.
+# --dry-run builds the package and the notes in a directory it names, says what it would create,
+# and creates nothing.
 # Exit: 0 done; 1 refused, saying why (the tag is not on origin, or already has a Release, or its
-# CHANGELOG has no entry for it), or gh failed; 2 bad usage.
+# CHANGELOG has no entry for it), gh failed, or GitHub's digest of the package is not its SHA-256;
+# 2 bad usage.
 set -u
 repo="gzurl/agent-squad"
 usage="usage: release.sh [--dry-run] vN | release.sh --downloads"
@@ -61,7 +63,7 @@ notes="$(git -C "$root" show "$tag:CHANGELOG.md" 2>/dev/null | awk -v head="## $
 [ -n "${notes//[[:space:]]/}" ] || refuse "CHANGELOG.md at $tag has no entry for $tag"
 title="$(git -C "$root" tag -l --format='%(contents:subject)' "$tag")"
 
-# 3. The package and its checksum, built in a directory of their own.
+# 3. The package and the notes, built in a directory of their own.
 asset="agent-squad-$tag.tar.gz"
 work="${TMPDIR:-/tmp}"
 work="$(mktemp -d "${work%/}/agent-squad-release.XXXXXX")" || refuse "cannot create a temporary directory"
@@ -71,18 +73,22 @@ git -C "$root" archive --format=tar --prefix="agent-squad-$tag/" "$tag" | gzip -
   || refuse "cannot build $asset from $tag"
 set +o pipefail
 sum="$(sha256_of "$work/$asset")"
-printf '%s  %s\n' "$sum" "$asset" > "$work/$asset.sha256"
 printf '%s\n' "$notes" | sed -e '/./,$!d' > "$work/notes.md"
 
 # 4. The Release, or what it would be.
 if $dry_run; then
   echo "release: would create the Release $tag of $repo, titled \"$title\", with:"
-  echo "  $asset, SHA-256 $sum"
-  echo "  $asset.sha256"
+  echo "  $asset, SHA-256 $sum, which GitHub's digest of it must then equal"
   echo "  and the notes in $work/notes.md"
   echo "release: nothing was created; the files are in $work"
   exit 0
 fi
 gh release create "$tag" --repo "$repo" --verify-tag --title "$title" --notes-file "$work/notes.md" \
-  "$work/$asset" "$work/$asset.sha256" </dev/null || refuse "gh could not create the Release $tag"
-echo "release: created the Release $tag, with $asset (SHA-256 $sum) and its checksum"
+  "$work/$asset" </dev/null || refuse "gh could not create the Release $tag"
+# GitHub's digest of the package, which the installer checks it against: it must be the SHA-256.
+digest="$(gh api "repos/$repo/releases/tags/$tag" \
+  --jq "[.assets[] | select(.name == \"$asset\") | .digest // \"\"] | first // \"\"" </dev/null 2>/dev/null)"
+if [ "$digest" != "sha256:$sum" ]; then
+  refuse "created the Release $tag, but GitHub's digest of $asset is '${digest:-none}', not sha256:$sum: check the asset before anyone installs it"
+fi
+echo "release: created the Release $tag, with $asset, whose digest on GitHub is its SHA-256, sha256:$sum"

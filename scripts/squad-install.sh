@@ -654,20 +654,36 @@ if [ -n "$source_dir" ]; then
     || die "cannot copy $source_dir; the installed playbook is unchanged"
 else
   # The tag's Release, when it has one (agent-squad #295): its package, so that GitHub counts the
-  # download, and its SHA-256, checked before anything is extracted. A tag with no Release, as
-  # every tag before v50 is, a Release with no package, or a package that cannot be downloaded,
-  # takes the tag's tarball, as before.
+  # download, checked before anything is extracted against the SHA-256 GitHub computes for it, the
+  # asset's digest (agent-squad #330). Only the package is downloaded, so each install counts once.
+  # A package with no digest, as an asset uploaded before GitHub kept one, is checked against its
+  # .sha256 asset, which v50 and v51 carry. A tag with no Release, as every tag before v50 is, a
+  # Release with no package, or a package that cannot be downloaded, takes the tag's tarball.
   tarball="$(mktemp "$squad/tarball.XXXXXX")" || die "cannot create a file in $squad"
   release_dir="$(mktemp -d "$squad/release.XXXXXX")" || die "cannot create a directory in $squad"
   asset="agent-squad-$tag.tar.gz"
-  if gh release download "$tag" --repo "$upstream" --pattern "$asset" --pattern "$asset.sha256" \
-      --dir "$release_dir" >/dev/null 2>&1 && [ -f "$release_dir/$asset" ]; then
-    sum="$(cut -d' ' -f1 "$release_dir/$asset.sha256" 2>/dev/null)"
-    [ -n "$sum" ] || die "the Release of $tag has no $asset.sha256 to check $asset against; the installed playbook is unchanged"
+  # The package's digest, "sha256:<hex>"; "none" when the asset has none; nothing without it.
+  found="$(gh api "repos/$upstream/releases/tags/$tag" \
+    --jq "[.assets[] | select(.name == \"$asset\") | .digest // \"none\"] | first // \"\"" 2>/dev/null)" || found=""
+  patterns=()
+  case "$found" in
+    sha256:*) patterns=(--pattern "$asset") ;;
+    none) patterns=(--pattern "$asset" --pattern "$asset.sha256") ;;
+  esac
+  if [ "${#patterns[@]}" -gt 0 ] \
+      && gh release download "$tag" --repo "$upstream" "${patterns[@]}" --dir "$release_dir" >/dev/null 2>&1 \
+      && [ -f "$release_dir/$asset" ]; then
+    if [ "$found" = none ]; then
+      sum="$(cut -d' ' -f1 "$release_dir/$asset.sha256" 2>/dev/null)"
+      [ -n "$sum" ] || die "the Release of $tag has no digest for $asset, and no $asset.sha256 to check it against; the installed playbook is unchanged"
+      against="its $asset.sha256"
+    else
+      sum="${found#sha256:}" against="GitHub's digest"
+    fi
     [ "$(sha256_of "$release_dir/$asset")" = "$sum" ] \
       || die "$asset, from the Release of $tag, does not match its SHA-256; the installed playbook is unchanged"
     mv "$release_dir/$asset" "$tarball" || die "cannot move $asset into $squad"
-    say download "$asset, from the Release of $tag, its SHA-256 checked"
+    say download "$asset, from the Release of $tag, its SHA-256 checked against $against"
   else
     gh api "repos/$upstream/tarball/$tag" > "$tarball" \
       || die "cannot download $tag from $upstream; the installed playbook is unchanged"
