@@ -102,9 +102,15 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   names the commit that was reviewed: in the main checkout `git pull --ff-only`, in a worktree
   `git fetch && git switch --detach origin/main`; then
   `git tag -a vN -m "Charter vN: <summary>" HEAD && git push origin vN`. The pre-push gate lets the
-  tag through without checks, since its commit is already on `main`. Then they notify the
-  agents of this repository and the CTOs of the projects (`ListAgents`), who decide when their
-  project takes the new version.
+  tag through without checks, since its commit is already on `main`. Then they publish the
+  release (#295): `scripts/release.sh --dry-run vN` shows what it would create, and
+  `scripts/release.sh vN` creates the GitHub Release. Its title is the tag's message, its notes
+  are the CHANGELOG entry, and it carries `agent-squad-vN.tar.gz`, built with `git archive`, and
+  its SHA-256, which the installer downloads and checks. A tag without a Release still installs,
+  from its tarball, but its downloads go uncounted. Then they notify the agents of this repository
+  and the CTOs of the projects (`ListAgents`), who decide when their project takes the new
+  version. `scripts/release.sh --downloads` prints each version's downloads of its package: one
+  number per version, which is all GitHub tells.
 
 ## Stack and commands
 - bash, git ≥ 2.32, `jq`, `gh`, `uv` (the checks run shellcheck through `uvx`), and Claude Code

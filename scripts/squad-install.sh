@@ -26,6 +26,10 @@ say() { printf 'install: %-10s %s\n' "$1" "$2"; }
 # `listed <word>...` joins its arguments with commas, for a step's one-line summary.
 listed() { local IFS=,; printf '%s' "$*" | sed 's/,/, /g'; }
 die() { echo "squad-install: $1" >&2; exit 2; }
+# `sha256_of <file>` prints the file's SHA-256, with whichever of sha256sum and shasum the machine has.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi 2>/dev/null | cut -d' ' -f1
+}
 
 # Output whose reader has gone, as when it is piped into head, must not stop the installer halfway:
 # killed by SIGPIPE after the playbook and before install.log, an upgrade was once left half done
@@ -62,6 +66,8 @@ for tool in git jq tar awk; do
 done
 if [ "$mode" = install ] && [ -z "$source_dir" ]; then
   command -v gh >/dev/null 2>&1 || die "gh is required to download the tag"
+  command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
+    || die "sha256sum or shasum is required to check the tag's package"
 fi
 
 # The project is named by its main checkout (D7 of agent-squad #23), the one directory every
@@ -594,11 +600,12 @@ fi
 #    playbook as it was.
 mkdir -p "$squad" || die "cannot create $squad"
 staging="$(mktemp -d "$squad/playbook.new.XXXXXX")" || die "cannot create a directory in $squad"
-tarball=""
+tarball="" release_dir=""
 # shellcheck disable=SC2317,SC2329 # invoked by the trap below
 cleanup() {
   rm -rf "$staging"
   [ -z "$tarball" ] || rm -f "$tarball"
+  [ -z "$release_dir" ] || rm -rf "$release_dir"
 }
 trap cleanup EXIT
 
@@ -607,9 +614,25 @@ if [ -n "$source_dir" ]; then
   cp -pR "$source_dir/." "$staging/" \
     || die "cannot copy $source_dir; the installed playbook is unchanged"
 else
+  # The tag's Release, when it has one (agent-squad #295): its package, so that GitHub counts the
+  # download, and its SHA-256, checked before anything is extracted. A tag with no Release, as
+  # every tag before v50 is, or whose Release has no package, takes the tag's tarball, as before.
   tarball="$(mktemp "$squad/tarball.XXXXXX")" || die "cannot create a file in $squad"
-  gh api "repos/$upstream/tarball/$tag" > "$tarball" \
-    || die "cannot download $tag from $upstream; the installed playbook is unchanged"
+  release_dir="$(mktemp -d "$squad/release.XXXXXX")" || die "cannot create a directory in $squad"
+  asset="agent-squad-$tag.tar.gz"
+  if gh release download "$tag" --repo "$upstream" --pattern "$asset" --pattern "$asset.sha256" \
+      --dir "$release_dir" >/dev/null 2>&1; then
+    sum="$(cut -d' ' -f1 "$release_dir/$asset.sha256" 2>/dev/null)"
+    [ -n "$sum" ] || die "the Release of $tag has no $asset.sha256 to check $asset against; the installed playbook is unchanged"
+    [ "$(sha256_of "$release_dir/$asset")" = "$sum" ] \
+      || die "$asset, from the Release of $tag, does not match its SHA-256; the installed playbook is unchanged"
+    mv "$release_dir/$asset" "$tarball" || die "cannot move $asset into $squad"
+    say download "$asset, from the Release of $tag, its SHA-256 checked"
+  else
+    gh api "repos/$upstream/tarball/$tag" > "$tarball" \
+      || die "cannot download $tag from $upstream; the installed playbook is unchanged"
+    say download "the tarball of $tag, which has no Release with its package"
+  fi
   tar -xzf "$tarball" -C "$staging" --strip-components=1 \
     || die "cannot extract the tarball of $tag; the installed playbook is unchanged"
 fi

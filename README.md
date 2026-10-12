@@ -331,11 +331,12 @@ the main checkout; the same line with `enable` turns it back on.
   [squad board](#the-squad-board), which an older one goes without.
 - **A GitHub repository** for your project.
 - **The GitHub CLI, `gh`**, logged in with the `repo` and `workflow` scopes.
-- **bash**, **git** 2.31 or later, **jq** and **tar**.
+- **bash**, **git** 2.31 or later, **jq**, **tar**, and `sha256sum` or `shasum`, which macOS,
+  Linux and Git Bash already have.
 - **macOS or Linux.** The squad is tested on both, and on Linux in CI. Windows with Git Bash is
   best effort: it is untested in CI.
 
-Before it touches anything, the installer checks that `gh`, git, jq and tar are there, and that
+Before it touches anything, the installer checks that `gh`, git, jq, tar and a SHA-256 tool are there, and that
 `gh` is logged in and can read `gzurl/agent-squad`. If something is missing, it stops and says
 what; it does not install anything for you.
 
@@ -466,6 +467,12 @@ terminal, for a permission or a question.
 
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
+
+**Does it collect anything about me?** No. Nothing in **agent-squad** calls home, and nothing
+about you or your project is sent anywhere. Each release is published as a GitHub Release with
+its package attached, which the installer downloads and checks against its SHA-256. GitHub counts
+each package's downloads, one number per version, and that number is all the squad sees: nothing
+about who downloaded it, or from where.
 
 **What comes next?** Whatever the open issues say, with no date promised. Ideas are welcome as
 issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
