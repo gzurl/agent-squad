@@ -197,13 +197,15 @@ imports_charter() {
     END { exit !found }' "$1" 2>/dev/null
 }
 
-# The five session hooks as the installer writes them (D5 and D10 of agent-squad #23, and #164 for
-# resume). Each runs the hooks' wrapper in .agent-squad/ with its event. Claude Code shows a hook's
+# The squad's session hooks as the installer writes them (D5 and D10 of agent-squad #23, #164 for
+# resume, and #302 for the turn's end, which starts the check of the latest release when one is
+# due). Each runs the hooks' wrapper in .agent-squad/ with its event. Claude Code shows a hook's
 # command in brackets on every line about it, a blocked /compact included, so the command is the
 # shortest that keeps the guard: the guard lives in the wrapper (agent-squad #269).
 # shellcheck disable=SC2016 # expanded by the shell that runs the hook, not here
 hook='"$CLAUDE_PROJECT_DIR"/.agent-squad/squad-hook'
 save_command="$hook save" restore_command="$hook restore" startup_command="$hook startup" resume_command="$hook resume"
+turn_command="$hook turn"
 # The wrapper runs the playbook's squad-handoff.sh, and reports a missing playbook to the session
 # instead of failing it: a save does nothing, and the other events tell the session. Every install
 # writes it into .agent-squad/, and --check requires it byte for byte, as it does the shim. A hook
@@ -455,13 +457,13 @@ check_installation() {
   fi
   verdict "playbook/ is complete and unmodified" "$why"
 
-  # 2. The five hooks, exactly as the installer writes them.
+  # 2. The squad's hooks, exactly as the installer writes them.
   why=""
   expected="$(jq -cn --arg save "$save_command" --arg restore "$restore_command" \
-    --arg startup "$startup_command" --arg resume "$resume_command" \
+    --arg startup "$startup_command" --arg resume "$resume_command" --arg turn "$turn_command" \
     '[["PreCompact", "manual", $save], ["PreCompact", "auto", $save],
       ["SessionStart", "compact", $restore], ["SessionStart", "startup", $startup],
-      ["SessionStart", "resume", $resume]] | sort')"
+      ["SessionStart", "resume", $resume], ["Stop", "", $turn]] | sort')"
   if ! actual="$(jq -c "$hook_ours"'[(.hooks // {}) | to_entries[] | .key as $event | .value[] | .matcher as $matcher
       | .hooks[] | select(ours) | [$event, $matcher, .command]] | sort' "$settings" 2>/dev/null)"; then
     why="cannot read .claude/settings.local.json"
@@ -473,7 +475,7 @@ check_installation() {
   elif [ "$(cat "$squad/squad-hook")" != "$hook_wrapper" ] || [ ! -x "$squad/squad-hook" ]; then
     why="their wrapper .agent-squad/squad-hook is not the one this installer writes; install again"
   fi
-  verdict "the five hooks are in .claude/settings.local.json and point at the playbook" "$why"
+  verdict "the squad's hooks are in .claude/settings.local.json and point at the playbook" "$why"
 
   # 11. Every squad command is the playbook's, byte for byte, and none is the project's.
   why="$(squad_commands | while IFS= read -r name; do
@@ -656,7 +658,7 @@ else
 fi
 # What the hooks, the pre-push gate and the By hand list rely on. A tree from before the installer
 # (v14 and older) has no scripts/squad-install.sh, and would install without working.
-for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh \
+for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh scripts/squad-latest.sh \
   scripts/squad-install.sh templates/AGENTS.md commands/squad-save-state.md commands/squad-pause.md \
   commands/squad-autopilot.md commands/squad-resume.md commands/squad-upgrade.md \
   commands/squad-pause-all.md commands/squad-autopilot-all.md commands/squad-resume-all.md \
@@ -770,10 +772,10 @@ current="{}"
 [ -f "$settings" ] && current="$(cat "$settings")"
 # A blank file holds no settings yet.
 [ -n "${current//[[:space:]]/}" ] || current="{}"
-# shellcheck disable=SC2016 # $save, $restore, $startup and $resume are jq variables
+# shellcheck disable=SC2016 # $save, $restore, $startup, $resume and $turn are jq variables
 if printf '%s' "$current" | one_object \
   && merged="$(printf '%s' "$current" | jq --arg save "$save_command" --arg restore "$restore_command" \
-  --arg startup "$startup_command" --arg resume "$resume_command" "$hook_ours"'
+  --arg startup "$startup_command" --arg resume "$resume_command" --arg turn "$turn_command" "$hook_ours"'
   def entry($matcher; $command): {matcher: $matcher, hooks: [{type: "command", command: $command}]};
   .hooks = (.hooks // {})
   | .hooks |= with_entries(.value |= map(
@@ -781,16 +783,17 @@ if printf '%s' "$current" | one_object \
       else . end))
   | .hooks.PreCompact = (.hooks.PreCompact // []) + [entry("manual"; $save), entry("auto"; $save)]
   | .hooks.SessionStart = (.hooks.SessionStart // [])
-      + [entry("compact"; $restore), entry("startup"; $startup), entry("resume"; $resume)]')" \
+      + [entry("compact"; $restore), entry("startup"; $startup), entry("resume"; $resume)]
+  | .hooks.Stop = (.hooks.Stop // []) + [entry(""; $turn)]')" \
   && printf '%s' "$merged" | one_object; then
   if [ "$wrapper" = failed ]; then
     say hooks "NOT INSTALLED: cannot write the hooks' wrapper .agent-squad/squad-hook; the hooks were left as they are"
     needs_decision=1
   elif [ -f "$settings" ] && [ "$merged" = "$current" ]; then
-    say hooks "the five hooks are already in .claude/settings.local.json${wrapper:+; $wrapper their wrapper .agent-squad/squad-hook}"
+    say hooks "the squad's hooks are already in .claude/settings.local.json${wrapper:+; $wrapper their wrapper .agent-squad/squad-hook}"
   else
     mkdir -p "$project/.claude" && printf '%s\n' "$merged" > "$settings"
-    say hooks "wrote the five hooks into .claude/settings.local.json, other settings kept${wrapper:+, and $wrapper their wrapper .agent-squad/squad-hook}"
+    say hooks "wrote the squad's hooks into .claude/settings.local.json, other settings kept${wrapper:+, and $wrapper their wrapper .agent-squad/squad-hook}"
   fi
 else
   say hooks "NOT INSTALLED: .claude/settings.local.json is not one JSON object with a valid \"hooks\"; it is left as it is: fix it and run again"

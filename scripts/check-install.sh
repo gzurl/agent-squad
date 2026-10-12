@@ -105,7 +105,7 @@ jq_holds() { jq -e "$1" "$2" >/dev/null; }
 
 # The items of --check, as it names them.
 item_playbook="playbook/ is complete and unmodified"
-item_hooks="the five hooks are in .claude/settings.local.json and point at the playbook"
+item_hooks="the squad's hooks are in .claude/settings.local.json and point at the playbook"
 item_ignore=".gitignore ignores .agent-squad/, .claude/settings.local.json and .claude/commands/squad-*.md"
 item_command="the squad's commands in .claude/commands/ are the playbook's"
 item_shim="the pre-push shim is installed and core.hooksPath is unset"
@@ -288,10 +288,11 @@ ours='[.hooks[][] | select(any(.hooks[]; .command | contains("/.agent-squad/squa
 hook_commands='[.hooks | to_entries[] | .key as $e | .value[] | .matcher as $m | .hooks[]
   | select(.command | contains("squad-hook") or contains("squad-handoff.sh")) | "\($e) \($m) \(.command)"]'
 # What they are, as the installer writes them: the wrapper and the event, nothing else.
+# The turn's end has no matcher (agent-squad #302).
 wrapper_commands="$(jq -nc --arg w '"$CLAUDE_PROJECT_DIR"/.agent-squad/squad-hook' '[
   "PreCompact manual \($w) save", "PreCompact auto \($w) save", "SessionStart compact \($w) restore",
-  "SessionStart startup \($w) startup", "SessionStart resume \($w) resume"]')"
-five_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\"]"
+  "SessionStart startup \($w) startup", "SessionStart resume \($w) resume", "Stop  \($w) turn"]')"
+squad_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\", \"\"]"
 # `broken <file>` keeps a copy of a file about to be broken; `mended <file>` puts it back.
 broken() { cp -p "$1" "$lab/mend.me"; }
 mended() { cp -p "$lab/mend.me" "$1"; }
@@ -405,8 +406,8 @@ JSON
     jq_holds '.permissions.allow == ["Bash(ls:*)"]' "$settings"
   check "and the project's own hook" \
     jq_holds '.hooks.PreToolUse[0].hooks[0].command == "echo own hook"' "$settings"
-  check "and has the five squad hooks once each, the older entry replaced" \
-    jq_holds "$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\"]" "$settings"
+  check "and has the squad's hooks once each, the older entry replaced" \
+    jq_holds "$squad_hooks" "$settings"
   # Each runs the wrapper with its event, the shortest command that keeps the guard for a missing
   # playbook (#269): Claude Code shows it in brackets on every line about the hook.
   check "each squad hook runs .agent-squad/squad-hook with its event, and no other command is the squad's" \
@@ -520,7 +521,7 @@ JSON
   # fails here.
   commands_in_tree="$(cd "$lab/vb" && ls commands/squad-*.md)"
   [ "$(wc -l <<<"$commands_in_tree")" -ge 8 ] || exit 2
-  for missing in SQUAD.md scripts/squad-install.sh templates/AGENTS.md $commands_in_tree; do
+  for missing in SQUAD.md scripts/squad-install.sh scripts/squad-latest.sh templates/AGENTS.md $commands_in_tree; do
     rm -rf "$lab/incomplete" && mkdir -p "$lab/incomplete" && cp -pR "$lab/vb/." "$lab/incomplete/"
     rm "$lab/incomplete/$missing"
     out="$("$install" --source "$lab/incomplete" "$project" vd 2>&1)"
@@ -577,7 +578,7 @@ cases_upgrade_output() {
   check "hooks written before v49 become the wrapper's, once each, and the project's own hook stays" \
     jq_holds "$hook_commands == $wrapper_commands and .hooks.PreToolUse[0].hooks[0].command == \"echo own hook\"" "$target/.claude/settings.local.json"
   check "and a wrapper changed since is rewritten, saying so" \
-    bash -c 'grep -qF "wrote the five hooks into .claude/settings.local.json, other settings kept, and rewrote their wrapper .agent-squad/squad-hook" <<<"$1" \
+    bash -c 'grep -qF "wrote the squad'"'"'s hooks into .claude/settings.local.json, other settings kept, and rewrote their wrapper .agent-squad/squad-hook" <<<"$1" \
       && ! grep -qF "# an edit" "$2"' _ "$out" "$target/.agent-squad/squad-hook"
 
   # 7c. An upgrade whose output loses its reader, as when it is piped into head, still completes:
@@ -730,7 +731,7 @@ cases_decisions() {
     out="$("$install" "$target" "$tag_a" 2>&1)"
     code=$?
     check "an $kind settings.local.json exits 0" [ "$code" -eq 0 ]
-    check "and gets the five hooks" jq_holds "$five_hooks" "$target/.claude/settings.local.json"
+    check "and gets the squad's hooks" jq_holds "$squad_hooks" "$target/.claude/settings.local.json"
   done
   for kind in not-json two-objects; do
     target="$(new_project "settings-$kind")" || exit 2
@@ -1443,7 +1444,7 @@ cases_mods() {
   check "declares it at .agent-squad/ and enables the default plugin under it, and nothing else of the squad's" \
     jq_holds ".extraKnownMarketplaces == {\"$name_a\": {source: {source: \"directory\", path: \"$tsquad\"}}}
       and .enabledPlugins == {\"squad-board@$name_a\": true}" "$tsettings"
-  check "and keeps the five hooks" jq_holds "$five_hooks" "$tsettings"
+  check "and keeps the squad's hooks" jq_holds "$squad_hooks" "$tsettings"
   check "the marketplace in .agent-squad/ is the release's, renamed, its plugins the playbook's" \
     [ "$(jq -S . "$tsquad/.claude-plugin/marketplace.json")" = "$(release_marketplace "$lab/va" "$name_a")" ]
   check "and the plugin it names is in the playbook" present "$tsquad/playbook/mods" squad-board/.claude-plugin/plugin.json

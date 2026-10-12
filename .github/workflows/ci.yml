@@ -41,6 +41,8 @@ jobs:
         run: scripts/check-outside.sh
       - name: The release script publishes the tag's package and its checksum, and nothing else
         run: scripts/check-release.sh
+      - name: The latest release is checked at most once a day, and once an hour while GitHub fails
+        run: scripts/check-latest.sh
 
   install:
     runs-on: ubuntu-latest
