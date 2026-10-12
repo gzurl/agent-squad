@@ -1,5 +1,6 @@
 ---
 description: The CEO needs every squad on this machine stopped at a safe point (agent-squad)
+disable-model-invocation: true
 ---
 The CEO needs every squad open on this machine stopped at a safe point, whatever the reason. Your
 role is your session name. The squad's commands are in the main checkout's `.claude/commands/`,
