@@ -399,12 +399,14 @@ function fit(widths: number[], columns: number): { count: number; hasEllipsis: b
   return { count: widths.length, hasEllipsis: false }
 }
 
-// The band's line in `columns` cells (agent-squad #244): the agents on the left, and the squad's
-// part on the right, after at least GAP cells. While every agent fits whole, the squad's part takes
-// the longest form that fits; only then are the agents cut, as fit() cuts them, beside its shortest
-// form; and when not even the CTO's part fits beside that, the squad's part goes. It gives which of
-// the squad's forms shows (null: none), how many agents, whether the ellipsis does, and the cells
-// of space before the squad's part.
+// The band's line in `columns` cells (agent-squad #244, #304): the agents on the left, and the
+// squad's part on the right, after at least GAP cells. While every agent fits whole, the squad's
+// part takes the longest form that fits; only then are the agents cut, as fit() cuts them, beside
+// its shortest form. When not even the CTO's part and the ellipsis of the cut fit beside that, the
+// squad's part goes, and the line is the CTO's part and the ellipsis, with no refitting: a narrower
+// band never shows more than a wider one, and a cut always shows its ellipsis where it fits. It
+// gives which of the squad's forms shows (null: none), how many agents, whether the ellipsis does,
+// and the cells of space before the squad's part.
 function layoutOf(agentWidths: number[], squadWidths: number[], columns: number) {
   const used = (count: number, hasEllipsis: boolean) => agentWidths.slice(0, count).reduce((sum, width) => sum + width, 0)
     + widthOf(SEPARATOR) * Math.max(0, count - 1) + (hasEllipsis ? widthOf(ELLIPSIS) : 0)
@@ -413,7 +415,10 @@ function layoutOf(agentWidths: number[], squadWidths: number[], columns: number)
   if (whole >= 0) return { squad: whole, count: agentWidths.length, hasEllipsis: false, space: columns - all - squadWidths[whole] }
   const last = squadWidths.length - 1
   const room = columns - GAP - squadWidths[last]
-  if (agentWidths[0] > room) return { squad: null, ...fit(agentWidths, columns), space: 0 }
+  const cutMark = agentWidths.length > 1 ? widthOf(ELLIPSIS) : 0
+  if (agentWidths[0] + cutMark > room) {
+    return { squad: null, count: 1, hasEllipsis: cutMark > 0 && agentWidths[0] + cutMark <= columns, space: 0 }
+  }
   const cut = fit(agentWidths, room)
   return { squad: last, ...cut, space: columns - used(cut.count, cut.hasEllipsis) - squadWidths[last] }
 }

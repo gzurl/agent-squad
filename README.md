@@ -296,9 +296,9 @@ Only the CTO's session draws the band; DEV's and QA's sessions publish their sta
 nothing of it.
 
 ```
-───────────────────────────────────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 💤 👷🏼‍♂️CTO (ctx: 96%) │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124       agent-squad (v49) → v50 available: /squad-upgrade
-───────────────────────────────────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ```
 
 On the right of the line, the squad's part:
@@ -311,7 +311,8 @@ On the right of the line, the squad's part:
   and connects to nothing itself.
 
 On a narrow terminal the agents keep the room: the notice shortens to `→ v50`, then goes, then ⏩
-goes. Only then is the line cut at its end, after whole agents, with an ellipsis.
+goes. Only then is the line cut at its end, after whole agents, with an ellipsis. Narrower still,
+when the CTO's part and the ellipsis no longer fit beside `agent-squad`, the line keeps only them.
 
 Each role's name is in the colour *Quick start*, step 2, gives its session: the CTO yellow, DEV blue
 and QA green.

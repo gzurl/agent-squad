@@ -360,10 +360,14 @@ describe('the line', () => {
       [47, ['CTO', 'DEV'], line(`${cto} │ ${dev} …`, P, 47)],
       [46, ['CTO'], line(`${cto} …`, P, 46)],
       [30, ['CTO'], line(`${cto} …`, P, 30)],
-      [29, ['CTO'], line(cto, P, 29)],
-      [28, ['CTO'], line(cto, P, 28)],
-      // Narrower: the squad's part goes, and the agents take the whole band.
-      [27, ['CTO', 'DEV'], `${cto} │ ${dev} …`],
+      // Narrower than the CTO's part and the ellipsis beside the squad's (agent-squad #304): the
+      // squad's part goes, and the line is the CTO's part and the ellipsis, with no refitting.
+      [29, ['CTO'], `${cto} …`],
+      [28, ['CTO'], `${cto} …`],
+      [27, ['CTO'], `${cto} …`],
+      [10, ['CTO'], `${cto} …`],
+      // Narrower than that, the CTO's part alone, which the surface cuts at the edge.
+      [9, ['CTO'], cto],
       [4, ['CTO'], cto],
     ]
     for (const [columns, keys, drawn] of cases) {
@@ -396,6 +400,31 @@ describe('the line', () => {
       expect([columns, cut.drawn]).toEqual([columns, drawn])
       await cut.ui.unmount()
     }
+  })
+
+  // agent-squad #304, after QA's QA-S2 and QA-S7 on PR #303: from 120 columns down to 10, on
+  // autopilot and with a notice, so that the squad's part has all its forms, a narrower band never
+  // shows more agents than a wider one, the squad's part never comes back once it went, a cut always
+  // shows its ellipsis, and the line never takes more cells than the band has.
+  test('walking every width down to 10, a narrower band never shows more, and a cut always shows its ellipsis', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working', ...ISSUE }), 'proj/QA': agent('QA', 'proj', { state: 'working', ...PR }) })
+    w.latest = '{"tag": "v43", "checkedAt": 1760263200, "attemptedAt": 1760263200}'
+    await start($, 'CTO:proj')
+    await says($, '/squad-autopilot')
+    await w.clock.settle()
+    const wrong: string[] = []
+    let [agents, hasSquad] = [3, true]
+    for (let columns = 120; columns >= 10; columns--) {
+      const { ui, keys, drawn } = await band($, columns)
+      const shows = drawn.endsWith(P) || drawn.includes(`${P} →`)
+      if (keys.length > agents) wrong.push(`${columns}: ${keys.length} agents, more than ${agents} wider`)
+      if (shows && !hasSquad) wrong.push(`${columns}: the squad's part is back`)
+      if (keys.length < 3 && !drawn.includes(' …')) wrong.push(`${columns}: a cut with no ellipsis: ${drawn}`)
+      if (cells(drawn) > columns) wrong.push(`${columns}: ${cells(drawn)} cells`)
+      ;[agents, hasSquad] = [keys.length, shows]
+      await ui.unmount()
+    }
+    expect(wrong).toEqual([])
   })
 
   // QA's case on PR #213, now with the signatures: the ellipsis must fit too.
