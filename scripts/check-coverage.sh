@@ -4,8 +4,10 @@
 # tests. A copy counts for the script of the same name when it has the same lines to measure, and
 # a different script of that name does not; a line counts once however many tests ran it; kcov's
 # "hits/total" counts the hits; a statement over several lines counts once, run if kcov recorded
-# any of its lines, and is left out if it recorded none; an empty case branch counts only if it
-# ran. A path that holds a double quote or a backslash, which kcov writes as it is, is read, and
+# any of its lines, and is left out if it recorded none; an empty case branch, a lone `(`, and a
+# `done` or `)` with only redirections or a `&` after it count only if they ran, and a line marked
+# `# coverage: excluded, <reason>` does not count; the summary lists both kinds of line not counted,
+# with why (agent-squad #352). A path that holds a double quote or a backslash, which kcov writes as it is, is read, and
 # a record that cannot be read even so stops the summary (agent-squad #348). The summary names a
 # test that failed, lists the thinnest script first, rounds its shares, lists the lines no test
 # ran, and --summary-only writes it again from the records alone. Without kcov, with nothing
@@ -58,6 +60,24 @@ case "$value" in
   *) echo other ;;
 esac
 EOF
+# squad-latest.sh: a loop whose `done` takes a redirection (2-4), a subshell opened by a lone `(` and
+# sent to the background by `) &` (5-7), a statement (8), a loop whose `done` sends its output
+# elsewhere (9-11), a line excluded with its reason (12), and a statement (13).
+cat > "$repo/scripts/squad-latest.sh" <<'EOF'
+#!/usr/bin/env bash
+while read -r x; do
+  echo "$x"
+done < /dev/null
+(
+  echo inside
+) &
+wait
+for y in 1; do
+  echo "$y"
+done >&2
+echo polled  # coverage: excluded, it runs only when a process outlives its kill
+echo never
+EOF
 # squad-install.sh: a heredoc inside a $( ), with an apostrophe and an open parenthesis in its
 # body (2-6), a statement (7), a heredoc of its own (8-10), a statement (11), a here-string, which
 # opens no heredoc (12), and a statement (13).
@@ -88,7 +108,8 @@ EOF
 # was recorded nowhere, whose \ line ran on its second; install.sh, two lines of three run, and a
 # copy of it whose path holds a double quote and a backslash, written as kcov writes it, with no
 # escape, which ran the third; and squad-install.sh, recorded on the first line of each heredoc's
-# statement, on 11 and on the here-string, with 13 unrun.
+# statement, on 11 and on the here-string, with 13 unrun; and squad-latest.sh, every line run but
+# those kcov never records, the excluded one and the last.
 # KCOV_RECORDS=none makes it record nothing, and KCOV_RECORDS=broken writes check-gate.sh's record
 # cut short; --merge writes an index.
 mkdir -p "$lab/bin"
@@ -119,7 +140,9 @@ case "$test" in
       "scripts/squad-merge-gate.sh": {"2": 0, "3": 0, "4": 1, "5": 0, "6": 2, "7": 0, "8": 0, "9": 0,
                                       "10": 0, "11": 1, "13": 0, "14": 0},
       "install.sh": {"2": 1, "3": 1, "4": 0},
-      "scripts/squad-install.sh": {"2": 1, "6": 0, "7": 1, "8": 1, "9": 0, "11": 1, "12": 1, "13": 0}}}' \
+      "scripts/squad-install.sh": {"2": 1, "6": 0, "7": 1, "8": 1, "9": 0, "11": 1, "12": 1, "13": 0},
+      "scripts/squad-latest.sh": {"2": 1, "3": 1, "4": 0, "5": 0, "6": 1, "7": 0, "8": 1, "9": 1, "10": 1,
+                                  "11": 0, "12": 0, "13": 0}}}' \
       | awk 'NR == 2 { print; print "    \"tmp/lab/odd \"one\" \\x/playbook/install.sh\": {";
                         print "      \"2\": 0,"; print "      \"3\": 0,"; print "      \"4\": 1"; print "    },"; next } 1' ;;
   *) exit 0 ;;
@@ -153,8 +176,15 @@ summary_of "a heredoc belongs to its statement, its apostrophe and parenthesis r
   '| `scripts/squad-install.sh` | 5 | 6 | 83.3 % |'
 summary_of "a copy whose path holds a double quote and a backslash, which kcov writes with no escape, is read, and counts" \
   '| `install.sh` (and 1 copy) | 3 | 3 | 100 % |'
+summary_of "a lone ( and a done or ) with only redirections or & after it count only if they ran, and a line marked excluded does not count" \
+  '| `scripts/squad-latest.sh` | 6 | 7 | 85.7 % |'
+summary_of "the lines not counted list an excluded line with its reason" \
+  '- `scripts/squad-latest.sh` 12, excluded: it runs only when a process outlives its kill'
+summary_of "and a statement kcov recorded on none of its lines, by its first line" \
+  "- \`scripts/squad-merge-gate.sh\` 8: kcov recorded none of the statement's lines"
+summary_of "in a collapsed block of their own" '<details><summary>The lines not counted</summary>'
 summary_of "a script no test ran" '| `scripts/squad-tokens.sh` | 0 | 0 | not run |'
-summary_of "the total adds up the scripts: 16 of 21 is 76.2 %" '| **Total** | **16** | **21** | **76.2 %** |'
+summary_of "the total adds up the scripts: 22 of 28 is 78.6 %" '| **Total** | **22** | **28** | **78.6 %** |'
 summary_of "a test that failed under kcov is named" 'Tests that failed under kcov, so their figures may be short: `check-handoff`.'
 if grep -qF 'kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out.' "$lab/out/summary.md" \
    && grep -qF 'so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back' "$lab/out/summary.md"; then
@@ -163,15 +193,17 @@ else
   fail "the summary's text: $(sed -n 3p "$lab/out/summary.md")"
 fi
 summary_of "the lines no test ran are listed by the first line of their statement" '- `scripts/squad-merge-gate.sh`: 5, 14'
+summary_of "and a line excluded is not among them" '- `scripts/squad-latest.sh`: 13'
 summary_of "in a collapsed block" '<details><summary>The lines no test ran</summary>'
 if grep -q '^- `scripts/squad-checks.sh`' "$lab/out/summary.md"; then
   fail "squad-checks.sh, whose lines all ran, is listed among the lines not run"
 else
   pass "a script whose lines all ran has no line in the list"
 fi
-#    The thinnest scripts come first: the one no test ran, then 33.3 %, 60 %, 83.3 % and 100 %.
+#    The thinnest scripts come first: the one no test ran, then 33.3 %, 60 %, 83.3 %, 85.7 % and
+#    100 %.
 order="$(grep -o '^| `[^`]*`' "$lab/out/summary.md" | sed 's/^| `//; s/`$//' | tr '\n' ' ')"
-if [ "$order" = "scripts/squad-tokens.sh .githooks/pre-push scripts/squad-merge-gate.sh scripts/squad-install.sh scripts/squad-checks.sh install.sh " ]; then
+if [ "$order" = "scripts/squad-tokens.sh .githooks/pre-push scripts/squad-merge-gate.sh scripts/squad-install.sh scripts/squad-latest.sh scripts/squad-checks.sh install.sh " ]; then
   pass "the thinnest script comes first"
 else
   fail "the order of the scripts: $order"

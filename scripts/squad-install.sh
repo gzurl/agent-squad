@@ -320,8 +320,8 @@ gate_refusal() {
       kill -KILL -- "-$1" 2>/dev/null
       wait "$1" 2>/dev/null
       while kill -0 -- "-$1" 2>/dev/null && [ "$polls" -lt 500 ]; do
-        sleep 0.01
-        polls=$((polls + 1))
+        sleep 0.01  # coverage: excluded, it runs only when the killed group outlives SIGKILL for an instant
+        polls=$((polls + 1))  # coverage: excluded, it runs only when the killed group outlives SIGKILL for an instant
       done
     fi
     rm -rf "$lab"
