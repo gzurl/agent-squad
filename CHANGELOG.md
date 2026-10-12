@@ -12,8 +12,8 @@
   - **`📥 needs-triage`** is a new label (`BOOTSTRAP.md`, *Labels*). A project creates it by hand.
     This repository sets it with a workflow of its own.
   - **`squad-outside.sh`** lists, for `/squad-resume` and `/squad-watch`, the outside items waiting
-    for triage and the outside comments and reviews since the last one, each with its account. The stall watch
-    asks the CTO for a triage that has waited half an hour.
+    for triage and the outside comments and reviews since the last one, each with its account. The
+    stall watch asks the CTO for a triage that has waited half an hour.
 - **The merge gate refuses a PR labelled `👨🏻‍💼 needs-ceo`** (#283, from rogue-trader's CTO). §4.9's
   checklist lists it: a merge would take the CEO's decision in the CEO's place.
 - **A blocked `/compact` says what to do** (#269): *Save this session's state first: type
