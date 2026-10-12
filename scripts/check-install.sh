@@ -163,10 +163,10 @@ detached_at() {
     && [ "$(git -C "$2" rev-parse HEAD)" = "$(git -C "$1" rev-parse "origin/$3")" ] \
     && ! git -C "$2" symbolic-ref -q HEAD >/dev/null
 }
-# `no_leftovers <squad dir>`: no staging directory or tarball survived a run.
+# `no_leftovers <squad dir>`: no staging directory, tarball or Release download survived a run.
 no_leftovers() {
   local entry
-  for entry in "$1"/playbook.new.* "$1"/tarball.*; do [ ! -e "$entry" ] || return 1; done
+  for entry in "$1"/playbook.new.* "$1"/tarball.* "$1"/release.*; do [ ! -e "$entry" ] || return 1; done
 }
 # `ran <what>` tells whether a recording hook or check wrote <what> since the last `forget`.
 ran() { grep -qx -- "$1" "$lab/ran.txt" 2>/dev/null; }
@@ -179,12 +179,33 @@ push_from() {
 }
 
 # GitHub, as far as the installer is concerned: `gh api repos/<upstream>/tarball/<tag>` answers
-# with the file named by GH_TARBALL when the tag is GH_TAG; anything else fails.
+# with the file named by GH_TARBALL when the tag is GH_TAG. `gh release download <tag> --repo
+# gzurl/agent-squad --pattern <name>... --dir <dir>` copies into <dir> the files of the directory
+# GH_RELEASE that the patterns name, when the tag is GH_TAG, and fails when it copies none, as gh
+# does, or when GH_RELEASE is unset: the tag has no Release. Anything else fails.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
 if [ "${1:-}" = api ] && [ "${2:-}" = "repos/gzurl/agent-squad/tarball/${GH_TAG:-}" ]; then
   exec cat "$GH_TARBALL"
+fi
+if [ "${1:-} ${2:-}" = "release download" ] && [ -n "${GH_RELEASE:-}" ] && [ "${3:-}" = "${GH_TAG:-}" ]; then
+  shift 3
+  repo="" dir="" patterns=() copied=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --repo) repo="$2" ;;
+      --dir) dir="$2" ;;
+      --pattern) patterns+=("$2") ;;
+    esac
+    shift 2
+  done
+  [ "$repo" = gzurl/agent-squad ] && [ -d "$dir" ] || exit 1
+  for pattern in ${patterns[@]+"${patterns[@]}"}; do
+    [ ! -f "$GH_RELEASE/$pattern" ] || { cp "$GH_RELEASE/$pattern" "$dir/" && copied=$((copied + 1)); }
+  done
+  [ "$copied" -gt 0 ]
+  exit
 fi
 exit 1
 GH
@@ -1204,6 +1225,97 @@ cases_failure_installs() {
     contains "$out" "templates  .github/ISSUE_TEMPLATE/task.md is not in the playbook, skipped"
 }
 
+# Case 1b (agent-squad #295): a tag with a GitHub Release. The installer downloads the Release's
+# package and checks its SHA-256 before it extracts anything. A Release without the package, or no
+# Release at all, takes the tag's tarball, as before. A checksum that is wrong or missing stops the
+# install, with the installed playbook unchanged.
+cases_release() {
+  local asset="agent-squad-$tag_a.tar.gz" kind
+  # `sha_of <file>` is the file's SHA-256; `release_with <kind>` writes a Release into
+  # $lab/assets-<kind>: the package as scripts/release.sh builds it, with its checksum right, wrong
+  # or missing; or another file alone; or the checksum without its package (QA-R1, on PR #301).
+  sha_of() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+  release_with() {
+    local dir="$lab/assets-$1"
+    mkdir -p "$dir" || return 1
+    if [ "$1" = other ]; then echo "notes" > "$dir/notes.md"; return; fi
+    if [ "$1" = checksum ]; then printf '%s  %s\n' "$(printf '%064d' 0)" "$asset" > "$dir/$asset.sha256"; return; fi
+    git -C "$base/upstream" archive --format=tar --prefix="agent-squad-$tag_a/" HEAD | gzip -n > "$dir/$asset" || return 1
+    case "$1" in
+      right) printf '%s  %s\n' "$(sha_of "$dir/$asset")" "$asset" > "$dir/$asset.sha256" ;;
+      wrong) printf '%s  %s\n' "$(printf '%064d' 0)" "$asset" > "$dir/$asset.sha256" ;;
+    esac
+  }
+  for kind in right wrong missing other checksum; do release_with "$kind" || exit 2; done
+
+  # The package of a Release, with no tarball to fall back on: the playbook is the tarball's.
+  from_tarball="$(new_project release-tarball)" || exit 2
+  "$install" "$from_tarball" "$tag_a" >/dev/null 2>&1
+  target="$(new_project release-right)" || exit 2
+  out="$(GH_RELEASE="$lab/assets-right" GH_TARBALL="$lab/no-tarball.tgz" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "a tag with a Release installs from its package, and exits 0" [ "$code" -eq 0 ]
+  check "saying so, its SHA-256 checked" \
+    contains "$out" "install: download   $asset, from the Release of $tag_a, its SHA-256 checked"
+  check "and the playbook is the one the tag's tarball gives" \
+    diff -r "$from_tarball/.agent-squad/playbook" "$target/.agent-squad/playbook"
+  check "and nothing of the download is left" no_leftovers "$target/.agent-squad"
+
+  # No Release, or one without the package, its checksum alone included: the tag's tarball, as before.
+  for kind in none other checksum; do
+    target="$(new_project "release-$kind")" || exit 2
+    if [ "$kind" = none ]; then
+      out="$("$install" "$target" "$tag_a" 2>&1)"
+    else
+      out="$(GH_RELEASE="$lab/assets-$kind" "$install" "$target" "$tag_a" 2>&1)"
+    fi
+    code=$?
+    case "$kind" in
+      none) what="no Release" ;;
+      other) what="a Release without its package" ;;
+      checksum) what="a Release with the package's checksum alone" ;;
+    esac
+    check "a tag with $what installs from its tarball, and exits 0" \
+      bash -c '[ "$1" -eq 0 ] && grep -qxF "install: download   the tarball of $2, since no Release package of it could be downloaded" <<<"$3"' \
+      _ "$code" "$tag_a" "$out"
+  done
+
+  # A checksum that is wrong, or missing: the install stops, the installed playbook unchanged.
+  for kind in wrong missing; do
+    target="$(new_project "release-$kind")" || exit 2
+    "$install" "$target" "$tag_a" >/dev/null 2>&1
+    before="$(tree_state "$target")"
+    out="$(GH_RELEASE="$lab/assets-$kind" "$install" "$target" "$tag_a" 2>&1)"
+    code=$?
+    case "$kind" in
+      wrong) says="squad-install: $asset, from the Release of $tag_a, does not match its SHA-256; the installed playbook is unchanged" ;;
+      missing) says="squad-install: the Release of $tag_a has no $asset.sha256 to check $asset against; the installed playbook is unchanged" ;;
+    esac
+    check "a Release whose checksum is $kind stops the install with exit 2, saying so" \
+      bash -c '[ "$1" -eq 2 ] && grep -qxF -- "$2" <<<"$3"' _ "$code" "$says" "$out"
+    check "and changes nothing" [ "$before" = "$(tree_state "$target")" ]
+    check "and leaves nothing of the download" no_leftovers "$target/.agent-squad"
+  done
+
+  # A machine with neither sha256sum nor shasum: the install stops before it downloads anything.
+  mkdir -p "$lab/no-sha"
+  local dir tool
+  IFS=: read -r -a dirs <<<"$PATH"
+  for dir in "${dirs[@]}"; do
+    for tool in "$dir"/*; do
+      case "${tool##*/}" in sha256sum|shasum) continue ;; esac
+      [ -x "$tool" ] && [ ! -e "$lab/no-sha/${tool##*/}" ] && ln -s "$tool" "$lab/no-sha/${tool##*/}"
+    done
+  done
+  target="$(new_project release-no-sha)" || exit 2
+  before="$(tree_state "$target")"
+  out="$(PATH="$lab/no-sha" GH_RELEASE="$lab/assets-right" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "without sha256sum or shasum the installer exits 2, saying so" \
+    bash -c '[ "$1" -eq 2 ] && grep -qxF "squad-install: sha256sum or shasum is required to check the tag'"'"'s package" <<<"$2"' _ "$code" "$out"
+  check "and changes nothing" [ "$before" = "$(tree_state "$target")" ]
+}
+
 # Case 14b (agent-squad #296): this machine's own excludes, a global core.excludesFile or the
 # project's .git/info/exclude, that ignore the .claude/ directory. Git then hides every rule below
 # it, the project's own included, so the installer and --check read the project's rules alone.
@@ -1623,6 +1735,7 @@ cases_quoted_names() {
 # interrupts with it.
 groups=(
   cases_main_project
+  cases_release
   cases_upgrade_output
   cases_lfs
   cases_decisions

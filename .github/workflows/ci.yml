@@ -39,6 +39,8 @@ jobs:
         run: scripts/check-triage.sh
       - name: The outside list shows what outside accounts opened and wrote, by account
         run: scripts/check-outside.sh
+      - name: The release script publishes the tag's package and its checksum, and nothing else
+        run: scripts/check-release.sh
 
   install:
     runs-on: ubuntu-latest
