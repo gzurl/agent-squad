@@ -245,10 +245,20 @@ function sameItem(a: BoardItem, b: BoardItem): boolean {
   return a.item === b.item && a.url === b.url
 }
 
+// The PR gh pr create made, from the command line's output: the first line that is a PR's address
+// alone, as gh pr create prints it. Other calls on the line print addresses too: gh issue edit the
+// issue's, and gh pr comment or gh issue comment the comment's, which goes on past the number (QA's
+// finding on PR #294).
+function createdIn(output: string): BoardItem | null {
+  const line = output.split('\n').find(text => /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(text.trim()))
+  return line ? itemAt(line) : null
+}
+
 // What a command that worked does to the focus, each gh call in order (agent-squad #289):
 // - gh issue edit <n> adding the in-progress label: the issue becomes the focus;
-// - gh pr create: the PR gh prints becomes the focus, tied to the issue in focus;
-// - gh pr checkout <n> or gh pr review <n>: the PR becomes the focus, which is QA's case;
+// - gh pr create: the PR it made becomes the focus, tied to the issue in focus;
+// - gh pr checkout <n> or gh pr review <n>: the PR becomes the focus, which is QA's case, and a PR
+//   already in it keeps its tie;
 // - gh pr merge <n>, gh pr close <n> or gh issue close <n>: that item leaves the focus, and with a
 //   PR the issue it is tied to;
 // - any other call, such as view, comment or another label edit, changes nothing.
@@ -264,7 +274,7 @@ function focusAfter(before: Focus[], command: string, output: string, home: stri
     const [, noun, verb] = call
     const args = call.slice(3)
     if (noun === 'pr' && verb === 'create') {
-      const created = itemAt(output)
+      const created = createdIn(output)
       const top = after.at(-1)
       if (created) enter({ ...created, tied: top && !top.item.startsWith('PR ') ? { item: top.item, url: top.url } : null })
       continue
@@ -272,7 +282,7 @@ function focusAfter(before: Focus[], command: string, output: string, home: stri
     const target = targetOf(noun, args, home)
     if (!target) continue
     if ((noun === 'issue' && verb === 'edit' && addsInProgress(args)) || (noun === 'pr' && (verb === 'checkout' || verb === 'review'))) {
-      enter({ ...target, tied: null })
+      enter({ ...target, tied: after.find(entry => sameItem(entry, target))?.tied ?? null })
     } else if ((noun === 'pr' && (verb === 'merge' || verb === 'close')) || (noun === 'issue' && verb === 'close')) {
       const tied = after.find(entry => sameItem(entry, target))?.tied
       after = after.filter(entry => !sameItem(entry, target) && !(tied && sameItem(entry, tied)))

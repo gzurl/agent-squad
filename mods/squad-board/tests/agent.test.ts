@@ -332,6 +332,43 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     focusIs(w, null)
   })
 
+  // QA's finding on PR #294: the other calls of a line print addresses too, gh issue edit the
+  // issue's and a comment the comment's, before or after the one gh pr create prints.
+  const created: [string, string, string][] = [
+    ['after gh issue edit (QA-F2)', `gh issue edit 117 --add-label "👀 status:in-review" --remove-label "🚧 status:in-progress" && gh pr create --fill`,
+      'https://github.com/o/r/issues/117\nhttps://github.com/o/r/pull/120\n'],
+    ['after gh issue comment (QA-F3)', 'gh issue comment 117 --body "PR next" && gh pr create --fill',
+      'https://github.com/o/r/issues/117#issuecomment-1\nhttps://github.com/o/r/pull/120\n'],
+    ['after gh pr comment on another PR', 'gh pr comment 50 --body "superseded" && gh pr create --fill',
+      'https://github.com/o/r/pull/50#issuecomment-2\nhttps://github.com/o/r/pull/120\n'],
+    ['before gh issue edit', 'gh pr create --fill && gh issue edit 117 --add-label "👀 status:in-review"',
+      'Creating pull request for x into main in o/r\n\nhttps://github.com/o/r/pull/120\nhttps://github.com/o/r/issues/117\n'],
+  ]
+  for (const [name, command, output] of created) {
+    test(`gh pr create ${name}: the PR it made, tied to the issue, and its merge ends both`, async ($, on) => {
+      const w = world(on)
+      await start($, 'DEV:proj')
+      await runs($, w, `gh issue edit 117 --add-label ${IN_PROGRESS}`)
+      await runs($, w, command, output)
+      expect(w.store.get('proj/DEV')).toMatchObject({ item: pr(120), focus: [{ ...issue(117), tied: null }, { ...pr(120), tied: issue(117) }] })
+      await runs($, w, 'gh pr merge 120 --squash')
+      focusIs(w, null)
+    })
+  }
+
+  // QA's P3 on PR #294 (QA-F8): a PR the session created keeps its tie when it is entered again.
+  test('a created PR checked out or reviewed again keeps its tie: its merge still ends the issue', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, `gh issue edit 117 --add-label ${IN_PROGRESS}`)
+    await runs($, w, 'gh pr create --fill', 'https://github.com/o/r/pull/120\n')
+    await runs($, w, 'gh pr checkout 120')
+    await runs($, w, 'gh pr review 120 --comment -b "self-review"')
+    focusIs(w, pr(120))
+    await runs($, w, 'gh pr merge 120 --squash')
+    focusIs(w, null)
+  })
+
   test("QA: pr checkout, then pr review, show the PR; QA's next checkout replaces it", async ($, on) => {
     const w = world(on)
     await start($, 'QA:proj')
