@@ -12,7 +12,7 @@
   - **`📥 needs-triage`** is a new label (`BOOTSTRAP.md`, *Labels*). A project creates it by hand.
     This repository sets it with a workflow of its own.
   - **`squad-outside.sh`** lists, for `/squad-resume` and `/squad-watch`, the outside items waiting
-    for triage and the outside comments since the last one, each with its account. The stall watch
+    for triage and the outside comments and reviews since the last one, each with its account. The stall watch
     asks the CTO for a triage that has waited half an hour.
 - **The merge gate refuses a PR labelled `👨🏻‍💼 needs-ceo`** (#283, from rogue-trader's CTO). §4.9's
   checklist lists it: a merge would take the CEO's decision in the CEO's place.
@@ -22,7 +22,7 @@
     the playbook is missing. `--check` verifies it.
   - **An upgrade rewrites the five hooks' commands and writes the wrapper.** Restart the sessions to
     load them.
-- **Removing the squad** (#263, #287): `/squad-uninstall`, the twelfth command, in the CTO's
+- **Removing the squad** (#263, #287): `/squad-uninstall`, a new command, in the CTO's
   session. It runs `squad-uninstall.sh`, which ships in the playbook and can also be run by hand,
   with `--dry-run` first.
   - **It removes** what the installer wrote outside git, after a PR for what git tracks.
@@ -30,6 +30,9 @@
     into `.agent-squad/kept/`.
   - **It refuses** while a worktree holds unsaved or unpushed work.
   - A known gap is #291.
+- **The docs count nothing that grows** (#297): the README, `BOOTSTRAP.md` and `CONTRIBUTING.md`
+  say "the squad's commands" and "the squad's hooks", without a number. The README's *What goes
+  where* lists `.agent-squad/`'s new entries: `squad-hook`, `kept/` and `triage.since`.
 
 ## v48 — 2026-10-10
 - **`--check` works on Windows with Git Bash** (#277, from #276 by @lauverrec, the first report from
