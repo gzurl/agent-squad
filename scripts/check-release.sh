@@ -35,8 +35,10 @@ sha_of() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum 
 # gh, as far as release.sh is concerned. Every call goes to gh.log, one line each. `release view
 # <tag>` passes when the tag is GH_RELEASED. `release create` copies the files it is given into
 # created/, records its arguments in create.args, one per line, and fails when GH_CREATE_FAILS is
-# set. `api --paginate repos/gzurl/agent-squad/releases --jq <filter>` runs the filter on
-# releases.json, and fails when GH_API_FAILS is set.
+# set or, as gh does, when a file it is given does not exist. `api --paginate repos/gzurl/agent-squad/releases --jq <filter>` runs the filter on
+# releases.json, and fails when GH_API_FAILS is set. `api repos/gzurl/agent-squad/releases/tags/<tag>
+# --jq <filter>` runs it on a Release whose assets are created/'s files, each with its digest, the
+# SHA-256 GitHub computes (agent-squad #330): none when GH_DIGEST is none, a wrong one when it is wrong.
 mkdir -p "$lab/bin" "$lab/created" "$lab/tmp"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -46,8 +48,20 @@ case "${1:-} ${2:-}" in
   "release view") [ -n "${GH_RELEASED:-}" ] && [ "${3:-}" = "$GH_RELEASED" ] ;;
   "release create")
     [ -z "${GH_CREATE_FAILS:-}" ] || exit 1
+    for arg in "$@"; do case "$arg" in /*) [ -e "$arg" ] || exit 1 ;; esac; done
     printf '%s\n' "$@" > "$lab/create.args"
     for arg in "$@"; do [ ! -f "$arg" ] || cp "$arg" "$lab/created/"; done ;;
+  "api repos/gzurl/agent-squad/releases/tags/"*)
+    [ "${3:-}" = --jq ] || exit 1
+    for file in "$lab/created"/*; do
+      [ -f "$file" ] || continue
+      case "${GH_DIGEST:-}" in
+        none) digest=null ;;
+        wrong) digest="\"sha256:$(printf '%064d' 0)\"" ;;
+        *) digest="\"sha256:$(if command -v sha256sum >/dev/null; then sha256sum "$file"; else shasum -a 256 "$file"; fi | cut -d' ' -f1)\"" ;;
+      esac
+      printf '{"name": "%s", "digest": %s}\n' "${file##*/}" "$digest"
+    done | jq -s '{assets: .}' | jq -r "$4" ;;
   "api --paginate")
     [ -z "${GH_API_FAILS:-}" ] && [ "${3:-}" = repos/gzurl/agent-squad/releases ] && [ "${4:-}" = --jq ] || exit 1
     jq -r "$5" "$lab/releases.json" ;;
@@ -123,7 +137,8 @@ code=$?
 check "outside a checkout it exits 1, saying so" \
   bash -c '[ "$1" -eq 1 ] && [ "$2" = "release: run it from a checkout of gzurl/agent-squad" ]' _ "$code" "$out"
 
-# 3. A dry run: the package, its checksum and the notes, in the directory it names; no Release.
+# 3. A dry run: the package and the notes, in the directory it names, and no checksum file; no
+#    Release.
 rm -f "$lab/gh.log"
 run --dry-run v2
 dir="$(sed -n 's/^release: nothing was created; the files are in //p' <<<"$out")"
@@ -136,22 +151,38 @@ git -C "$repo" archive v2 | tar -xf - -C "$lab/archived"
 check "the package holds the tag's tree under agent-squad-v2/, as git archive writes it" \
   diff -r "$lab/archived" "$lab/unpacked/agent-squad-v2"
 check "which leaves out what .gitattributes marks export-ignore" [ ! -e "$lab/unpacked/agent-squad-v2/left-out.txt" ]
-check "its checksum file names the package with its SHA-256" \
-  bash -c '[ "$(cat "$1/agent-squad-v2.tar.gz.sha256")" = "$2  agent-squad-v2.tar.gz" ]' _ "$dir" "$(sha_of "$dir/agent-squad-v2.tar.gz")"
+check "it says the package's SHA-256, which GitHub's digest must then equal, and writes no .sha256 file" \
+  bash -c 'grep -qxF "  agent-squad-v2.tar.gz, SHA-256 $2, which GitHub'"'"'s digest of it must then equal" <<<"$3" && [ ! -e "$1/agent-squad-v2.tar.gz.sha256" ]' \
+  _ "$dir" "$(sha_of "$dir/agent-squad-v2.tar.gz")" "$out"
 check "and the notes are v2's entry, without its heading or the next one" \
   bash -c '[ "$(cat "$1/notes.md")" = "$(printf -- "- **Two:** the second release.\n  - With a nested line.")" ]' _ "$dir"
 
-# 4. A run: the Release, with the package, its checksum and the notes, and nothing left behind.
+# 4. A run: the Release, with the package alone and the notes, its digest on GitHub checked against
+#    the package's SHA-256, and nothing left behind.
 rm -f "$lab/gh.log"
 run v2
-check "a run exits 0, saying what it created" \
-  bash -c '[ "$1" -eq 0 ] && grep -qF "release: created the Release v2, with agent-squad-v2.tar.gz (SHA-256 " <<<"$2"' _ "$code" "$out"
+check "a run exits 0, saying that GitHub's digest of the package is its SHA-256" \
+  bash -c '[ "$1" -eq 0 ] && [ "$2" = "release: created the Release v2, with agent-squad-v2.tar.gz, whose digest on GitHub is its SHA-256, sha256:$3" ]' \
+  _ "$code" "$out" "$(sha_of "$dir/agent-squad-v2.tar.gz")"
 check "with gh release create, on the tag that must exist, titled by its message" \
   bash -c '[ "$(head -n 9 "$1" | tr "\n" " ")" = "release create v2 --repo gzurl/agent-squad --verify-tag --title Charter v2: two --notes-file " ]' \
   _ "$lab/create.args"
 check "and the same package a dry run builds, byte for byte" cmp -s "$dir/agent-squad-v2.tar.gz" "$lab/created/agent-squad-v2.tar.gz"
-check "with its checksum and its notes" \
-  bash -c 'cmp -s "$1/agent-squad-v2.tar.gz.sha256" "$2/agent-squad-v2.tar.gz.sha256" && cmp -s "$1/notes.md" "$2/notes.md"' _ "$dir" "$lab/created"
+check "with its notes, and no .sha256 asset, so that an install downloads one asset and counts once" \
+  bash -c 'cmp -s "$1/notes.md" "$2/notes.md" && [ "$(ls "$2" | grep -c "\.tar\.gz")" -eq 1 ] && [ ! -e "$2/agent-squad-v2.tar.gz.sha256" ]' _ "$dir" "$lab/created"
+#    A digest on GitHub that is not the package's SHA-256, or none: the Release exists, and the run
+#    exits 1, saying to check the asset before anyone installs it.
+for kind in wrong none; do
+  rm -f "$lab/create.args"
+  GH_DIGEST="$kind" run v2
+  case "$kind" in
+    wrong) shown="sha256:$(printf '%064d' 0)" ;;
+    none) shown=none ;;
+  esac
+  check "a digest that is $kind exits 1, saying so, and what to check" \
+    bash -c '[ "$1" -eq 1 ] && [ "$2" = "release: created the Release v2, but GitHub'"'"'s digest of agent-squad-v2.tar.gz is '"'"'$3'"'"', not sha256:$4: check the asset before anyone installs it" ]' \
+    _ "$code" "$out" "$shown" "$(sha_of "$dir/agent-squad-v2.tar.gz")"
+done
 rm -rf "$dir"
 check "and leaves nothing in its temporary directory" [ -z "$(ls -A "$lab/tmp")" ]
 rm -f "$lab/create.args"

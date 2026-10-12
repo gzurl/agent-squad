@@ -105,9 +105,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   tag through without checks, since its commit is already on `main`. Then they publish the
   release (#295): `scripts/release.sh --dry-run vN` shows what it would create, and
   `scripts/release.sh vN` creates the GitHub Release. Its title is the tag's message, its notes
-  are the CHANGELOG entry, and it carries `agent-squad-vN.tar.gz`, built with `git archive`, and
-  its SHA-256, which the installer downloads and checks. A tag without a Release still installs,
-  from its tarball, but its downloads go uncounted. Then they notify the agents of this repository
+  are the CHANGELOG entry, and it carries `agent-squad-vN.tar.gz` alone, built with `git archive`,
+  so that an install downloads one asset and counts once (#330). GitHub keeps the package's SHA-256
+  as its digest: `release.sh` checks it after the upload, and the installer before it extracts the
+  package. A tag without a Release still installs, from its tarball, but its downloads go
+  uncounted. Then they notify the agents of this repository
   and the CTOs of the projects (`ListAgents`), who decide when their project takes the new
   version. `scripts/release.sh --downloads` prints each version's downloads of its package: one
   number per version, which is all GitHub tells.
