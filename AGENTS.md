@@ -61,6 +61,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   gate hold that gate. The pre-push gate also refuses pushes to `main`; an exception approved by
   the CEO (§2.3) would need the CEO to lift the protection for it.
 
+## Docs conventions
+- The docs state no count that changes when something is added, such as how many commands or hooks
+  the squad has: they say "the squad's commands". The CEO asked for it, so that a new command does
+  not mean editing the docs (#297).
+
 ## Git conventions
 - **Commits:** Conventional Commits, in English.
 - **Branches:** `<type>/<short-kebab-description>`; `qa/` is a branch prefix for QA-owned tests.
