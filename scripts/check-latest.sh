@@ -66,7 +66,7 @@ run() {
   code=$?
 }
 # `holds <jq filter>` passes when the file satisfies the filter, `now` being the time.
-# shellcheck disable=SC2329 # invoked through check
+# shellcheck disable=SC2317,SC2329 # invoked through check
 holds() { jq -e --argjson now "$(date +%s)" "$1" "$file" >/dev/null 2>&1; }
 
 # 1. No file: a check is due, gh is asked for o/r's latest Release, and the file holds its answer.
