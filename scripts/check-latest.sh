@@ -65,8 +65,8 @@ run() {
   out="$("$latest" "$@" "$checkout" 2>&1)"
   code=$?
 }
-asked() { [ -s "$lab/gh.log" ]; }
 # `holds <jq filter>` passes when the file satisfies the filter, `now` being the time.
+# shellcheck disable=SC2329 # invoked through check
 holds() { jq -e --argjson now "$(date +%s)" "$1" "$file" >/dev/null 2>&1; }
 
 # 1. No file: a check is due, gh is asked for o/r's latest Release, and the file holds its answer.
@@ -107,7 +107,7 @@ for answer in failed wrong empty two-words; do
   case "$answer" in
     failed) GH_FAILS=1 run ;;
     wrong) GH_ANSWER=latest run ;;
-    empty) GH_ANSWER= run ;;
+    empty) GH_ANSWER='' run ;;
     two-words) GH_ANSWER="v51 v52" run ;;
   esac
   check "an answer that is $answer keeps the tag and when it was checked, and records the attempt now" \
