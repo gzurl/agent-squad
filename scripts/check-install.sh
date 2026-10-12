@@ -182,12 +182,29 @@ push_from() {
 # with the file named by GH_TARBALL when the tag is GH_TAG. `gh release download <tag> --repo
 # gzurl/agent-squad --pattern <name>... --dir <dir>` copies into <dir> the files of the directory
 # GH_RELEASE that the patterns name, when the tag is GH_TAG, and fails when it copies none, as gh
-# does, or when GH_RELEASE is unset: the tag has no Release. Anything else fails.
+# does, or when GH_RELEASE is unset: the tag has no Release; it writes the patterns it was given to
+# release-downloads.txt beside bin/. `gh api repos/gzurl/agent-squad/releases/tags/<tag> --jq <filter>`
+# runs the filter on a Release whose assets are GH_RELEASE's files, each with its digest, the
+# SHA-256 GitHub computes (agent-squad #330): none when GH_DIGEST is none, a wrong one when it is
+# wrong; it fails when GH_RELEASE is unset or the tag is not GH_TAG. Anything else fails.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
 if [ "${1:-}" = api ] && [ "${2:-}" = "repos/gzurl/agent-squad/tarball/${GH_TAG:-}" ]; then
   exec cat "$GH_TARBALL"
+fi
+if [ "${1:-}" = api ] && [ "${2:-}" = "repos/gzurl/agent-squad/releases/tags/${GH_TAG:-}" ] && [ "${3:-}" = --jq ]; then
+  [ -n "${GH_RELEASE:-}" ] || exit 1
+  for file in "$GH_RELEASE"/*; do
+    [ -f "$file" ] || continue
+    case "${GH_DIGEST:-}" in
+      none) digest=null ;;
+      wrong) digest="\"sha256:$(printf '%064d' 0)\"" ;;
+      *) digest="\"sha256:$(if command -v sha256sum >/dev/null; then sha256sum "$file"; else shasum -a 256 "$file"; fi | cut -d' ' -f1)\"" ;;
+    esac
+    printf '{"name": "%s", "digest": %s}\n' "${file##*/}" "$digest"
+  done | jq -s '{assets: .}' | jq -r "$4"
+  exit
 fi
 if [ "${1:-} ${2:-}" = "release download" ] && [ -n "${GH_RELEASE:-}" ] && [ "${3:-}" = "${GH_TAG:-}" ]; then
   shift 3
@@ -201,6 +218,7 @@ if [ "${1:-} ${2:-}" = "release download" ] && [ -n "${GH_RELEASE:-}" ] && [ "${
     shift 2
   done
   [ "$repo" = gzurl/agent-squad ] && [ -d "$dir" ] || exit 1
+  printf '%s\n' "${patterns[*]}" >> "$(dirname "$0")/../release-downloads.txt"
   for pattern in ${patterns[@]+"${patterns[@]}"}; do
     [ ! -f "$GH_RELEASE/$pattern" ] || { cp "$GH_RELEASE/$pattern" "$dir/" && copied=$((copied + 1)); }
   done
@@ -1286,8 +1304,9 @@ cases_failure_installs() {
 cases_release() {
   local asset="agent-squad-$tag_a.tar.gz" kind
   # `sha_of <file>` is the file's SHA-256; `release_with <kind>` writes a Release into
-  # $lab/assets-<kind>: the package as scripts/release.sh builds it, with its checksum right, wrong
-  # or missing; or another file alone; or the checksum without its package (QA-R1, on PR #301).
+  # $lab/assets-<kind>: the package alone, as scripts/release.sh uploads it from v52 on (#330); the
+  # package with its checksum right or wrong, as v50 and v51 carry it; another file alone; or the
+  # checksum without its package (QA-R1, on PR #301). The stub gh gives each asset its digest.
   sha_of() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
   release_with() {
     local dir="$lab/assets-$1"
@@ -1300,20 +1319,39 @@ cases_release() {
       wrong) printf '%s  %s\n' "$(printf '%064d' 0)" "$asset" > "$dir/$asset.sha256" ;;
     esac
   }
-  for kind in right wrong missing other checksum; do release_with "$kind" || exit 2; done
+  for kind in package right wrong other checksum; do release_with "$kind" || exit 2; done
+  # `downloaded` is what the last release download asked for.
+  downloaded() { tail -n 1 "$lab/release-downloads.txt" 2>/dev/null; }
 
-  # The package of a Release, with no tarball to fall back on: the playbook is the tarball's.
+  # The package alone, checked against GitHub's digest, with no tarball to fall back on: the
+  # playbook is the tarball's, and only the package is downloaded, so an install counts once.
   from_tarball="$(new_project release-tarball)" || exit 2
   "$install" "$from_tarball" "$tag_a" >/dev/null 2>&1
-  target="$(new_project release-right)" || exit 2
-  out="$(GH_RELEASE="$lab/assets-right" GH_TARBALL="$lab/no-tarball.tgz" "$install" "$target" "$tag_a" 2>&1)"
+  target="$(new_project release-package)" || exit 2
+  out="$(GH_RELEASE="$lab/assets-package" GH_TARBALL="$lab/no-tarball.tgz" "$install" "$target" "$tag_a" 2>&1)"
   code=$?
   check "a tag with a Release installs from its package, and exits 0" [ "$code" -eq 0 ]
-  check "saying so, its SHA-256 checked" \
-    contains "$out" "install: download   $asset, from the Release of $tag_a, its SHA-256 checked"
+  check "saying so, its SHA-256 checked against GitHub's digest" \
+    contains "$out" "install: download   $asset, from the Release of $tag_a, its SHA-256 checked against GitHub's digest"
+  check "and downloads the package alone" [ "$(downloaded)" = "$asset" ]
   check "and the playbook is the one the tag's tarball gives" \
     diff -r "$from_tarball/.agent-squad/playbook" "$target/.agent-squad/playbook"
   check "and nothing of the download is left" no_leftovers "$target/.agent-squad"
+  #    A Release that carries a .sha256 too, as v50's and v51's do: the digest decides, and the
+  #    .sha256 is not downloaded.
+  target="$(new_project release-both)" || exit 2
+  out="$(GH_RELEASE="$lab/assets-right" GH_TARBALL="$lab/no-tarball.tgz" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "with a .sha256 beside the package, the digest decides, and the .sha256 is not downloaded" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "its SHA-256 checked against GitHub'"'"'s digest" <<<"$2" && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$(downloaded)" "$asset"
+  #    A package with no digest, uploaded before GitHub kept one: its .sha256 asset, as v50 and v51 have.
+  target="$(new_project release-no-digest)" || exit 2
+  out="$(GH_DIGEST=none GH_RELEASE="$lab/assets-right" GH_TARBALL="$lab/no-tarball.tgz" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "a package with no digest is checked against its .sha256, and installs" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "its SHA-256 checked against its $2.sha256" <<<"$3" && [ "$4" = "$2 $2.sha256" ]' \
+    _ "$code" "$asset" "$out" "$(downloaded)"
 
   # No Release, or one without the package, its checksum alone included: the tag's tarball, as before.
   for kind in none other checksum; do
@@ -1334,18 +1372,23 @@ cases_release() {
       _ "$code" "$tag_a" "$out"
   done
 
-  # A checksum that is wrong, or missing: the install stops, the installed playbook unchanged.
-  for kind in wrong missing; do
+  # A digest the package does not match; with no digest, a .sha256 it does not match, or none: the
+  # install stops, the installed playbook unchanged.
+  for kind in digest-wrong sha256-wrong neither; do
     target="$(new_project "release-$kind")" || exit 2
     "$install" "$target" "$tag_a" >/dev/null 2>&1
     before="$(tree_state "$target")"
-    out="$(GH_RELEASE="$lab/assets-$kind" "$install" "$target" "$tag_a" 2>&1)"
+    case "$kind" in
+      digest-wrong) out="$(GH_DIGEST=wrong GH_RELEASE="$lab/assets-package" "$install" "$target" "$tag_a" 2>&1)" ;;
+      sha256-wrong) out="$(GH_DIGEST=none GH_RELEASE="$lab/assets-wrong" "$install" "$target" "$tag_a" 2>&1)" ;;
+      neither) out="$(GH_DIGEST=none GH_RELEASE="$lab/assets-package" "$install" "$target" "$tag_a" 2>&1)" ;;
+    esac
     code=$?
     case "$kind" in
-      wrong) says="squad-install: $asset, from the Release of $tag_a, does not match its SHA-256; the installed playbook is unchanged" ;;
-      missing) says="squad-install: the Release of $tag_a has no $asset.sha256 to check $asset against; the installed playbook is unchanged" ;;
+      neither) says="squad-install: the Release of $tag_a has no digest for $asset, and no $asset.sha256 to check it against; the installed playbook is unchanged" ;;
+      *) says="squad-install: $asset, from the Release of $tag_a, does not match its SHA-256; the installed playbook is unchanged" ;;
     esac
-    check "a Release whose checksum is $kind stops the install with exit 2, saying so" \
+    check "a package whose check is $kind stops the install with exit 2, saying so" \
       bash -c '[ "$1" -eq 2 ] && grep -qxF -- "$2" <<<"$3"' _ "$code" "$says" "$out"
     check "and changes nothing" [ "$before" = "$(tree_state "$target")" ]
     check "and leaves nothing of the download" no_leftovers "$target/.agent-squad"

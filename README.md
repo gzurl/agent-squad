@@ -3,6 +3,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2172A7.svg?style=for-the-badge&labelColor=000"></a>
   <a href="https://github.com/gzurl/agent-squad/tags"><img alt="Latest release" src="https://img.shields.io/github/v/tag/gzurl/agent-squad?sort=semver&label=release&style=for-the-badge&color=2172A7&labelColor=000"></a>
+  <a href="https://github.com/gzurl/agent-squad/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/gzurl/agent-squad/total?label=downloads&style=for-the-badge&color=2172A7&labelColor=000"></a>
   <a href="https://github.com/gzurl/agent-squad/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/gzurl/agent-squad/ci.yml?branch=main&label=CI&style=for-the-badge&labelColor=000"></a>
   <img alt="Built for Claude Code" src="https://img.shields.io/badge/Built%20for-Claude%20Code-D97757.svg?style=for-the-badge&labelColor=000">
   <a href="https://github.com/gzurl/agent-squad/pulls?q=is%3Apr+is%3Amerged"><img alt="PRs reviewed and merged by AI" src="https://img.shields.io/github/issues-search/gzurl/agent-squad?query=is%3Apr%20is%3Amerged&label=PRs%20reviewed%20%26%20merged%20by%20AI&color=2EA44F&style=for-the-badge&labelColor=000"></a>
@@ -506,9 +507,10 @@ you what it needs to know.
 
 **Does it collect anything about me?** No. Nothing in **agent-squad** calls home, and nothing
 about you or your project is sent anywhere. Each release is published as a GitHub Release with
-its package attached, which the installer downloads and checks against its SHA-256. GitHub counts
-each package's downloads, one number per version, and that number is all the squad sees: nothing
-about who downloaded it, or from where.
+its package attached, which the installer downloads and checks against the SHA-256 GitHub
+publishes for it. GitHub counts each package's downloads, one number per version, which the
+downloads badge above adds up, and that number is all the squad sees: nothing about who downloaded
+it, or from where.
 
 **What comes next?** Whatever the open issues say, with no date promised. Ideas are welcome as
 issues ([CONTRIBUTING.md](CONTRIBUTING.md)).
