@@ -361,14 +361,16 @@ what; it does not install anything for you.
 
 When a new release is out, type `/squad-upgrade` in the CTO's session. The CTO tells you which
 release the project runs, what the new one changes and whether you need to do anything, and
-installs it only when you say yes. The agents then re-read the rules that changed, so the rules
-need nothing more from you; the CTO asks you to compact the sessions only after a release that
-rewrites much of the charter. The upgrade also moves the squad board to the new release, and
-keeps it off if you turned it off. Then restart the three sessions when it suits you, with
-`/restart` in each, which keeps each session's conversation and name: until a session restarts,
-it keeps the board it started with, and a hook the release adds waits for it too, so the CTO's
-line shows the previous release, with the new one's notice. The release notes are in
-[CHANGELOG.md](CHANGELOG.md).
+installs it only when you say yes. Before installing, it brings DEV and QA to a safe point, as
+`/squad-pause` does, since the install replaces the scripts their hooks and pushes run. The
+agents then re-read the rules that changed, so the rules need nothing more from you; the CTO asks
+you to compact the sessions only after a release that rewrites much of the charter. The upgrade
+also moves the squad board to the new release, and keeps it off if you turned it off. Then the
+CTO asks you to restart the three sessions, with `/restart` in each, which keeps each session's
+conversation and name: until a session restarts, it keeps the board it started with, and a hook
+the release adds waits for it too, so the CTO's line shows the previous release, with the new
+one's notice. The agents wait at their safe point until their session restarts, then carry on
+from where they were. The release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 **To remove the squad from a project,** type `/squad-uninstall` in the CTO's session. The CTO shows
 you what would go and what would stay. When you say yes, it first merges a PR for what git tracks,
