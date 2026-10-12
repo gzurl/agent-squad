@@ -1233,19 +1233,20 @@ cases_release() {
   local asset="agent-squad-$tag_a.tar.gz" kind
   # `sha_of <file>` is the file's SHA-256; `release_with <kind>` writes a Release into
   # $lab/assets-<kind>: the package as scripts/release.sh builds it, with its checksum right, wrong
-  # or missing, or another file alone.
+  # or missing; or another file alone; or the checksum without its package (QA-R1, on PR #301).
   sha_of() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
   release_with() {
     local dir="$lab/assets-$1"
     mkdir -p "$dir" || return 1
     if [ "$1" = other ]; then echo "notes" > "$dir/notes.md"; return; fi
+    if [ "$1" = checksum ]; then printf '%s  %s\n' "$(printf '%064d' 0)" "$asset" > "$dir/$asset.sha256"; return; fi
     git -C "$base/upstream" archive --format=tar --prefix="agent-squad-$tag_a/" HEAD | gzip -n > "$dir/$asset" || return 1
     case "$1" in
       right) printf '%s  %s\n' "$(sha_of "$dir/$asset")" "$asset" > "$dir/$asset.sha256" ;;
       wrong) printf '%s  %s\n' "$(printf '%064d' 0)" "$asset" > "$dir/$asset.sha256" ;;
     esac
   }
-  for kind in right wrong missing other; do release_with "$kind" || exit 2; done
+  for kind in right wrong missing other checksum; do release_with "$kind" || exit 2; done
 
   # The package of a Release, with no tarball to fall back on: the playbook is the tarball's.
   from_tarball="$(new_project release-tarball)" || exit 2
@@ -1260,17 +1261,22 @@ cases_release() {
     diff -r "$from_tarball/.agent-squad/playbook" "$target/.agent-squad/playbook"
   check "and nothing of the download is left" no_leftovers "$target/.agent-squad"
 
-  # No Release, or one without the package: the tag's tarball, as before.
-  for kind in none other; do
+  # No Release, or one without the package, its checksum alone included: the tag's tarball, as before.
+  for kind in none other checksum; do
     target="$(new_project "release-$kind")" || exit 2
     if [ "$kind" = none ]; then
       out="$("$install" "$target" "$tag_a" 2>&1)"
     else
-      out="$(GH_RELEASE="$lab/assets-other" "$install" "$target" "$tag_a" 2>&1)"
+      out="$(GH_RELEASE="$lab/assets-$kind" "$install" "$target" "$tag_a" 2>&1)"
     fi
     code=$?
-    check "a tag with $([ "$kind" = none ] && echo "no Release" || echo "a Release without its package") installs from its tarball, and exits 0" \
-      bash -c '[ "$1" -eq 0 ] && grep -qxF "install: download   the tarball of $2, which has no Release with its package" <<<"$3"' \
+    case "$kind" in
+      none) what="no Release" ;;
+      other) what="a Release without its package" ;;
+      checksum) what="a Release with the package's checksum alone" ;;
+    esac
+    check "a tag with $what installs from its tarball, and exits 0" \
+      bash -c '[ "$1" -eq 0 ] && grep -qxF "install: download   the tarball of $2, since no Release package of it could be downloaded" <<<"$3"' \
       _ "$code" "$tag_a" "$out"
   done
 
@@ -1308,6 +1314,85 @@ cases_release() {
   check "without sha256sum or shasum the installer exits 2, saying so" \
     bash -c '[ "$1" -eq 2 ] && grep -qxF "squad-install: sha256sum or shasum is required to check the tag'"'"'s package" <<<"$2"' _ "$code" "$out"
   check "and changes nothing" [ "$before" = "$(tree_state "$target")" ]
+}
+
+# Case 14b (agent-squad #296): this machine's own excludes, a global core.excludesFile or the
+# project's .git/info/exclude, that ignore the .claude/ directory. Git then hides every rule below
+# it, the project's own included, so the installer and --check read the project's rules alone.
+cases_machine_excludes() {
+  printf '.claude/\n' > "$lab/machine-excludes"
+  printf '[core]\n\texcludesFile = %s\n' "$lab/machine-excludes" > "$lab/excludes.gitconfig"
+  for kind in core.excludesFile info/exclude; do
+    target="$(new_project "excludes-${kind//[.\/]/-}")" || exit 2
+    # `with_machine <command...>` runs the command on this machine as the kind sets it.
+    if [ "$kind" = core.excludesFile ]; then
+      with_machine() { env GIT_CONFIG_GLOBAL="$lab/excludes.gitconfig" "$@"; }
+    else
+      printf '.claude/\n' >> "$target/.git/info/exclude"
+      with_machine() { "$@"; }
+    fi
+    out="$(with_machine "$install" "$target" "$tag_a" 2>&1)"
+    code=$?
+    check "with $kind ignoring .claude/, an install exits 0" [ "$code" -eq 0 ]
+    check "and adds the squad's lines, saying so" \
+      contains "$out" ".gitignore added .agent-squad/, .claude/settings.local.json, .claude/commands/squad-*.md"
+    check "with no NOT IGNORED" lacks "$out" "NOT IGNORED"
+    cp "$target/.gitignore" "$lab/gitignore-first"
+    out="$(with_machine "$install" "$target" "$tag_a" 2>&1)"
+    code=$?
+    check "and a second install exits 0 and adds nothing" \
+      bash -c '[ "$1" -eq 0 ] && cmp -s "$2" "$3"' _ "$code" "$lab/gitignore-first" "$target/.gitignore"
+    check "so each line is there once" has_lines "$target/.gitignore" .agent-squad/ .claude/settings.local.json ".claude/commands/squad-*.md"
+    out="$(with_machine "$install" --check "$target" 2>&1)"
+    check "and --check passes its .gitignore item" contains "$out" "check: ok      $item_ignore"
+  done
+
+  # A nested negation still decides below a directory the machine ignores: nothing is appended.
+  target="$(new_project excludes-nested)" || exit 2
+  mkdir -p "$target/.claude" && echo '!settings.local.json' > "$target/.claude/.gitignore"
+  out="$(env GIT_CONFIG_GLOBAL="$lab/excludes.gitconfig" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "with the machine ignoring .claude/, a nested negation of settings.local.json still exits 1" [ "$code" -eq 1 ]
+  check "and says which rule wins" contains "$out" ".gitignore NOT IGNORED: .claude/settings.local.json would lose to .claude/.gitignore:1:!settings.local.json"
+  check "and appends nothing" refused grep -qxF .claude/settings.local.json "$target/.gitignore"
+
+  # A .gitignore that cannot be written says so, and claims nothing added.
+  target="$(new_project readonly-gitignore)" || exit 2
+  echo build > "$target/.gitignore" && chmod a-w "$target/.gitignore"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  chmod u+w "$target/.gitignore"
+  check "a .gitignore that cannot be written makes the installer exit 1" [ "$code" -eq 1 ]
+  check "and says so, for each line" \
+    bash -c 'grep -qF "NOT IGNORED: .agent-squad/, because .gitignore cannot be written; fix it and run again" <<<"$1" \
+      && grep -qF "NOT IGNORED: .claude/settings.local.json, because .gitignore cannot be written" <<<"$1"' _ "$out"
+  check "and claims nothing added" lacks "$out" ".gitignore added"
+  check "and leaves it as it was" [ "$(cat "$target/.gitignore")" = build ]
+
+  # A .agent-squad that is a symbolic link: git takes it for a file, which .agent-squad/ does not
+  # match, so the added line does not ignore it, and the step says so.
+  target="$(new_project linked-squad)" || exit 2
+  mkdir -p "$lab/linked-squad.target" && ln -s "$lab/linked-squad.target" "$target/.agent-squad"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "a .agent-squad that is a symbolic link makes the installer exit 1" [ "$code" -eq 1 ]
+  check "saying the line it added does not ignore it" \
+    contains "$out" ".gitignore NOT IGNORED: .agent-squad/ was added, and still git does not ignore it; decide with the CEO"
+
+  # Without a temporary directory for its empty git directory, the installer still sets aside a
+  # global core.excludesFile, though not .git/info/exclude.
+  target="$(new_project excludes-no-tmpdir)" || exit 2
+  out="$(env GIT_CONFIG_GLOBAL="$lab/excludes.gitconfig" TMPDIR="$lab/no-such-directory" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "without a temporary directory, core.excludesFile ignoring .claude/ still lets an install exit 0" \
+    bash -c '[ "$1" -eq 0 ] && ! grep -qF "NOT IGNORED" <<<"$2"' _ "$code" "$out"
+  check "and makes no directory there" absent "$lab" no-such-directory
+  target="$(new_project own-tmpdir)" || exit 2
+  mkdir "$lab/own-tmpdir.tmp"
+  TMPDIR="$lab/own-tmpdir.tmp" "$install" "$target" "$tag_a" >/dev/null 2>&1
+  TMPDIR="$lab/own-tmpdir.tmp" "$install" --check "$target" >/dev/null 2>&1
+  check "and an install or a --check leaves nothing in the temporary directory" \
+    [ -z "$(ls -A "$lab/own-tmpdir.tmp")" ]
 }
 
 # Case 18.
@@ -1663,6 +1748,7 @@ groups=(
   cases_default_branch
   cases_failure_paths
   cases_failure_installs
+  cases_machine_excludes
   cases_leftover_commands
   cases_mods
   cases_uninstall
