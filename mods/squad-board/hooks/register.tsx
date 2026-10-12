@@ -11,7 +11,9 @@ import type { BoardAgent, BoardAgents, BoardItem, BoardRole, BoardState } from '
 // release on the right, and shows a toast when an agent waits for the CEO. The band shows each
 // session's own state, not GitHub's: nothing is read from GitHub, and no command is run; a newer
 // release is known from a file another script writes. A session whose name is not a squad role's
-// does nothing. The signals are the ones agent-squad #199 measured.
+// does nothing. Every key records the release its session's board loaded, and the band marks a
+// session older than the installed release, which still needs a /restart (agent-squad #362). The
+// signals are the ones agent-squad #199 measured.
 
 const ROLES: readonly BoardRole[] = ['CTO', 'DEV', 'QA']
 // How often a session rewrites its key, and how old a key may grow before its part reads unknown.
@@ -40,6 +42,9 @@ const SIGNATURE: Record<BoardRole, string> = {
 // cells between it and the agents, and no separator.
 const AUTOPILOT = '\u23E9'
 const GAP = 3
+// The mark of a session whose board is older than the installed release, before the two releases
+// (agent-squad #362): a clockwise arrow, a text character of one cell.
+const RESTART = '\u27F3'
 // Every emoji the band draws takes two cells of a terminal, however many code points it has, as
 // Claude Code measures it; every other character one. The longest are matched first. A terminal
 // that draws the pause in one cell leaves the line one cell shorter, which the cut allows for, and
@@ -88,7 +93,8 @@ let repository: string | null = null
 // The session's repository on this machine, its main checkout for a squad's session; null outside
 // a git checkout.
 let checkout: string | null = null
-// The CTO's session only: the release its board belongs to, as `v42`, read once when the board starts.
+// The release this session's board belongs to, as `v42`, read once when the board starts: the
+// CTO's wordmark shows it, and every session's key records it (agent-squad #362).
 let release: string | null = null
 // The CTO's session only: the waits it has already shown a toast for.
 let toasted: string[] = []
@@ -454,8 +460,9 @@ function stepAwayOf(text: string): 'pause' | 'resume' | 'autopilot' | null {
 }
 
 // One part of the band (agent-squad #235): an agent's role, its state mark, the CTO's context when
-// it shows, and its item when it has one.
-type Part = { key: BoardRole; mark: string; context: string; item: BoardItem | null }
+// it shows, the mark of a session to restart when it is older than the installed release
+// (agent-squad #362), and its item when it has one.
+type Part = { key: BoardRole; mark: string; context: string; restart: string; item: BoardItem | null }
 
 // An item as the band names it: `#123` for an issue, `PR #124` for a pull request. A key written by
 // a session still on an older board says `Issue #123`, and reads the same.
@@ -463,10 +470,10 @@ function labelOf(item: BoardItem): string {
   return item.item.replace(/^Issue #/, '#')
 }
 
-// A part's text as the band draws it: the mark, the signature and the role, the context, then a
-// colon and the item when there is one.
+// A part's text as the band draws it: the mark, the signature and the role, the context, the mark of
+// a session to restart, then a colon and the item when there is one.
 function textOf(part: Part): string {
-  const head = `${part.mark} ${SIGNATURE[part.key]}${part.key}${part.context}`
+  const head = `${part.mark} ${SIGNATURE[part.key]}${part.key}${part.context}${part.restart}`
   return part.item ? `${head}: ${labelOf(part.item)}` : head
 }
 
@@ -480,15 +487,38 @@ function markOf(role: BoardRole, agent: BoardAgent): string {
   return agent.paused === true ? MARK.paused : MARK.idle
 }
 
-// An agent's part: its mark, the CTO's context once it reaches CONTEXT_FROM, and the item its
-// session works on while the agent has something in hand (agent-squad #247): an idle agent
-// shows its role alone, and its key keeps the item for when it works again. With no key, or one
-// gone stale, the unknown mark, with the item of the work whose session went silent.
-function partOf(role: BoardRole, agent: BoardAgent | undefined, now: number): Part {
-  if (!agent || now - agent.at > STALE_MS) return { key: role, mark: MARK.unknown, context: '', item: agent?.item ?? null }
+// The number of a release, `v42` as 42; null for anything else.
+function releaseNumber(text: unknown): number | null {
+  return typeof text === 'string' && /^v\d+$/.test(text) ? Number(text.slice(1)) : null
+}
+
+// The mark of a session whose board is older than the installed release (agent-squad #362), as
+// ` ⟳ v50→v53`, compared as numbers; none when it is not, or when the installed release is not
+// known. A key with no release was written by a board from before boards recorded it, so older
+// than any that does: ` ⟳ →v54`. A key whose release its board could not read gets none.
+function restartOf(agent: BoardAgent, installed: string | null): string {
+  const target = releaseNumber(installed)
+  if (target === null) return ''
+  if (agent.release === undefined) return ` ${RESTART} \u2192${installed}`
+  const loaded = releaseNumber(agent.release)
+  return loaded !== null && loaded < target ? ` ${RESTART} ${agent.release}\u2192${installed}` : ''
+}
+
+// An agent's part: its mark, the CTO's context once it reaches CONTEXT_FROM, the mark of a session
+// to restart, and the item its session works on while the agent has something in hand (agent-squad
+// #247): an idle agent shows its role alone, and its key keeps the item for when it works again.
+// With no key, or one gone stale, the unknown mark, with the item of the work whose session went
+// silent, and no mark of a restart, since the key may not be a session's any more.
+function partOf(role: BoardRole, agent: BoardAgent | undefined, now: number, installed: string | null = null): Part {
+  if (!agent || now - agent.at > STALE_MS) {
+    return { key: role, mark: MARK.unknown, context: '', restart: '', item: agent?.item ?? null }
+  }
   const isFull = role === 'CTO' && agent.context !== null && agent.context >= CONTEXT_FROM
   const mark = markOf(role, agent)
-  return { key: role, mark, context: isFull ? ` (ctx: ${agent.context}%)` : '', item: mark === MARK.idle ? null : agent.item ?? null }
+  return {
+    key: role, mark, context: isFull ? ` (ctx: ${agent.context}%)` : '', restart: restartOf(agent, installed),
+    item: mark === MARK.idle ? null : agent.item ?? null,
+  }
 }
 
 // How many cells a text takes on a terminal.
@@ -574,18 +604,29 @@ async function latestOf($: any): Promise<string | null> {
   }
 }
 
-// The release this session's board belongs to, as `v42`: the major version of the plugin.json the
-// mod ships, which check-version.sh keeps equal to the release. It is read with no host command,
-// once, when the board starts, so a session not restarted since an upgrade shows the release of
-// the code it loaded. Null when it cannot be read.
-async function releaseOf($: any): Promise<string | null> {
+// The release a board's plugin.json belongs to, as `v42`: the major version, which check-version.sh
+// keeps equal to the release. It is read with no host command; null when it cannot be read.
+async function manifestRelease($: any, path: string): Promise<string | null> {
   try {
-    const manifest = JSON.parse(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`))
+    const manifest = JSON.parse(await $.fs.read(path))
     const major = /^(\d+)\./.exec(String(manifest?.version ?? ''))
     return major ? `v${major[1]}` : null
   } catch {
     return null
   }
+}
+
+// The release this session's board belongs to: its own plugin.json, read once, when the board
+// starts, so a session not restarted since an upgrade shows the release of the code it loaded.
+function releaseOf($: any): Promise<string | null> {
+  return manifestRelease($, `${$.plugin.root}/.claude-plugin/plugin.json`)
+}
+
+// The installed release (agent-squad #362): the plugin.json of the board in the playbook under the
+// main checkout, read at each tick, so that an upgrade shows at once, with no network call.
+function installedOf($: any): Promise<string | null> {
+  if (checkout === null) return Promise.resolve(null)
+  return manifestRelease($, `${checkout}/.agent-squad/playbook/mods/squad-board/.claude-plugin/plugin.json`)
 }
 
 // Writes this session's key: its state, its pause, its item, its context use, and the time.
@@ -605,6 +646,7 @@ async function publish($: any) {
     paused: isPaused,
     autopilot: isAutopilot,
     background: hasShell,
+    release,
     item: itemNow(),
     focus,
   }
@@ -671,7 +713,8 @@ async function readAgents($: any) {
     if (isAgent(value) && value.project === me.project && value.role === role) byRole[role] = value
   }
   const latest = await latestOf($)
-  await update($, agents, () => ({ byRole, now, latest }))
+  const installed = await installedOf($)
+  await update($, agents, () => ({ byRole, now, latest, installed }))
   const waits = ROLES.filter(role => role !== 'CTO')
     .map(role => byRole[role])
     .filter((agent): agent is BoardAgent => agent !== undefined && isWaiting(agent.state) && now - agent.at <= STALE_MS)
@@ -698,10 +741,10 @@ async function activate($: any) {
   repository = webOf(repo?.remote ?? null)
   checkout = repo?.root ?? null
   if (since === 0) since = await $.clock.now()
+  release = await releaseOf($)
   await publish($)
   $.clock.every(HEARTBEAT_MS, () => void publish($))
   if (me.role !== 'CTO') return
-  release = await releaseOf($)
   await readAgents($)
   $.clock.every(TICK_MS, () => void readAgents($))
 }
@@ -808,7 +851,7 @@ export const register: Register = on => {
     if (me?.role !== 'CTO' || e.props.hasSurvey) return next(e)
     const { Box, Text, Link } = $.ui.resolve(e)
     const seen = await read($, agents)
-    const parts = ROLES.map(role => partOf(role, seen.byRole[role], seen.now))
+    const parts = ROLES.map(role => partOf(role, seen.byRole[role], seen.now, seen.installed ?? null))
     const squadParts = squadPartsOf(release, seen.latest ?? null, isAutopilot)
     const { squad: chosen, count, hasEllipsis, space } = layoutOf(parts.map(part => widthOf(textOf(part))),
       squadParts.map(part => squadWidthOf(part, release)), e.props.bodyColumns)
@@ -829,6 +872,11 @@ export const register: Register = on => {
                 <Text color={ROLE_COLOR[part.key].key}>{part.key}</Text>
               </Text>
               {part.context !== '' && <Text wrap="truncate-end">{part.context}</Text>}
+              {part.restart !== '' && (
+                <Text color={ROLE_COLOR.CTO.plain} wrap="truncate-end">
+                  <Text color={ROLE_COLOR.CTO.key}>{part.restart}</Text>
+                </Text>
+              )}
               {part.item && <Text>: </Text>}
               {part.item && (part.item.url?.startsWith('https://')
                 ? <Link href={part.item.url}>{labelOf(part.item)}</Link>

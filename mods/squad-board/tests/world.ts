@@ -29,6 +29,8 @@ export type World = {
   latest: string | null
   // Files the board may read by their absolute path, as a PR's body file (agent-squad #354).
   files: Record<string, string>
+  // The plugin.json of the board installed in the playbook (agent-squad #362); null: none there.
+  installed: string | null
 }
 
 // Sets the world up on the test's `on`, with the store holding `store` at the start.
@@ -48,6 +50,7 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
     manifest: '{ "name": "squad-board", "version": "42.0.0" }',
     latest: null,
     files: {},
+    installed: null,
   }
   on('store.get', ($, e) => ({ value: w.store.get(e.key) }))
   on('store.set', ($, e) => {
@@ -64,6 +67,10 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
   on('fs.read', ($, e) => {
     if (e.path === '/work/proj/.agent-squad/latest-release' && w.latest !== null) return { value: w.latest }
     if (Object.hasOwn(w.files, e.path)) return { value: w.files[e.path] }
+    if (e.path === '/work/proj/.agent-squad/playbook/mods/squad-board/.claude-plugin/plugin.json') {
+      if (w.installed === null) throw new Error(`ENOENT: ${e.path}`)
+      return { value: w.installed }
+    }
     if (w.manifest === null || !String(e.path).endsWith('/.claude-plugin/plugin.json')) throw new Error(`ENOENT: ${e.path}`)
     return { value: w.manifest }
   })

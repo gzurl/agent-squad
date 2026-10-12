@@ -24,13 +24,14 @@ describe('a session outside the squad', () => {
 })
 
 describe("a squad session's key", () => {
-  test('names the project and the role, and holds the state, pause, autopilot, item, context, id, name and time', async ($, on) => {
+  test('names the project and the role, and holds the state, pause, autopilot, item, context, id, name, time and the release its board loaded', async ($, on) => {
     const w = world(on)
     await start($, 'DEV:proj')
     expect([...w.store.keys()]).toEqual(['proj/DEV'])
     expect(w.store.get('proj/DEV')).toEqual({
       project: 'proj', role: 'DEV', name: 'DEV:proj', sessionId: 'sid-1',
-      state: 'idle', tool: null, since: START, at: START, context: 42, paused: false, autopilot: false, background: false, item: null, focus: [],
+      state: 'idle', tool: null, since: START, at: START, context: 42, paused: false, autopilot: false, background: false,
+      release: 'v42', item: null, focus: [],
     })
   })
 
@@ -71,7 +72,8 @@ describe("a squad session's key", () => {
     const w = world(on, { 'proj/DEV': kept, 'other/DEV': { ...kept, project: 'other', name: 'DEV:other', sessionId: 'sid-9' } })
     // A reload runs session.start again, without the SessionStart hook that gave the name.
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
-    expect(w.store.get('proj/DEV')).toEqual({ ...kept, at: START, context: 42, paused: false, autopilot: false, background: false, item: null, focus: [] })
+    // The release is the one the reloaded code belongs to (agent-squad #362).
+    expect(w.store.get('proj/DEV')).toEqual({ ...kept, at: START, context: 42, paused: false, autopilot: false, background: false, release: 'v42', item: null, focus: [] })
   })
 
   test('after a reload, keeps its pause and its item', async ($, on) => {
@@ -82,7 +84,7 @@ describe("a squad session's key", () => {
     }
     const w = world(on, { 'proj/QA': kept })
     await $.session.start({ cwd: '/work/proj', surface: 'terminal', isInteractive: true })
-    expect(w.store.get('proj/QA')).toEqual({ ...kept, at: START, context: 42, autopilot: false, background: false, focus: [item] })
+    expect(w.store.get('proj/QA')).toEqual({ ...kept, at: START, context: 42, autopilot: false, background: false, release: 'v42', focus: [item] })
   })
 })
 
