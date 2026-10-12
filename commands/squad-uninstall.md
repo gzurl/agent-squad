@@ -33,7 +33,9 @@ installer wrote outside git and nothing else, and it never touches a tracked fil
 3. **First, one PR for what git tracks,** while the squad is still installed, so that the merge
    gate, QA's worktree and the pre-push checks are all there for it. It takes the *Squad* section of
    `AGENTS.md`, the `.gitignore` lines the dry run names (keep `.agent-squad/` unless the CEO chose
-   `--records`: the records stay there), and the GitHub templates if the CEO wants them gone.
+   `--records`: the records stay there), and the GitHub templates if the CEO wants them gone. The
+   dry run leaves out `.claude/settings.local.json`'s line while the project's own settings stay,
+   since it keeps them out of git, and says so.
    - **Write it** from a `cto-<topic>` worktree, as for the installer's files (`BOOTSTRAP.md`, *The
      installer's files*).
    - **Its description** names the release installed and each item it removes. Like the
