@@ -5,14 +5,16 @@
 #            then gate a manual /compact on /squad-save-state (agent-squad #100).
 #   restore  SessionStart(compact) hook: print that snapshot plus re-orientation instructions, so
 #            that it is re-injected into the compacted session's context.
-#   startup  SessionStart(startup) hook: print a one-line warning when the charter is not installed,
-#            and nothing otherwise.
+#   startup  SessionStart(startup) hook, and SessionStart(clear) since a /clear starts a session too
+#            (agent-squad #336): print a one-line warning when the charter is not installed, and
+#            nothing otherwise.
 #   resume   SessionStart(resume) hook: the same warning, then where the resumed session's shell is
 #            and each role's directory, since Claude Code starts that shell in the launch directory
 #            whatever worktree the conversation last worked in (agent-squad #164).
 #   turn     Stop hook, at the end of every turn: print nothing (agent-squad #302).
 #
-# startup, resume and turn also start the check of the latest release, when one is due.
+# startup, resume and turn also start the check of the latest release: startup and resume, which
+# are session starts, every time; turn when one is due.
 #
 # save and restore read the hook's JSON payload on stdin and key the file by session_id, so the
 # script works for any role without knowing which session it runs in. Snapshots live in the main
@@ -190,12 +192,16 @@ charter_warning() {
 }
 
 # The check of the latest release, for the squad board's notice (agent-squad #302): started in the
-# background when one is due, so that a session never waits on GitHub. Whether one is due is a
-# comparison of dates, with no network; the playbook's squad-latest.sh decides, and without it
-# nothing happens.
+# background, so that a session never waits on GitHub. `latest_check start`, at a session start,
+# checks whatever the last check's age (agent-squad #336); a plain `latest_check` checks only when
+# one is due, a comparison of dates with no network. The playbook's squad-latest.sh decides, and
+# without it nothing happens.
 latest_check() {
   local latest="$main_checkout/.agent-squad/playbook/scripts/squad-latest.sh"
-  if [ -x "$latest" ] && "$latest" --due "$main_checkout" </dev/null >/dev/null 2>&1; then
+  [ -x "$latest" ] || return 0
+  if [ "${1:-}" = start ]; then
+    ( "$latest" --now "$main_checkout" </dev/null >/dev/null 2>&1 & )
+  elif "$latest" --due "$main_checkout" </dev/null >/dev/null 2>&1; then
     ( "$latest" "$main_checkout" </dev/null >/dev/null 2>&1 & )
   fi
 }
@@ -239,12 +245,12 @@ case "$action" in
     ;;
   startup)
     charter_warning
-    latest_check
+    latest_check start
     ;;
   resume)
     charter_warning
     reorient
-    latest_check
+    latest_check start
     ;;
   turn)
     latest_check

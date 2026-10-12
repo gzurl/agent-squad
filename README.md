@@ -335,9 +335,11 @@ The CTO's context shows once it reaches 90% of its window, as `(ctx: 96%)` right
 The board is a Claude Code mod, which the installer enables for this project alone. It needs Claude
 Code 2.1.287 or later; with an older one, the squad works without it. It only watches: it never
 answers a prompt for you, runs no command, and makes no network call. The latest release, which the
-board's notice names, is checked by the squad's hooks and scripts instead: when a session starts,
-once a day in a session that stays open, and when the CTO runs `/squad-resume` or `/squad-watch`.
-They never ask GitHub twice within a day, nor more than once an hour while it cannot be reached.
+board's notice names, is checked by the squad's hooks and scripts instead. A session start always
+asks GitHub, however recent the last check: a new session, a resumed one, a `/restart` or a
+`/clear`, though not a compaction. Otherwise they check once a day in a session that stays open,
+and when the CTO runs `/squad-resume` or `/squad-watch`, never twice within a day, nor more than
+once an hour while GitHub cannot be reached.
 After an upgrade, restart the three sessions, with `/restart` in each, to load the new board;
 until the CTO's session restarts, its line still shows the previous release. To turn it off, run
 the `claude plugin disable` line the installer printed, in the main checkout; the same line with
@@ -430,7 +432,7 @@ the installer touches only the files listed before it:
     ├── triage.since       when the CTO last triaged what came from outside
     ├── kept/              what the worktrees held that git ignores, kept by the uninstaller
     ├── squad-hook         the small wrapper the squad's hooks run
-    ├── latest-release     the latest release, checked at most once a day, for the board's notice
+    ├── latest-release     the latest release, for the board's notice
     └── playbook.manifest  the checksums that --check compares the playbook against
 ```
 

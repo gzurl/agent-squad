@@ -198,8 +198,9 @@ imports_charter() {
 }
 
 # The squad's session hooks as the installer writes them (D5 and D10 of agent-squad #23, #164 for
-# resume, and #302 for the turn's end, which starts the check of the latest release when one is
-# due). Each runs the hooks' wrapper in .agent-squad/ with its event, the wrapper named by its
+# resume, #302 for the turn's end, which starts the check of the latest release when one is due,
+# and #336 for /clear, a session start that runs startup's command, as startup and resume check
+# the latest release every time). Each runs the hooks' wrapper in .agent-squad/ with its event, the wrapper named by its
 # absolute path (agent-squad #319): Claude Code's $CLAUDE_PROJECT_DIR is the directory a session
 # started in, which for a session started or resumed from a subdirectory is not the main checkout,
 # and a command built on it then found no wrapper and failed, telling the session nothing. The
@@ -480,7 +481,7 @@ check_installation() {
     --arg startup "$startup_command" --arg resume "$resume_command" --arg turn "$turn_command" \
     '[["PreCompact", "manual", $save], ["PreCompact", "auto", $save],
       ["SessionStart", "compact", $restore], ["SessionStart", "startup", $startup],
-      ["SessionStart", "resume", $resume], ["Stop", "", $turn]] | sort')"
+      ["SessionStart", "clear", $startup], ["SessionStart", "resume", $resume], ["Stop", "", $turn]] | sort')"
   if ! actual="$(jq -c "$hook_ours"'[(.hooks // {}) | to_entries[] | .key as $event | .value[] | .matcher as $matcher
       | .hooks[] | select(ours) | [$event, $matcher, .command]] | sort' "$settings" 2>/dev/null)"; then
     why="cannot read .claude/settings.local.json"
@@ -819,7 +820,7 @@ if printf '%s' "$current" | one_object \
       else . end))
   | .hooks.PreCompact = (.hooks.PreCompact // []) + [entry("manual"; $save), entry("auto"; $save)]
   | .hooks.SessionStart = (.hooks.SessionStart // [])
-      + [entry("compact"; $restore), entry("startup"; $startup), entry("resume"; $resume)]
+      + [entry("compact"; $restore), entry("startup"; $startup), entry("clear"; $startup), entry("resume"; $resume)]
   | .hooks.Stop = (.hooks.Stop // []) + [entry(""; $turn)]')" \
   && printf '%s' "$merged" | one_object; then
   if [ "$wrapper" = failed ]; then

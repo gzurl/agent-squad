@@ -307,13 +307,14 @@ hook_commands='[.hooks | to_entries[] | .key as $e | .value[] | .matcher as $m |
   | select(.command | contains("squad-hook") or contains("squad-handoff.sh")) | "\($e) \($m) \(.command)"]'
 # `wrapper_commands <project>` is what they are, as the installer writes them for that project: its
 # wrapper, by its physical absolute path in single quotes (agent-squad #319), and the event, nothing
-# else. The turn's end has no matcher (agent-squad #302).
+# else. The turn's end has no matcher (agent-squad #302), and /clear runs startup's command (#336).
 wrapper_commands() {
   jq -nc --arg w "'$(cd "$1" && pwd -P)/.agent-squad/squad-hook'" '[
     "PreCompact manual \($w) save", "PreCompact auto \($w) save", "SessionStart compact \($w) restore",
-    "SessionStart startup \($w) startup", "SessionStart resume \($w) resume", "Stop  \($w) turn"]'
+    "SessionStart startup \($w) startup", "SessionStart clear \($w) startup", "SessionStart resume \($w) resume",
+    "Stop  \($w) turn"]'
 }
-squad_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"resume\", \"\"]"
+squad_hooks="$ours == [\"manual\", \"auto\", \"compact\", \"startup\", \"clear\", \"resume\", \"\"]"
 # `broken <file>` keeps a copy of a file about to be broken; `mended <file>` puts it back.
 broken() { cp -p "$1" "$lab/mend.me"; }
 mended() { cp -p "$lab/mend.me" "$1"; }
@@ -488,7 +489,7 @@ JSON
   }
   mv "$squad/playbook" "$lab/playbook-aside"
   check "the shim refuses a push when the playbook is missing" refused push_from "$dev" no-playbook
-  for matcher in startup compact resume; do
+  for matcher in startup clear compact resume; do
     check "the $matcher hook warns that the charter is not installed" \
       prints "charter is not installed" run_hook "$matcher"
   done
@@ -523,7 +524,7 @@ JSON
     out="$(run_hook startup "$project/harness")" && grep -qxF -- "$misplaced" <<<"$out" \
       && contains "$out" "charter is not installed ($checkout_p/.agent-squad/playbook/scripts/squad-handoff.sh is missing)"
   }
-  for matcher in startup compact resume; do
+  for matcher in startup clear compact resume; do
     check "a session started in a subdirectory gets, from its $matcher hook, the message that names both directories" \
       told_misplaced "$matcher"
   done
@@ -886,6 +887,11 @@ cases_check_settings() {
   jq '.hooks.SessionStart |= map(select(.matcher != "resume"))' "$lab/mend.me" > "$settings"
   check "a missing resume hook fails the hooks item" check_reports "$item_hooks"
   check "naming it" contains "$("$install" --check "$project" 2>&1)" "$item_hooks: missing: resume; unexpected: none"
+  mended "$settings"
+  broken "$settings"
+  jq '.hooks.SessionStart |= map(select(.matcher != "clear"))' "$lab/mend.me" > "$settings"
+  check "so does a missing clear hook, which a /clear runs (agent-squad #336), naming it" \
+    contains "$("$install" --check "$project" 2>&1)" "$item_hooks: missing: clear; unexpected: none"
   mended "$settings"
   # The hooks' wrapper (#269), which --check requires as the installer writes it.
   broken "$squad/squad-hook"

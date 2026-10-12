@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Find the latest agent-squad release, at most once a day, for the squad board's notice (agent-squad
-# #302). It asks GitHub for the upstream's latest Release with gh, and writes the answer into the
+# Find the latest agent-squad release, at every session start and at most once a day otherwise, for
+# the squad board's notice (agent-squad #302, #336). It asks GitHub for the upstream's latest Release with gh, and writes the answer into the
 # main checkout's .agent-squad/latest-release, which the three sessions share and the board reads
 # (#244):
 #   {"tag": "v50", "checkedAt": 1760263200, "attemptedAt": 1760263200}
@@ -11,18 +11,24 @@
 # now counts as never, so that a clock that ran ahead cannot hold the check back (agent-squad
 # #309). The attempt is written down before GitHub is asked, so a session that starts while a
 # check is under way asks nothing; sessions that start at the very same instant may each ask once,
-# which is harmless. Nothing is sent: it is a read of a public repository's latest Release. The upstream is the one on the
+# which is harmless. A session start does not wait for a check to be due: it asks with --now. Nothing
+# is sent: it is a read of a public repository's latest Release. The upstream is the one on the
 # upstream= line of the squad-install.sh beside this script, as /squad-upgrade reads it.
 #
-# Usage: squad-latest.sh [--due] <main checkout>
+# Usage: squad-latest.sh [--due | --now] <main checkout>
 #   --due  only tell whether a check is due: exit 0 if it is, 1 if not; nothing is asked or written.
+#   --now  check whatever the last check's age, even right after a failed attempt, as a session
+#          start does (agent-squad #336).
 # Run by the session hooks (squad-handoff.sh) and by /squad-resume and /squad-watch. Without --due
 # it prints one line on what it knows, and exits 0 whatever GitHub answers; 2 is bad usage.
 # SQUAD_LATEST_TIMEOUT is how long gh may take, in seconds (10 when unset).
 set -u
-usage="usage: squad-latest.sh [--due] <main checkout>"
-due_only=false
-[ "${1:-}" != --due ] || { due_only=true; shift; }
+usage="usage: squad-latest.sh [--due | --now] <main checkout>"
+due_only=false always=false
+case "${1:-}" in
+  --due) due_only=true; shift ;;
+  --now) always=true; shift ;;
+esac
 if [ $# -ne 1 ] || [ ! -d "$1/.agent-squad" ]; then echo "$usage" >&2; exit 2; fi
 file="$1/.agent-squad/latest-release"
 day=86400 hour=3600
@@ -46,6 +52,7 @@ now="$(date +%s)"
 is_due=false
 [ $((now - checked)) -lt "$day" ] || [ $((now - attempted)) -lt "$hour" ] || is_due=true
 if $due_only; then $is_due; exit; fi
+! $always || is_due=true
 
 # `write <tag> <checkedAt> <attemptedAt>` replaces the file whole, through a temporary file.
 write() {
