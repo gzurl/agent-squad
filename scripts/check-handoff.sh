@@ -412,70 +412,106 @@ fi
 # 10. The check of the latest release (agent-squad #302): startup, resume and the turn's end start
 #     it, in the background, when the playbook's squad-latest.sh says one is due; restore does not;
 #     and none of them prints a word about it, nor waits for it. A stand-in for squad-latest.sh
-#     records each call in latest.log, answers --due with 0 when the file due is there, and takes
-#     two seconds over a check.
+#     answers --due with 0 when the file due is there, and holds a check until the case lets it
+#     end, so that what it logs, not a clock, tells whether a hook waited for it: under load, a
+#     hook run can take longer than any delay a clock would allow it (agent-squad #329). Each case
+#     has a log of its own, named by LATEST_CASE, which the hook passes on to the stand-in, so that
+#     a check one case started cannot write into another case's log.
 latest="$main/.agent-squad/playbook/scripts/squad-latest.sh"
 mkdir -p "$(dirname "$latest")"
 cat > "$latest" <<'LATEST'
 #!/usr/bin/env bash
 here="$(cd "$(dirname "$0")/../../.." && pwd -P)"
-echo "$*" >> "$here/latest.log"
+log="$here/latest-${LATEST_CASE:-none}.log"
+echo "$*" >> "$log"
 if [ "${1:-}" = --due ]; then [ -f "$here/due" ]; exit; fi
-sleep 2
-echo "checked" >> "$here/latest.log"
+# A check ends once its case creates go-<case>, and gives up after 30 seconds without it.
+waited=0
+while [ ! -e "$here/go-${LATEST_CASE:-none}" ]; do
+  if [ "$waited" -ge 300 ]; then echo "gave up" >> "$log"; exit 1; fi
+  sleep 0.1
+  waited=$((waited + 1))
+done
+echo "checked" >> "$log"
 LATEST
 chmod +x "$latest"
-# `checks <case> <directory> <action> <due> <expected log>` runs the hook there, the check due or
-# not, and passes when it printed nothing, returned before the check's two seconds, and the log
-# reads as expected once the check, if any, has ended.
-checks() {
-  local started out waited=0
-  rm -f "$main/latest.log" "$main/due"
-  [ "$4" = no ] || touch "$main/due"
-  started=$SECONDS
-  out="$(run "$2" "$3" '{"session_id":"x","source":"startup"}')"
-  if [ -n "$out" ] || [ $((SECONDS - started)) -ge 2 ]; then
-    fail "$1: printed '$out', or waited for the check"
-    return
-  fi
-  while [ "$waited" -lt 50 ] && [[ "$5" == *checked* && "$(cat "$main/latest.log" 2>/dev/null)" != *checked* ]]; do
+# `next_case <due>` starts a case: a log of its own, and a check due (yes) or not (no).
+latest_case=0
+next_case() {
+  latest_case=$((latest_case + 1))
+  export LATEST_CASE="$latest_case"
+  rm -f "$main/due"
+  [ "$1" = no ] || touch "$main/due"
+}
+# `case_log [<case>]` is what the stand-in logged for that case, the current one by default, on one
+# line.
+case_log() { tr '\n' ' ' 2>/dev/null < "$main/latest-${1:-$latest_case}.log"; }
+# `end_check <expected log>` lets the current case's check end and, when the expected log has one
+# ending, waits until it has, for up to 30 seconds.
+end_check() {
+  local waited=0
+  touch "$main/go-$latest_case"
+  while [[ "$1" == *checked* && "$(case_log)" != *checked* ]] && [ "$waited" -lt 300 ]; do
     sleep 0.1
     waited=$((waited + 1))
   done
-  if [ "$(tr '\n' ' ' 2>/dev/null < "$main/latest.log")" = "$5" ]; then
+}
+# `checks <case> <directory> <action> <due> <expected log>` runs the hook there, the check due or
+# not, and passes when it printed nothing, returned while the check it started was still held, and
+# the log reads as expected once that check has ended.
+checks() {
+  local out held
+  next_case "$4"
+  out="$(run "$2" "$3" '{"session_id":"x","source":"startup"}')"
+  held="$(case_log)"
+  end_check "$5"
+  if [ -n "$out" ] || [[ "$held" == *checked* || "$held" == *"gave up"* ]]; then
+    fail "$1: printed '$out', or waited for the check: the stand-in had logged '$held'"
+  elif [ "$(case_log)" = "$5" ]; then
     pass "$1"
   else
-    fail "$1: the stand-in logged '$(tr '\n' ' ' 2>/dev/null < "$main/latest.log")', not '$5'"
+    fail "$1: the stand-in logged '$(case_log)', not '$5'"
   fi
 }
 checks "the turn's end starts a check that is due, for the main checkout, in the background" \
   "$nested" turn yes "--due $main_p $main_p checked "
 checks "and starts none when none is due" "$nested" turn no "--due $main_p "
+none_due=$latest_case
 checks "startup starts one when it is due" "$beside" startup yes "--due $main_p $main_p checked "
-#    restore prints the snapshot, and starts no check.
-rm -f "$main/latest.log" && touch "$main/due"
+#    restore prints the snapshot, and starts no check: its log is read once the cases below have
+#    run, so that a check it started late would be there by then.
+next_case yes
 run "$main" restore '{"session_id":"x"}' >/dev/null
-sleep 0.5
-if [ ! -e "$main/latest.log" ]; then
-  pass "restore starts no check"
-else
-  fail "restore called the stand-in: '$(tr '\n' ' ' < "$main/latest.log")'"
-fi
+restored=$latest_case
+touch "$main/go-$latest_case"
 #    resume prints its re-orientation, which `checks` does not expect: its own case, then.
-rm -f "$main/latest.log" && touch "$main/due"
+next_case yes
 out="$(run "$main" resume '{"session_id":"x","source":"resume"}')"
-waited=0
-while [ "$waited" -lt 50 ] && [[ "$(cat "$main/latest.log" 2>/dev/null)" != *checked ]]; do sleep 0.1; waited=$((waited + 1)); done
-if [[ "$out" == "Squad: this session was resumed."* ]] && [ "$(tr '\n' ' ' < "$main/latest.log")" = "--due $main_p $main_p checked " ]; then
+held="$(case_log)"
+end_check checked
+if [[ "$out" == "Squad: this session was resumed."* ]] && [[ "$held" != *checked* && "$held" != *"gave up"* ]] \
+  && [ "$(case_log)" = "--due $main_p $main_p checked " ]; then
   pass "resume re-orients, then starts a check that is due"
 else
-  fail "resume printed '$out', and the stand-in logged '$(tr '\n' ' ' 2>/dev/null < "$main/latest.log")'"
+  fail "resume printed '$out', and the stand-in logged '$held', then '$(case_log)'"
 fi
 #    Without the playbook's squad-latest.sh, or with one that cannot run, nothing happens.
 chmod -x "$latest"
 checks "a squad-latest.sh that cannot run is left alone" "$main" turn yes ""
 rm -f "$latest"
 checks "and the turn's end without one prints nothing" "$main" turn yes ""
+#    No check started late: by now, the case with none due still logged its --due alone, and
+#    restore nothing.
+if [ "$(case_log "$none_due")" = "--due $main_p " ]; then
+  pass "and none started late, when none was due"
+else
+  fail "with none due, the stand-in logged '$(case_log "$none_due")' in the end"
+fi
+if [ ! -e "$main/latest-$restored.log" ]; then
+  pass "restore starts no check"
+else
+  fail "restore called the stand-in: '$(case_log "$restored")'"
+fi
 #    An unknown action prints the usage, which names the turn's end too.
 out="$(run "$main" bogus '{}' 2>&1)"
 if [ "$out" = "usage: $handoff save|restore|startup|resume|turn" ]; then
