@@ -335,10 +335,10 @@ answers a prompt for you, runs no command, and makes no network call. The latest
 board's notice names, is checked by the squad's hooks and scripts instead: when a session starts,
 once a day in a session that stays open, and when the CTO runs `/squad-resume` or `/squad-watch`.
 They never ask GitHub twice within a day, nor more than once an hour while it cannot be reached.
-After an upgrade, restart the three sessions to load the new board; until the CTO's session
-restarts, its line still shows the previous release. To turn it off, run the `claude plugin
-disable` line the installer printed, in the main checkout; the same line with `enable` turns it
-back on.
+After an upgrade, restart the three sessions, with `/restart` in each, to load the new board;
+until the CTO's session restarts, its line still shows the previous release. To turn it off, run
+the `claude plugin disable` line the installer printed, in the main checkout; the same line with
+`enable` turns it back on.
 
 
 ## 📋 Requirements
@@ -361,10 +361,14 @@ what; it does not install anything for you.
 
 When a new release is out, type `/squad-upgrade` in the CTO's session. The CTO tells you which
 release the project runs, what the new one changes and whether you need to do anything, and
-installs it only when you say yes. The agents then re-read the rules that changed, so there is
-nothing else for you to do; the CTO asks you to compact the sessions only after a release that
+installs it only when you say yes. The agents then re-read the rules that changed, so the rules
+need nothing more from you; the CTO asks you to compact the sessions only after a release that
 rewrites much of the charter. The upgrade also moves the squad board to the new release, and
-keeps it off if you turned it off. The release notes are in [CHANGELOG.md](CHANGELOG.md).
+keeps it off if you turned it off. Then restart the three sessions when it suits you, with
+`/restart` in each, which keeps each session's conversation and name: until a session restarts,
+it keeps the board it started with, and a hook the release adds waits for it too, so the CTO's
+line shows the previous release, with the new one's notice. The release notes are in
+[CHANGELOG.md](CHANGELOG.md).
 
 **To remove the squad from a project,** type `/squad-uninstall` in the CTO's session. The CTO shows
 you what would go and what would stay. When you say yes, it first merges a PR for what git tracks,
