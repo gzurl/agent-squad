@@ -366,11 +366,12 @@ installs it only when you say yes. Before installing, it brings DEV and QA to a 
 agents then re-read the rules that changed, so the rules need nothing more from you; the CTO asks
 you to compact the sessions only after a release that rewrites much of the charter. The upgrade
 also moves the squad board to the new release, and keeps it off if you turned it off. Then the
-CTO asks you to restart the three sessions, with `/restart` in each, which keeps each session's
-conversation and name: until a session restarts, it keeps the board it started with, and a hook
-the release adds waits for it too, so the CTO's line shows the previous release, with the new
-one's notice. The agents wait at their safe point until their session restarts, then carry on
-from where they were. The release notes are in [CHANGELOG.md](CHANGELOG.md).
+CTO asks you to restart the three sessions, with `/restart` in each, the CTO's last, which keeps
+each session's conversation and name: until a session restarts, it keeps the board it started
+with, and a hook the release adds waits for it too, so the CTO's line shows the previous release,
+with the new one's notice. A session that restarts waits for someone to write to it, so you then
+type `/squad-resume` in the CTO's session, and the agents carry on from where they stopped. The
+release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 **To remove the squad from a project,** type `/squad-uninstall` in the CTO's session. The CTO shows
 you what would go and what would stay. When you say yes, it first merges a PR for what git tracks,
