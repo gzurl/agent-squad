@@ -347,7 +347,9 @@ asks GitHub, however recent the last check: a new session, a resumed one, a `/re
 and when the CTO runs `/squad-resume` or `/squad-watch`, never twice within a day, nor more than
 once an hour while GitHub cannot be reached.
 After an upgrade, restart the three sessions, with `/restart` in each, to load the new board;
-until the CTO's session restarts, its line still shows the previous release. To turn it off, run
+until the CTO's session restarts, its line still shows the previous release. Until then, the band
+marks each session still on an older board with the release it loaded and the one installed,
+`DEV ⟳ v50→v53`, and the mark goes once that session restarts. To turn it off, run
 the `claude plugin disable` line the installer printed, in the main checkout; the same line with
 `enable` turns it back on.
 

@@ -33,6 +33,9 @@ export type BoardAgent = {
   autopilot?: boolean
   // Whether the session's last turn ended with a background shell still running (agent-squad #264).
   background?: boolean
+  // The release the session's board loaded, as `v53`; null when it could not be read. A key from a
+  // board before agent-squad #362 has none.
+  release?: string | null
   // The issue or PR the band shows: the latest of the session's focus; null with none.
   item?: BoardItem | null
   // The issues and PRs the session's agent works on, the latest last, up to five, each PR it created
@@ -42,9 +45,12 @@ export type BoardAgent = {
   toasted?: string[]
 }
 
-// The agents' keys as the CTO's session last read them, the time it read them, and the latest
-// release .agent-squad/latest-release names, as `v50` (null: none known, agent-squad #244).
-export type BoardAgents = { byRole: Partial<Record<BoardRole, BoardAgent>>; now: number; latest?: string | null }
+// The agents' keys as the CTO's session last read them, the time it read them, the latest release
+// .agent-squad/latest-release names, as `v50` (null: none known, agent-squad #244), and the release
+// installed in the playbook (null: not known, agent-squad #362).
+export type BoardAgents = {
+  byRole: Partial<Record<BoardRole, BoardAgent>>; now: number; latest?: string | null; installed?: string | null
+}
 
 declare module 'claude-code' {
   interface PluginState {

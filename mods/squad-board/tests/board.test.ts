@@ -575,6 +575,88 @@ describe('the toasts', () => {
   })
 })
 
+describe('a session to restart: older than the installed release (agent-squad #362)', () => {
+  // The installed board's plugin.json, as the playbook holds it after an upgrade; the CTO's own board
+  // loaded the world's, version 42.0.0.
+  const installed = (version: string) => JSON.stringify({ name: 'squad-board', version })
+  const RESTART = '⟳'
+
+  test('each older session shows the releases it loaded and the one installed, the CTO\'s own included; a session on it, none', async ($, on) => {
+    const w = world(on, {
+      'proj/DEV': agent('DEV', 'proj', { release: 'v50' }),
+      'proj/QA': agent('QA', 'proj', { release: 'v53' }),
+    })
+    w.installed = installed('53.0.0')
+    await start($, 'CTO:proj')
+    const { part, drawn, colorsOf } = await band($)
+    expect(await part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO ${RESTART} v42→v53`)
+    expect(await part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV ${RESTART} v50→v53`)
+    expect(await part('QA')).toBe(` │ ${MARK.idle} ${SIGN.QA}QA`)
+    // The line keeps its widths, the marks counted; and each mark is in the CTO's yellow.
+    expect(drawn).toBe(line(`${MARK.idle} ${SIGN.CTO}CTO ${RESTART} v42→v53 │ ${MARK.idle} ${SIGN.DEV}DEV ${RESTART} v50→v53 │ ${MARK.idle} ${SIGN.QA}QA`))
+    expect(colorsOf(` ${RESTART} v50→v53`)).toEqual(['yellow', 'yellow_FOR_SUBAGENTS_ONLY'])
+  })
+
+  test('releases compare as numbers: v9 is older than v10, and v100 is not', async ($, on) => {
+    const w = world(on, {
+      'proj/DEV': agent('DEV', 'proj', { release: 'v9' }),
+      'proj/QA': agent('QA', 'proj', { release: 'v100' }),
+    })
+    w.installed = installed('10.0.0')
+    w.manifest = installed('10.0.0')
+    await start($, 'CTO:proj')
+    const { part } = await band($)
+    expect(await part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV ${RESTART} v9→v10`)
+    expect(await part('QA')).toBe(` │ ${MARK.idle} ${SIGN.QA}QA`)
+    expect(await part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO`)
+  })
+
+  test('a key with no release, from a board before #362, is older than any that records one', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj') })
+    w.installed = installed('54.0.0')
+    await start($, 'CTO:proj')
+    expect(await (await band($)).part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV ${RESTART} →v54`)
+  })
+
+  test('a stale key keeps its unknown mark, with no mark of a restart; a release its board could not read, none either', async ($, on) => {
+    const w = world(on, {
+      'proj/DEV': agent('DEV', 'proj', { release: 'v50', at: START - 200_000 }),
+      'proj/QA': agent('QA', 'proj', { release: null }),
+    })
+    w.installed = installed('53.0.0')
+    await start($, 'CTO:proj')
+    const { part } = await band($)
+    expect(await part('DEV')).toBe(` │ ${MARK.unknown} ${SIGN.DEV}DEV`)
+    expect(await part('QA')).toBe(` │ ${MARK.idle} ${SIGN.QA}QA`)
+  })
+
+  test('with no installed release to read, nothing is marked', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { release: 'v1' }) })
+    await start($, 'CTO:proj')
+    expect(await (await band($)).part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV`)
+  })
+
+  test('once the session restarts on the installed release, its mark goes at the next read of the keys', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { release: 'v50' }) })
+    w.installed = installed('53.0.0')
+    await start($, 'CTO:proj')
+    expect(await (await band($)).part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV ${RESTART} v50→v53`)
+    w.store.set('proj/DEV', agent('DEV', 'proj', { release: 'v53', at: START + 3_000 }))
+    await w.clock.advance(3_000)
+    expect(await (await band($)).part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV`)
+  })
+
+  test('an upgrade shows at once: the installed release is read again with the keys', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { release: 'v42' }) })
+    w.installed = installed('42.0.0')
+    await start($, 'CTO:proj')
+    expect(await (await band($)).part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV`)
+    w.installed = installed('43.0.0')
+    await w.clock.advance(3_000)
+    expect(await (await band($)).part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV ${RESTART} v42→v43`)
+  })
+})
+
 describe('the squad part: fast-forward on autopilot, and the notice of a newer release (agent-squad #244)', () => {
   const NOTICE = ' → v43 available: /squad-upgrade'
   const IDLE = `${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.unknown} ${SIGN.DEV}DEV │ ${MARK.unknown} ${SIGN.QA}QA`
