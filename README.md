@@ -263,8 +263,10 @@ command until you answer it there, so the CTO tells you which one.
 
 **Work that stalls.** An agent waits only for a message, and a message can go astray.
 `/squad-watch`, in the CTO's session, finds work whose next step has waited half an hour on an
-agent that sits idle: it pings that agent, and tells you if nothing has moved an hour later. It
-leaves out what already waits on you (`needs-ceo`) and what is blocked on purpose
+agent that sits idle: it pings that agent, and tells you if nothing has moved an hour later. A PR
+that QA approved but that still waits for a review requested on GitHub, such as a colleague's, is
+nobody's to merge yet: the watch tells you once it has waited an hour, since only you can reach that
+reviewer. It leaves out what already waits on you (`needs-ceo`) and what is blocked on purpose
 (`status:blocked`), and when it finds nothing, it says nothing. `/squad-autopilot` runs it every
 half hour until you pause or resume the squad, and you can type it yourself at any time.
 

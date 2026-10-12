@@ -9,7 +9,9 @@
 # and the CEO told once if it is still there an hour later. A session that waits on the CEO, or is
 # not open, is reported to the CEO at once; a busy one never. Activity starts a stall afresh. An
 # issue or a PR opened from outside the squad, by the account's association and whatever its
-# signature, is the CTO's to triage once it has waited 30 minutes, and nobody else's (#281).
+# signature, is the CTO's to triage once it has waited 30 minutes, and nobody else's (#281). An
+# approved PR with a review still requested on GitHub waits for that reviewer: nobody is pinged, and
+# the CEO is told once it has been quiet for an hour, whatever the sessions (#306).
 # Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
 # happens in a temporary directory; this script touches neither its repository nor GitHub.
 # shellcheck disable=SC2016 # jq programs use jq variables
@@ -273,6 +275,54 @@ run 0 "${everyone_idle[@]}"
 finds "megabytes of text in PRs, reviews and issues are read through files, and the stalls found as ever" "$(
   tsv ping DEV "PR #1" https://github.com/o/r/pull/1 "merge it: QA approved its head 1111111" "2026-10-03 11:20" ""
   tsv ping CTO "#50" https://github.com/o/r/issues/50 "triage it: stranger opened it from outside the squad (NONE)" "2026-10-03 11:20" "")"
+
+# 6g. A review requested on GitHub and still pending (agent-squad #306, from trivial-tape's PR #119,
+#     where the CEO wanted a person's Approve after QA's verdict). An approved head then waits for
+#     that reviewer, not for its author: nobody is pinged, and the CEO, the only one who can reach a
+#     person, is told once the PR has been quiet for an hour, once, whatever the sessions. The
+#     squad's own steps, a review of a new head and the answer to changes, are pinged as before.
+# `requested <PR as JSON> <requests as JSON>` adds GitHub's pending review requests to a PR.
+requested() { jq -c --argjson r "$2" '. + {reviewRequests: $r}' <<<"$1"; }
+david='[{"__typename": "User", "login": "david"}]'
+wait_line() {
+  tsv ceo "$1" "PR #$2" "https://github.com/o/r/pull/$2" "wait for the review requested from $1 on GitHub, before the merge" "$3" \
+    "a review is requested from $1 on GitHub, whom only the CEO can reach"
+}
+rm -f "$state"
+github "[$(requested "$(pr 1 DEV "$head1" 40)" "$david")]" '[]'
+review "$head1" APPROVED > "$lab/gh/reviews-1.json"
+run 0 "${everyone_idle[@]}"
+finds "an approved PR with a review still requested is not its author's to merge: after 40 minutes, no ping" ""
+run 20 "${everyone_idle[@]}"
+finds "an hour quiet, the CEO is told that it waits for the requested reviewer" "$(wait_line david 1 "2026-10-03 11:20")"
+run 50 "${everyone_idle[@]}"
+finds "and only once" ""
+rm -f "$state"
+run 20
+finds "with no session open, the same line, and no ping" "$(wait_line david 1 "2026-10-03 11:20")"
+rm -f "$state"
+run 20 --session CTO=busy --session DEV=busy --session QA=busy
+finds "and with every session busy, the same line too" "$(wait_line david 1 "2026-10-03 11:20")"
+rm -f "$state"
+github "[$(requested "$(pr 1 DEV "$head1" 70)" '[{"__typename": "Team", "slug": "reviewers", "name": "Reviewers"}]')]" '[]'
+review "$head1" APPROVED > "$lab/gh/reviews-1.json"
+run 0 "${everyone_idle[@]}"
+finds "a team requested is named by its slug" "$(wait_line reviewers 1 "2026-10-03 10:50")"
+#    The reviewer reviews: GitHub drops the request, and the approved head is the author's to merge.
+rm -f "$state"
+github "[$(requested "$(pr 1 DEV "$head1" 40)" '[]')]" '[]'
+review "$head1" APPROVED > "$lab/gh/reviews-1.json"
+run 0 "${everyone_idle[@]}"
+finds "once the request is answered by a review, the author is pinged to merge" \
+  "$(tsv ping DEV "PR #1" https://github.com/o/r/pull/1 "merge it: QA approved its head 1111111" "2026-10-03 11:20" "")"
+#    A request does not hold the squad's own steps.
+rm -f "$state"
+github "[$(requested "$(pr 1 DEV "$head1" 40)" "$david"),$(requested "$(pr 2 DEV "$head1" 40)" "$david")]" '[]'
+review "$head1" CHANGES-REQUESTED > "$lab/gh/reviews-2.json"
+run 0 "${everyone_idle[@]}"
+finds "with a review requested, a head with no verdict is still QA's to review, and changes asked still the author's" "$(
+  tsv ping QA "PR #1" https://github.com/o/r/pull/1 "review its head 1111111" "2026-10-03 11:20" ""
+  tsv ping DEV "PR #2" https://github.com/o/r/pull/2 "answer the changes requested on 1111111" "2026-10-03 11:20" "")"
 
 # 6d. Records that cannot be kept fail the run, since every pass would then report the same
 #     findings again: a directory where watch.tsv goes, or a .agent-squad/ that cannot be written.
