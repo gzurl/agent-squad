@@ -157,6 +157,11 @@ done
 printf 'not json' > "$file"
 run
 check "and a check rewrites it in the board's format" holds '.tag == "v50" and (now - .checkedAt) < 5'
+#    A tag that is not vN is no tag, even when its times say no check is due.
+known '"latest"' 100 100
+run
+check "a file whose tag is not vN knows no release, though no check is due" \
+  bash -c '[ "$1" = "latest release: not known yet; GitHub was asked 0 h ago" ] && [ ! -e "$2" ]' _ "$out" "$lab/gh.log"
 
 # 7. Without an upstream to ask, it asks nothing, says so, and still records the attempt.
 alone="$lab/alone"
