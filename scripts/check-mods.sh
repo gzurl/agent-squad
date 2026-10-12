@@ -74,6 +74,15 @@ for name in pause pause-all resume resume-all autopilot autopilot-all; do
     fail "commands/squad-$name.md names ${named:-no step-away command} in parentheses with a colon, not (\`/squad-$name\`): alone: the board would not tell its pause"
   fi
 done
+# 1d. /squad-upgrade's safe point relays /squad-pause the same way (agent-squad #320), so that the
+#     board shows DEV and QA as paused until /squad-resume.
+# shellcheck disable=SC2016 # the backquotes are the relay's own, not a command
+named="$(grep -oE '\(`/squad-(pause|resume|autopilot)(-all)?`\):' "$root/commands/squad-upgrade.md" 2>/dev/null | sort -u | paste -sd ' ' -)"
+if [ "$named" = "(\`/squad-pause\`):" ]; then
+  pass "commands/squad-upgrade.md relays its safe point as (\`/squad-pause\`):, and no other step-away command"
+else
+  fail "commands/squad-upgrade.md names ${named:-no step-away command} in parentheses with a colon, not (\`/squad-pause\`): alone: the board would not show the upgrade's pause"
+fi
 
 # 2. Each plugin it lists, from the marketplace itself; a marketplace that lists none fails.
 sources="$(jq -r '.plugins[].source' "$mods/.claude-plugin/marketplace.json" 2>/dev/null)"
