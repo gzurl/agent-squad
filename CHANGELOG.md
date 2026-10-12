@@ -1,12 +1,14 @@
 # Changelog
 
 ## v50 — 2026-10-12
-- **The band follows each agent's focus** (#289, from trivial-tape's CTO), not its last `gh` call.
+- **The band follows each agent's focus** (#289, found by trivial-tape's CEO), not its last `gh`
+  call.
   - **Declaring work sets the item:** an issue marked `🚧 status:in-progress`, a PR the agent
     creates, or a PR it checks out or reviews.
   - **Bookkeeping does not:** viewing, commenting, other labels.
   - **A merge or a close** goes back to the focus before it.
-  - **Every `gh` call** on a command line counts, in order (#299).
+  - **Every `gh` call** on a command line counts, in order. The PR that `gh pr create` made is
+    never taken for one an earlier call on the line printed (#299).
   - Each key gains a `focus` list, and a key written before v50 comes back as a focus of its item.
 - **The band's squad part moves to the right** (#244). The agents come first, on the left; on the right
   go ⏩ while the squad is on autopilot, the wordmark and the release, and the notice of a newer one:
