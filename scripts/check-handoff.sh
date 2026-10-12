@@ -517,6 +517,17 @@ if [ ! -e "$main/latest-$restored.log" ]; then
 else
   fail "restore called the stand-in: '$(case_log "$restored")'"
 fi
+#    Outside a git repository, the hooks take the directory they run in as the main checkout: a
+#    startup there warns about that directory's charter (agent-squad #246). GIT_CEILING_DIRECTORIES
+#    keeps git from finding a repository above the lab.
+plain="$lab/plain"
+mkdir -p "$plain"
+out="$(GIT_CEILING_DIRECTORIES="$lab" run "$plain" startup '{"session_id":"x"}')"
+if [[ "$out" == "Squad: the charter is not installed ($plain/.agent-squad/playbook/SQUAD.md is missing)."* ]]; then
+  pass "outside a git repository, a hook takes the directory it runs in as the main checkout"
+else
+  fail "outside a git repository, startup printed: '$out'"
+fi
 #    An unknown action prints the usage, which names the turn's end too.
 out="$(run "$main" bogus '{}' 2>&1)"
 if [ "$out" = "usage: $handoff save|restore|startup|resume|turn" ]; then
