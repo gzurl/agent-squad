@@ -1,5 +1,43 @@
 # Changelog
 
+## v52 — 2026-10-12
+- **A session that is not in the main checkout is told so** (#319, found by biwenger-metrics-ai's QA
+  and CEO). Such a session was started in a subdirectory, or resumed from one.
+  - **Before:** v50's hooks failed in it with nothing reaching the model, and older ones said the
+    charter was not installed.
+  - **Now:** the hooks name the wrapper by its absolute path, and the wrapper tells this case apart
+    from a missing playbook. The session hears where it belongs and that it should start again
+    from the main checkout, without `--resume`.
+  - **§2.1** says so, and `--check` names a checkout that has moved.
+- **A session start always checks the latest release** (#336): a new session, a resumed one, a
+  `/restart` or a `/clear`, though not a compaction. The other moments keep the once-a-day rule. An
+  upgrade adds a hook for `/clear`.
+- **The stall watch leaves an approved PR to a reviewer still requested on GitHub** (#306, from
+  trivial-tape's squad). It tells the CEO after an hour, since only the CEO can reach a human
+  reviewer. The squad's own review and answer steps ping as before.
+- **The band:**
+  - **The PR QA reviews** shows when QA checks it out with `git fetch … pull/<n>/head` and
+    reviews through `gh api` (#334).
+  - **`/squad-upgrade`'s safe point** shows DEV and QA as ⏸️ (#320).
+- **The commands only the CEO types cannot be run by the model** (#325): `/squad-uninstall`,
+  `/squad-upgrade`, the step-away commands and their `-all` forms, and `/squad-save-state`. Typing
+  them, `/loop 30m /squad-watch`, and a relay that reads a command's file work as before.
+- **Releases and downloads** (#330, #341):
+  - **A Release carries the package alone.** The installer checks it against the SHA-256 that
+    GitHub publishes for it, so each install counts once.
+  - **The README shows a downloads badge,** and its badges sit in two rows, with *Built for Claude
+    Code* and *Built for GitHub*.
+  - **A v50 or v51 installer run by hand with v52 refuses,** its playbook unchanged (#335). Upgrade
+    with `install.sh` or `/squad-upgrade`, which run v52's own installer.
+- **Charter:**
+  - **§6:** an announced step starts in the same turn (#326).
+  - **§2.4:** a load of the whole machine is announced to every other squad on it, and waits for
+    their answers (#337).
+  - **§2.1:** the misplaced session above.
+- **Upgrading:** as v51 says, `/squad-upgrade` brings the squad to a safe point, then asks for
+  `/restart` in the three sessions and `/squad-resume`. Upgrading from v50 or older, type
+  `/squad-pause` first.
+
 ## v51 — 2026-10-12
 - **`/squad-upgrade` brings the squad to a safe point before installing** (#317). On the CEO's
   yes, DEV and QA follow `/squad-pause`'s part for every agent, and save their state, before the
