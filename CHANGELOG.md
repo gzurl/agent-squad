@@ -1,5 +1,21 @@
 # Changelog
 
+## v51 — 2026-10-12
+- **`/squad-upgrade` brings the squad to a safe point before installing** (#317). On the CEO's
+  yes, DEV and QA follow `/squad-pause`'s part for every agent, and save their state, before the
+  install replaces the scripts that their hooks and pushes run. §7's summary of `/squad-upgrade`
+  says so.
+- **Then it guides the CEO through the restart** (#315, #317). Every upgrade needs one, since a
+  session loads the board and any hook a release adds only when it starts.
+  - **The CEO types `/restart`** in DEV's session, in QA's and, last, in the CTO's. Claude Code's
+    `/restart` keeps each session's conversation and name.
+  - **Then `/squad-resume`** in the CTO's session. A restarted session waits for someone to write
+    to it, and `/squad-resume` tells DEV and QA to carry on from the state they saved.
+  - The README's board and *Upgrade* sections say the same.
+- **Upgrading to v51:** the `/squad-upgrade` that runs it is the installed release's, which does
+  not guide the restart yet. Once it is done, type `/restart` in the three sessions, the CTO's
+  last, and then `/squad-resume` in the CTO's.
+
 ## v50 — 2026-10-12
 - **The band follows each agent's focus** (#289, found by trivial-tape's CEO), not its last `gh`
   call.
