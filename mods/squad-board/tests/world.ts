@@ -18,13 +18,15 @@ export type World = {
   commands: string[]
   runs: (readonly string[])[]
   // What the engine answers: the session's id, its context use, its repository's remote, what a
-  // Bash call prints and whether it failed, and the mod's plugin.json (null: it cannot be read).
+  // Bash call prints and whether it failed, the mod's plugin.json (null: it cannot be read), and
+  // the main checkout's .agent-squad/latest-release (null: there is none, agent-squad #244).
   sessionId: string
   percent: number | null
   remote: string | null
   output: string
   isError: boolean
   manifest: string | null
+  latest: string | null
 }
 
 // Sets the world up on the test's `on`, with the store holding `store` at the start.
@@ -42,6 +44,7 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
     output: 'ran',
     isError: false,
     manifest: '{ "name": "squad-board", "version": "42.0.0" }',
+    latest: null,
   }
   on('store.get', ($, e) => ({ value: w.store.get(e.key) }))
   on('store.set', ($, e) => {
@@ -56,6 +59,7 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
   on('session.id', () => ({ value: w.sessionId }))
   on('session.root', () => ({ value: '/work/proj' }))
   on('fs.read', ($, e) => {
+    if (e.path === '/work/proj/.agent-squad/latest-release' && w.latest !== null) return { value: w.latest }
     if (w.manifest === null || !String(e.path).endsWith('/.claude-plugin/plugin.json')) throw new Error(`ENOENT: ${e.path}`)
     return { value: w.manifest }
   })

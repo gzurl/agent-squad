@@ -283,11 +283,10 @@ not cost: most of the input is read from the cache, which is billed far below fr
 
 ### The squad board
 
-Above the prompt of the CTO's session, between two blue rules, one line opens with `agent-squad`
-and the release of the board the CTO's session loaded, then shows every agent of the project, in
-the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its signature and
-role, then, while the agent has something in hand, a colon and a link to the issue (`#123`) or
-pull request (`PR #124`) it works on. The agent's own `gh` calls set that item: an issue it labels
+Above the prompt of the CTO's session, between two blue rules, one line shows every agent of the
+project, in the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its
+signature and role, then, while the agent has something in hand, a colon and a link to the issue
+(`#123`) or pull request (`PR #124`) it works on. The agent's own `gh` calls set that item: an issue it labels
 `status:in-progress`, a PR it creates, and a PR it checks out or reviews. Merging or closing the
 item ends it, and a PR the agent created takes its issue with it: the band then shows the item
 before it, or the role alone. Reading, commenting and other label edits change nothing. An idle
@@ -297,10 +296,22 @@ Only the CTO's session draws the band; DEV's and QA's sessions publish their sta
 nothing of it.
 
 ```
-───────────────────────────────────────────────────────────────────────────
-agent-squad (v44) │ 💤 👷🏼‍♂️CTO (ctx: 96%) │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124
-───────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────────────
+💤 👷🏼‍♂️CTO (ctx: 96%) │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124       agent-squad (v49) → v50 available: /squad-upgrade
+───────────────────────────────────────────────────────────────────────────────────────────────────────
 ```
+
+On the right of the line, the squad's part:
+- `agent-squad` and the release of the board the CTO's session loaded;
+- ⏩ before it while the squad is on autopilot, from `/squad-autopilot` until `/squad-resume` or
+  `/squad-pause`;
+- after it, in the CTO's yellow, `→ v50 available: /squad-upgrade` while a newer release than the
+  installed one is out. `/squad-upgrade` shows you what it changes and asks you; the board installs
+  nothing. It reads the latest release from `.agent-squad/latest-release`, a file the squad keeps,
+  and connects to nothing itself.
+
+On a narrow terminal the agents keep the room: the notice shortens to `→ v50`, then goes, then ⏩
+goes. Only then is the line cut at its end, after whole agents, with an ellipsis.
 
 Each role's name is in the colour *Quick start*, step 2, gives its session: the CTO yellow, DEV blue
 and QA green.
