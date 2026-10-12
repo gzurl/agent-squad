@@ -90,7 +90,9 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   `scripts/squad-install.sh`. [.gitattributes](.gitattributes) keeps it out of the tarball, so a PR
   that changes it bumps no version and takes effect when merged. Such a PR keeps every tag that
   `install.sh` accepts installable (v15 and later, whose installers all take `<project> <tag>`),
-  and `scripts/check-one-line-install.sh` tests it with a stub `gh`.
+  and `scripts/check-one-line-install.sh` tests it with a stub `gh`. The exceptions are v50 and v51:
+  their Releases lost their `.sha256` after v52's release, so that the downloads badge counts
+  packages alone, and their own installers refuse without it (#330).
 - The text of the pre-push shim changes only on purpose: `--check` compares it byte for byte with
   what the installed installer writes. `install.sh` runs the new tag's installer, which writes the
   new text in the same run; an older installer run with a newer tag leaves `--check` failing until

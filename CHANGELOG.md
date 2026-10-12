@@ -29,6 +29,9 @@
     Code* and *Built for GitHub*.
   - **A v50 or v51 installer run by hand with v52 refuses,** its playbook unchanged (#335). Upgrade
     with `install.sh` or `/squad-upgrade`, which run v52's own installer.
+  - **Once v52 is out, v50's and v51's Releases lose their `.sha256`,** so that the badge counts
+    packages alone (#330). v50 and v51 can then no longer be installed by tag, since their own
+    installers need that file; upgrading from them is unaffected.
 - **Charter:**
   - **§6:** an announced step starts in the same turn (#326).
   - **§2.4:** a load of the whole machine is announced to every other squad on it, and waits for
