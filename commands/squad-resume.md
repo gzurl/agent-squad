@@ -1,5 +1,6 @@
 ---
 description: The CEO is back; resume and report what happened meanwhile (agent-squad)
+disable-model-invocation: true
 ---
 The CEO is back. Your role is your session name. The squad's commands are in the main checkout's
 `.claude/commands/`, not in the worktrees.

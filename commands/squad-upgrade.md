@@ -1,5 +1,6 @@
 ---
 description: Show what a new agent-squad release changes, ask the CEO, then install it (agent-squad)
+disable-model-invocation: true
 ---
 The CEO wants to know whether to upgrade the squad in this project. Your role is your session
 name.

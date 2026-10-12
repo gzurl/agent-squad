@@ -1,5 +1,6 @@
 ---
 description: The CEO is back; every squad on this machine resumes and reports (agent-squad)
+disable-model-invocation: true
 ---
 The CEO is back, for every squad open on this machine. Your role is your session name. The
 squad's commands are in the main checkout's `.claude/commands/`, not in the worktrees.

@@ -1,5 +1,6 @@
 ---
 description: Show what removing the squad would do, ask the CEO, then remove it (agent-squad)
+disable-model-invocation: true
 ---
 The CEO wants to know what removing the squad from this project would do, and to remove it on a
 yes. Your role is your session name.
