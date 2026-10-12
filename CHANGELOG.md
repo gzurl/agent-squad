@@ -1,5 +1,25 @@
 # Changelog
 
+## v53 — 2026-10-12
+- **The band keeps an agent's item through its work** (#354, seen by the CEO). DEV's item vanished
+  while it worked on a parent issue through sub-issues.
+  - **An issue created with `🚧 status:in-progress`** is the agent's focus, as one labelled later
+    is.
+  - **A PR is tied to the issue its body closes** (`Closes`, `Fixes` or `Resolves #N`), read from
+    `--body` or an absolute `--body-file`, never from the network. Merging it drops that issue
+    alone, so a parent issue stays while its sub-issues' PRs merge.
+  - **Taking an issue's in-progress or in-review label off,** with none put on, ends it, as §4.9's
+    step after a merge does.
+- **An install over a `.agent-squad/squad-hook` that is not a file refuses, saying so** (#356,
+  found by DEV while writing tests, filed by QA). Before, it moved the wrapper into it and reported
+  success, and every hook then failed.
+- **The scripts' tests run every line** (#246, #348, #350, #352), but the installer's two
+  timing-only lines, which carry a comment that excuses them. This repository's coverage check had
+  read about 44% since v52's PR #322 while it passed, and it now fails when it cannot read a
+  result.
+- No charter rule changes. As `/squad-upgrade` asks, restart the three sessions after the upgrade,
+  to load the new board.
+
 ## v52 — 2026-10-12
 - **A session that is not in the main checkout is told so** (#319, found by biwenger-metrics-ai's QA
   and CEO). Such a session was started in a subdirectory, or resumed from one.
