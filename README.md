@@ -415,6 +415,7 @@ the installer touches only the files listed before it:
     ├── triage.since       when the CTO last triaged what came from outside
     ├── kept/              what the worktrees held that git ignores, kept by the uninstaller
     ├── squad-hook         the small wrapper the squad's hooks run
+    ├── latest-release     the latest release, checked at most once a day, for the board's notice
     └── playbook.manifest  the checksums that --check compares the playbook against
 ```
 

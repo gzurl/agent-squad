@@ -7,9 +7,11 @@
 # tag is the latest Release's tag as of the last check that worked, null before the first one;
 # checkedAt is when that check worked, and attemptedAt when the last attempt was made, in seconds
 # since the epoch. A check is due 24 hours after the last one that worked, and, after a failure, an
-# hour after the last attempt, so an offline machine asks once an hour at most. The attempt is
-# written down before GitHub is asked, so the sessions that start together ask once. Nothing is
-# sent: it is a read of a public repository's latest Release. The upstream is the one on the
+# hour after the last attempt, so an offline machine asks once an hour at most. A time later than
+# now counts as never, so that a clock that ran ahead cannot hold the check back (agent-squad
+# #309). The attempt is written down before GitHub is asked, so a session that starts while a
+# check is under way asks nothing; sessions that start at the very same instant may each ask once,
+# which is harmless. Nothing is sent: it is a read of a public repository's latest Release. The upstream is the one on the
 # upstream= line of the squad-install.sh beside this script, as /squad-upgrade reads it.
 #
 # Usage: squad-latest.sh [--due] <main checkout>
@@ -39,6 +41,8 @@ tag="$(jq -r '.tag // ""' <<<"$known")"
 checked="$(jq -r '.checkedAt' <<<"$known")"
 attempted="$(jq -r '.attemptedAt' <<<"$known")"
 now="$(date +%s)"
+[ "$checked" -le "$now" ] || checked=0
+[ "$attempted" -le "$now" ] || attempted=0
 is_due=false
 [ $((now - checked)) -lt "$day" ] || [ $((now - attempted)) -lt "$hour" ] || is_due=true
 if $due_only; then $is_due; exit; fi

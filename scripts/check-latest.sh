@@ -82,6 +82,19 @@ check "and writes the tag, checked and attempted now, in the board's format" \
   holds 'keys == ["attemptedAt", "checkedAt", "tag"] and .tag == "v50" and (now - .checkedAt) < 5 and .attemptedAt == .checkedAt'
 check "leaving no file of its own beside it" bash -c '[ "$(ls -A "$1")" = latest-release ]' _ "$checkout/.agent-squad"
 
+# 1b. Times later than now, as a clock that ran ahead leaves them, count as never (agent-squad #309).
+for unit in seconds milliseconds; do
+  ahead=$((10 * day))
+  [ "$unit" = seconds ] || ahead=$(( ($(date +%s) + 10 * day) * 1000 - $(date +%s) ))
+  known '"v50"' -"$ahead" -"$ahead"
+  run --due
+  check "a check and an attempt ten days ahead, in $unit, count as never: one is due" [ "$code" -eq 0 ]
+done
+run
+check "and a run asks, and writes the time of now" \
+  bash -c 'grep -q releases/latest "$1"' _ "$lab/gh.log"
+check "so that the next check is due a day after now, not after that future" holds '(now - .checkedAt) < 5'
+
 # 2. Checked less than a day ago: nothing is due, and nothing is asked.
 for since in 100 $((day - 60)); do
   known '"v50"' "$since" "$since"
