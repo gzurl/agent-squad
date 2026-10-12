@@ -44,7 +44,11 @@ The CEO is back. Your role is your session name. The squad's commands are in the
      `gh issue list --label` finds nothing for that label (§3), and without `--limit` the list
      stops at 30 issues. Mark those from outside, with their author.
 5. End that summary with **the plan ahead**, short: the next few items, each linked, not the
-   whole backlog.
+   whole backlog. First run
+   `"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-latest.sh" "$(git rev-parse --path-format=absolute --git-common-dir)/.."`,
+   which checks the latest release at most once a day (agent-squad #302). When its line names a
+   release newer than the one installed (the last word of `.agent-squad/install.log`), say so
+   among what comes next: `/squad-upgrade` shows what it changes and installs it on the CEO's yes.
    - **Now:** the release in progress, step by step, with who does each step and its state
      (⏳ in progress, ✅ done, or waiting, and on what).
    - **Next:** the following release, and what it contains.

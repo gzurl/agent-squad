@@ -10,6 +10,9 @@
 #   resume   SessionStart(resume) hook: the same warning, then where the resumed session's shell is
 #            and each role's directory, since Claude Code starts that shell in the launch directory
 #            whatever worktree the conversation last worked in (agent-squad #164).
+#   turn     Stop hook, at the end of every turn: print nothing (agent-squad #302).
+#
+# startup, resume and turn also start the check of the latest release, when one is due.
 #
 # save and restore read the hook's JSON payload on stdin and key the file by session_id, so the
 # script works for any role without knowing which session it runs in. Snapshots live in the main
@@ -186,6 +189,17 @@ charter_warning() {
   fi
 }
 
+# The check of the latest release, for the squad board's notice (agent-squad #302): started in the
+# background when one is due, so that a session never waits on GitHub. Whether one is due is a
+# comparison of dates, with no network; the playbook's squad-latest.sh decides, and without it
+# nothing happens.
+latest_check() {
+  local latest="$main_checkout/.agent-squad/playbook/scripts/squad-latest.sh"
+  if [ -x "$latest" ] && "$latest" --due "$main_checkout" </dev/null >/dev/null 2>&1; then
+    ( "$latest" "$main_checkout" </dev/null >/dev/null 2>&1 & )
+  fi
+}
+
 # Where a resumed session's shell is, and where each role works, as absolute paths: the
 # conversation remembers the last directory it worked in, and the shell no longer is there. Both
 # paths are read physically, so that a symbolic link in either does not hide that they are one.
@@ -225,13 +239,18 @@ case "$action" in
     ;;
   startup)
     charter_warning
+    latest_check
     ;;
   resume)
     charter_warning
     reorient
+    latest_check
+    ;;
+  turn)
+    latest_check
     ;;
   *)
-    echo "usage: $0 save|restore|startup|resume" >&2
+    echo "usage: $0 save|restore|startup|resume|turn" >&2
     ;;
 esac
 exit 0
