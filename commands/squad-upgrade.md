@@ -77,6 +77,11 @@ Work from the main checkout. The upstream repository is the one named on the `up
    type `/squad-save-state` and then `/compact` in each session, the CTO's included, and say why.
    Then guide the CEO through the restart, which is the CEO's to type: a session loads the new
    release of the squad board, and any hook the release adds, only when it starts, and a session
-   that restarts takes no turn until something writes to it. Ask the CEO to type `/restart` in
-   DEV's session, in QA's and, last, in yours, and then `/squad-resume` in yours, so that you tell
-   DEV and QA to carry on from the state they saved.
+   that restarts takes no turn until something writes to it. First run
+   `"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-sessions.sh" "$(git rev-parse --path-format=absolute --git-common-dir)/.."`,
+   which names, from what each session's board recorded, the sessions still on an older release
+   (agent-squad #361): the roles on its `to restart` line, and those on its `to restart if open`
+   line, whose sessions may be closed. Ask the CEO to type `/restart` in each of those, DEV's
+   session and QA's first and yours last, and then `/squad-resume` in yours, so that you tell DEV
+   and QA to carry on from the state they saved. The band marks each one too, as `DEV ⟳ v50→v53`,
+   until it restarts.

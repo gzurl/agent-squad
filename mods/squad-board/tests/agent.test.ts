@@ -20,6 +20,7 @@ describe('a session outside the squad', () => {
     expect(w.commands).toEqual([])
     expect(w.opened).toEqual([])
     expect(w.runs).toEqual([])
+    expect(w.written).toEqual({})
   })
 })
 
@@ -33,6 +34,25 @@ describe("a squad session's key", () => {
       state: 'idle', tool: null, since: START, at: START, context: 42, paused: false, autopilot: false, background: false,
       release: 'v42', item: null, focus: [],
     })
+  })
+
+  // agent-squad #361: the record squad-sessions.sh reads, beside the key.
+  test("writes its record in .agent-squad/sessions/<role>.json: its name, id, loaded release and time, again with each key", async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    const path = '/work/proj/.agent-squad/sessions/DEV.json'
+    expect(JSON.parse(w.written[path])).toEqual({ name: 'DEV:proj', sessionId: 'sid-1', release: 'v42', at: START })
+    expect(w.written[path].endsWith('}\n')).toBe(true)
+    await w.clock.advance(60_000)
+    expect(JSON.parse(w.written[path])).toMatchObject({ at: START + 60_000 })
+  })
+
+  test('outside a git checkout it writes no record, and a record it cannot write leaves its key as it is', async ($, on) => {
+    const outside = world(on)
+    outside.remote = null
+    await start($, 'DEV:proj')
+    expect(outside.written).toEqual({})
+    expect(outside.store.get('proj/DEV')).toMatchObject({ release: 'v42' })
   })
 
   test('takes the project-first name too', async ($, on) => {

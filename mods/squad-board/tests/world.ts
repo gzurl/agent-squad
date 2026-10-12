@@ -31,6 +31,9 @@ export type World = {
   files: Record<string, string>
   // The plugin.json of the board installed in the playbook (agent-squad #362); null: none there.
   installed: string | null
+  // The files the board wrote, by path, and whether a write fails (agent-squad #361).
+  written: Record<string, string>
+  writeFails: boolean
 }
 
 // Sets the world up on the test's `on`, with the store holding `store` at the start.
@@ -51,6 +54,8 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
     latest: null,
     files: {},
     installed: null,
+    written: {},
+    writeFails: false,
   }
   on('store.get', ($, e) => ({ value: w.store.get(e.key) }))
   on('store.set', ($, e) => {
@@ -73,6 +78,11 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
     }
     if (w.manifest === null || !String(e.path).endsWith('/.claude-plugin/plugin.json')) throw new Error(`ENOENT: ${e.path}`)
     return { value: w.manifest }
+  })
+  on('fs.write', ($, e) => {
+    if (w.writeFails) throw new Error(`EACCES: ${e.path}`)
+    w.written[e.path] = e.text
+    return { value: undefined }
   })
   on('session.repo', () => {
     if (w.remote === 'unreadable') throw new Error('not a git checkout')

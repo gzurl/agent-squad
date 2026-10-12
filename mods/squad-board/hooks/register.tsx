@@ -12,8 +12,10 @@ import type { BoardAgent, BoardAgents, BoardItem, BoardRole, BoardState } from '
 // session's own state, not GitHub's: nothing is read from GitHub, and no command is run; a newer
 // release is known from a file another script writes. A session whose name is not a squad role's
 // does nothing. Every key records the release its session's board loaded, and the band marks a
-// session older than the installed release, which still needs a /restart (agent-squad #362). The
-// signals are the ones agent-squad #199 measured.
+// session older than the installed release, which still needs a /restart (agent-squad #362); each
+// session also writes that release in the main checkout's .agent-squad/sessions/<role>.json, for
+// /squad-upgrade and /squad-resume, which read no store (agent-squad #361). The signals are the ones
+// agent-squad #199 measured.
 
 const ROLES: readonly BoardRole[] = ['CTO', 'DEV', 'QA']
 // How often a session rewrites its key, and how old a key may grow before its part reads unknown.
@@ -652,6 +654,21 @@ async function publish($: any) {
   }
   if (me.role === 'CTO') agent.toasted = toasted
   await $.store.set(keyOf(me.project, me.role), agent)
+  await record($, agent)
+}
+
+// The record squad-sessions.sh reads (agent-squad #361): the session's name and id, the release its
+// code loaded, and the time, in the main checkout's .agent-squad/sessions/<role>.json, written each
+// time the key is. Outside a git checkout there is none, and a file the board cannot write leaves
+// the key and the band as they are.
+async function record($: any, agent: BoardAgent) {
+  if (checkout === null) return
+  const text = JSON.stringify({ name: agent.name, sessionId: agent.sessionId, release, at: agent.at })
+  try {
+    await $.fs.write(`${checkout}/.agent-squad/sessions/${agent.role}.json`, `${text}\n`)
+  } catch {
+    // squad-sessions.sh then reads an older record, or none.
+  }
 }
 
 // Moves this session to another state, and publishes it.

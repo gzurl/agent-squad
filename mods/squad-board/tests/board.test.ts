@@ -630,6 +630,17 @@ describe('a session to restart: older than the installed release (agent-squad #3
     expect(await part('QA')).toBe(` │ ${MARK.idle} ${SIGN.QA}QA`)
   })
 
+  // agent-squad #361: the session record each board writes; one it cannot write changes nothing else.
+  test('a session record the board cannot write leaves its heartbeat, its reading of the keys and the band as they are', async ($, on) => {
+    const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { state: 'working' }) })
+    w.writeFails = true
+    await start($, 'CTO:proj')
+    await w.clock.advance(60_000)
+    expect(w.written).toEqual({})
+    expect(w.store.get('proj/CTO')).toMatchObject({ at: START + 60_000 })
+    expect(await (await band($)).part('DEV')).toBe(` │ ${MARK.working} ${SIGN.DEV}DEV`)
+  })
+
   test('with no installed release to read, nothing is marked', async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj', { release: 'v1' }) })
     await start($, 'CTO:proj')
