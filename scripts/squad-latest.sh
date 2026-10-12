@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # Find the latest agent-squad release, at every session start and at most once a day otherwise, for
-# the squad board's notice (agent-squad #302, #336). It asks GitHub for the upstream's latest Release with gh, and writes the answer into the
-# main checkout's .agent-squad/latest-release, which the three sessions share and the board reads
-# (#244):
+# the squad board's notice (agent-squad #302, #336). It asks GitHub for the upstream's latest
+# Release with gh, and writes the answer into the main checkout's .agent-squad/latest-release,
+# which the three sessions share and the board reads (#244):
 #   {"tag": "v50", "checkedAt": 1760263200, "attemptedAt": 1760263200}
 # tag is the latest Release's tag as of the last check that worked, null before the first one;
 # checkedAt is when that check worked, and attemptedAt when the last attempt was made, in seconds
 # since the epoch. A check is due 24 hours after the last one that worked, and, after a failure, an
-# hour after the last attempt, so an offline machine asks once an hour at most. A time later than
-# now counts as never, so that a clock that ran ahead cannot hold the check back (agent-squad
-# #309). The attempt is written down before GitHub is asked, so a session that starts while a
-# check is under way asks nothing; sessions that start at the very same instant may each ask once,
-# which is harmless. A session start does not wait for a check to be due: it asks with --now. Nothing
-# is sent: it is a read of a public repository's latest Release. The upstream is the one on the
-# upstream= line of the squad-install.sh beside this script, as /squad-upgrade reads it.
+# hour after the last attempt, so that, apart from a session start, an offline machine asks once an
+# hour at most. A time later than now counts as never, so that a clock that ran ahead cannot hold
+# the check back (agent-squad #309). The attempt is written down before GitHub is asked, so a turn's
+# end, /squad-resume or /squad-watch that runs while a check is under way asks nothing; two that
+# run at the very same instant may each ask once, which is harmless. A session start does not wait
+# for a check to be due: it asks with --now, every time (agent-squad #336). Nothing is sent: it is a
+# read of a public repository's latest Release. The upstream is the one on the upstream= line of
+# the squad-install.sh beside this script, as /squad-upgrade reads it.
 #
 # Usage: squad-latest.sh [--due | --now] <main checkout>
 #   --due  only tell whether a check is due: exit 0 if it is, 1 if not; nothing is asked or written.
