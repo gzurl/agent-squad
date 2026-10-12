@@ -273,25 +273,93 @@ function createdIn(output: string, named: BoardItem[]): BoardItem | null {
   return null
 }
 
-// What a command that worked does to the focus, each gh call in order (agent-squad #289):
+// The words of a call without the rtk prefix that rewrites it: `rtk <command>` or
+// `rtk proxy <command>`.
+function unwrapped(words: string[]): string[] {
+  if (words[0] !== 'rtk') return words
+  return words[1] === 'proxy' ? words.slice(2) : words.slice(1)
+}
+
+// The PR a git fetch brings in by its pull request ref, as QA checks a PR out (agent-squad #334):
+// `git [-C <dir>] fetch [<options>] <remote> pull/<n>/head[:<ref>]`, with `refs/` or `+` before it
+// or not. It is the remote's PR when the remote is a GitHub address, and the session's repository's
+// otherwise. Null for any other call.
+function fetchedPR(call: string[], home: string | null): BoardItem | null {
+  let at = 1
+  while (at < call.length && call[at].startsWith('-')) at += ['-C', '-c', '--git-dir', '--work-tree'].includes(call[at]) ? 2 : 1
+  if (call[0] !== 'git' || call[at] !== 'fetch') return null
+  const args = call.slice(at + 1).filter(arg => !arg.startsWith('-'))
+  const n = args.map(arg => /^\+?(?:refs\/)?pull\/(\d+)\/head(?::\S*)?$/.exec(arg)?.[1]).find(Boolean)
+  if (!n) return null
+  const repo = /github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/.exec(args[0] ?? '')
+  const base = repo ? `https://github.com/${repo[1]}` : home
+  return { item: `PR #${n}`, url: base ? `${base}/pull/${n}` : null }
+}
+
+// The PR a gh api call posts a review on, as QA reviews, to bind the review to a commit (agent-squad
+// #334): `gh api [<flags>] repos/<owner>/<repo>/pulls/<n>/reviews` with a body, from --input or a
+// field, or with -X POST; {owner} and {repo} name the session's repository, as gh fills them in. A
+// call with neither, or with -X GET, only reads, and posts nothing. Null for any other call.
+function reviewedPR(call: string[], home: string | null): BoardItem | null {
+  if (call[0] !== 'gh' || call[1] !== 'api') return null
+  let endpoint: string | null = null
+  let method: string | null = null
+  let body = false
+  for (let i = 2; i < call.length; i++) {
+    const arg = call[i]
+    const eq = arg.startsWith('--') ? arg.indexOf('=') : -1
+    const flag = eq > 0 ? arg.slice(0, eq) : arg
+    const value = () => (eq > 0 ? arg.slice(eq + 1) : call[++i] ?? '')
+    if (flag === '-X' || flag === '--method') {
+      method = value().toUpperCase()
+    } else if (/^-X\w/.test(arg)) {
+      method = arg.slice(2).toUpperCase()
+    } else if (['-f', '-F', '--field', '--raw-field', '--input'].includes(flag)) {
+      value()
+      body = true
+    } else if (['-H', '--header', '--hostname', '-q', '--jq', '-t', '--template', '--cache', '-p', '--preview'].includes(flag)) {
+      value()
+    } else if (!arg.startsWith('-')) {
+      endpoint ??= arg
+    }
+  }
+  const found = /^\/?repos\/([^/\s]+)\/([^/\s]+)\/pulls\/(\d+)\/reviews\/?(?:\?\S*)?$/.exec(endpoint ?? '')
+  if (!found || !(method === null ? body : method === 'POST')) return null
+  const filled = /^(\{owner\}|:owner)$/.test(found[1]) || /^(\{repo\}|:repo)$/.test(found[2])
+  const base = filled ? home : `https://github.com/${found[1]}/${found[2]}`
+  return { item: `PR #${found[3]}`, url: base ? `${base}/pull/${found[3]}` : null }
+}
+
+// What a command that worked does to the focus, each call in order (agent-squad #289), with or
+// without rtk before it:
 // - gh issue edit <n> adding the in-progress label: the issue becomes the focus;
 // - gh pr create: the PR it made becomes the focus, tied to the issue in focus;
-// - gh pr checkout <n> or gh pr review <n>: the PR becomes the focus, which is QA's case, and a PR
-//   already in it keeps its tie;
+// - gh pr checkout <n> or gh pr review <n>, or QA's way of doing each, a git fetch of the PR's
+//   pull/<n>/head and a gh api call that posts a review on it (agent-squad #334): the PR becomes the
+//   focus, and a PR already in it keeps its tie;
 // - gh pr merge <n>, gh pr close <n> or gh issue close <n>: that item leaves the focus, and with a
 //   PR the issue it is tied to;
-// - any other call, such as view, comment or another label edit, changes nothing.
+// - any other call, such as view, comment, another label edit or a gh api call that only reads,
+//   changes nothing.
 // It gives back the new focus.
 function focusAfter(before: Focus[], command: string, output: string, home: string | null): Focus[] {
   let after = before
   const enter = (next: Focus) => {
     after = [...after.filter(entry => !sameItem(entry, next)), next].slice(-FOCUS_LIMIT)
   }
-  const calls = commandsOf(command)
-    .map(words => words[0] === 'rtk' ? words.slice(1) : words)
-    .filter(call => call[0] === 'gh' && (call[1] === 'issue' || call[1] === 'pr'))
-  const named = calls.flatMap(call => call[1] === 'pr' && call[2] !== 'create' ? [targetOf('pr', call.slice(3), home) ?? []].flat() : [])
+  const calls = commandsOf(command).map(unwrapped)
+  const named = calls.flatMap(call => {
+    const prCall = call[0] === 'gh' && call[1] === 'pr' && call[2] !== 'create'
+    const found = prCall ? targetOf('pr', call.slice(3), home) : fetchedPR(call, home) ?? reviewedPR(call, home)
+    return found ? [found] : []
+  })
   for (const call of calls) {
+    const opened = fetchedPR(call, home) ?? reviewedPR(call, home)
+    if (opened) {
+      enter({ ...opened, tied: after.find(entry => sameItem(entry, opened))?.tied ?? null })
+      continue
+    }
+    if (call[0] !== 'gh' || (call[1] !== 'issue' && call[1] !== 'pr')) continue
     const [, noun, verb] = call
     const args = call.slice(3)
     if (noun === 'pr' && verb === 'create') {
