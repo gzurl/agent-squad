@@ -10,14 +10,17 @@
 # |, a heredoc) counts as one line, run when kcov recorded any of its lines: kcov measures each of
 # them but records a run statement on one only, the first or the last, and some on none (an
 # assignment from a $( ) whose one command spans lines). Such a statement that kcov recorded
-# nowhere is left out, and the summary says how many were. An empty case branch, which kcov can
-# never record, counts only if it ran.
+# nowhere is left out, and the summary lists it. kcov never records some lines that run: an empty
+# case branch, a `(` alone that opens a subshell, and a `done` or `)` followed only by redirections
+# or a `&`, such as `done < "$list"` or `) &` (agent-squad #246). Each of those counts only if it
+# ran. A line that ends with the comment `# coverage: excluded, <reason>` is not counted at all, and
+# the summary lists it with its reason: it is for a line that no test can reach sensibly.
 #
 # Usage: ci-coverage.sh [--summary-only] <output directory>
 # It writes there summary.md, which CI adds to the job's summary: the total, one line per script,
-# thinnest first, and the lines no test ran in each. Also report/, kcov's HTML report of every test
-# merged into one, and runs/, each test's records, output and exit status, and the root it ran
-# in. No figure fails it, and a test that fails under kcov is named in the summary; a record it
+# thinnest first, the lines no test ran in each, and the lines it does not count, with why. Also
+# report/, kcov's HTML report of every test merged into one, and runs/, each test's records,
+# output and exit status, and the root it ran in. No figure fails it, and a test that fails under kcov is named in the summary; a record it
 # cannot read fails it, since a summary without it would count every line it records as not run.
 # --summary-only rewrites summary.md from runs/, without kcov: from CI's artifact, in a checkout of
 # the commit it measured.
@@ -94,7 +97,8 @@ with_source() {
 }
 # `continued <script>` prints, one per line, "c <n>" for each line after which the statement goes
 # on (inside a quote or a $( ), from a heredoc's first line to its end, after a trailing \, | or
-# &&), and "e <n>" for each empty case branch.
+# &&), "e <n>" for each line kcov never records (an empty case branch, a lone `(`, a `done` or `)`
+# with only redirections or a `&` after it), and "x <n> <reason>" for each excluded line.
 continued() {
   perl - "$1" <<'PERL'
 use strict; use warnings;
@@ -109,7 +113,7 @@ while (my $line = <>) {
     next;
   }
   my @c = split //, $line;
-  my $last = '';
+  my ($last, $comment) = ('', '');
   for (my $i = 0; $i < @c; $i++) {
     my $ch = $c[$i];
     my $ctx = @stack ? $stack[-1] : 'T';
@@ -120,7 +124,7 @@ while (my $line = <>) {
       elsif ($ch eq '$' && ($c[$i + 1] // '') eq '(') { push @stack, 'C'; $i++; }
       next;
     }
-    last if $ch eq '#' && ($i == 0 || $c[$i - 1] =~ /[\s;(]/);
+    if ($ch eq '#' && ($i == 0 || $c[$i - 1] =~ /[\s;(]/)) { $comment = substr($line, $i); last; }
     if ($ch eq "'") { push @stack, 'S'; }
     elsif ($ch eq '"') { push @stack, 'D'; }
     elsif ($ch eq '$' && ($c[$i + 1] // '') eq '(') { push @stack, 'C'; $i++; }
@@ -136,8 +140,12 @@ while (my $line = <>) {
   my $continues = @stack || @pending || $last eq '\\'
     || (!@stack && $code =~ /(\||&&)$/ && $code !~ /^\s*#/);
   my $empty_branch = $code =~ /^\s*[^\s#][^#]*\)\s*;;$/ && $code !~ /\)\s*\S.*;;$/;
+  (my $bare = substr($line, 0, length($line) - length($comment))) =~ s/\s+$//;
+  my $redirect = qr/(?:\d*(?:<|>|>>|<&|>&|&>)\s*\S+|&)/;
+  my $unrecorded = $bare =~ /^\s*\($/ || $bare =~ /^\s*(?:done|\))(?:\s*$redirect)+$/;
   print "c $.\n" if $continues;
-  print "e $.\n" if $empty_branch && !$continues;
+  print "e $.\n" if ($empty_branch || $unrecorded) && !$continues;
+  print "x $. $1\n" if $comment =~ /^#\s*coverage: excluded, (.*\S)\s*$/;
   $heredoc = shift @pending if @pending;
 }
 PERL
@@ -146,7 +154,8 @@ shape="$(for script in "${measured[@]}"; do
   continued "$script" | jq -Rs --arg s "$script" '
     split("\n") | map(select(. != "") | split(" ")) as $marks
     | {($s): {continued: [$marks[] | select(.[0] == "c") | .[1] | tonumber],
-              empty: [$marks[] | select(.[0] == "e") | .[1] | tonumber]}}'
+              empty: [$marks[] | select(.[0] == "e") | .[1] | tonumber],
+              excluded: [$marks[] | select(.[0] == "x") | {line: (.[1] | tonumber), reason: (.[2:] | join(" "))}]}}'
 done | jq -s 'add')"
 # Every record, read; one that cannot be read stops the summary, named.
 records="" unreadable=()
@@ -178,10 +187,12 @@ printf '%s' "$records" \
            as $copies
          | [$all[] | . as $l | select(any($copies[]; .value[$l])) | tonumber] as $hit
          | $shape[$script].continued as $continued | $shape[$script].empty as $empty
+         | $shape[$script].excluded as $excluded
          # A line belongs to the statement that starts at the first line of its run of continued
-         # lines, and the statement ran when any of its lines did. An empty case branch counts
-         # only if it ran.
+         # lines, and the statement ran when any of its lines did. A line kcov never records counts
+         # only if it ran, and an excluded line not at all.
          | [$all[] | tonumber as $l
+            | select(any($excluded[]; .line == $l) | not)
             | select((any($empty[]; . == $l) | not) or any($hit[]; . == $l))
             | {line: $l, start: ($l | until((. - 1) as $p | any($continued[]; . == $p) | not; . - 1))}]
          | group_by(.start)
@@ -189,15 +200,16 @@ printf '%s' "$records" \
                 multi: any(.[]; .line as $l | any($continued[]; . == $l))})
          | [.[] | select(.ran or (.multi | not))] as $statements
          | {script: $script, measured: ($statements | length), copies: (($copies | length) - 1),
-            ran: ([$statements[] | select(.ran)] | length), left_out: (length - ($statements | length)),
-            unrun: [$statements[] | select(.ran | not) | .start]}
+            ran: ([$statements[] | select(.ran)] | length),
+            left_out: [.[] | select((.ran or (.multi | not)) | not) | .start],
+            excluded: $excluded, unrun: [$statements[] | select(.ran | not) | .start]}
        end]
   | sort_by(if .measured == 0 then -1 else .ran / .measured end) as $rows
   | ($rows | map(.ran) | add) as $ran | ($rows | map(.measured) | add) as $all
-  | ($rows | map(.left_out // 0) | add) as $left_out
+  | ($rows | map(.left_out // [] | length) | add) as $left_out
   | "## Test coverage of the scripts",
   "",
-  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end) The HTML report that kcov writes, in the `coverage` artifact, counts every line it measures and leaves the copies out, so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back from the records in that artifact.",
+  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end) A line that kcov never records, though it runs (an empty case branch, a lone `(`, a `done` or `)` with only redirections or a `&` after it), counts only if it ran, and a line marked `# coverage: excluded, <reason>` does not count. The HTML report that kcov writes, in the `coverage` artifact, counts every line it measures and leaves the copies out, so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back from the records in that artifact.",
   "",
   "| Script | Lines run | Lines measured | Coverage |",
   "|---|--:|--:|--:|",
@@ -208,6 +220,13 @@ printf '%s' "$records" \
   "<details><summary>The lines no test ran</summary>",
   "",
   ($rows[] | select((.unrun // []) != []) | "- `\(.script)`: \(.unrun | map(tostring) | join(", "))"),
+  "",
+  "</details>",
+  "",
+  "<details><summary>The lines not counted</summary>",
+  "",
+  ($rows[] | .script as $script | (.excluded // [])[] | "- `\($script)` \(.line), excluded: \(.reason)"),
+  ($rows[] | select((.left_out // []) != []) | "- `\(.script)` \(.left_out | map(tostring) | join(", ")): kcov recorded none of the statement\(if (.left_out | length) == 1 then "\u0027s lines" else "s\u0027 lines" end)"),
   "",
   "</details>"
 ' --args "${measured[@]}" >"$out/summary.md" || exit 1
