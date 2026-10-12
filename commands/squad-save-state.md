@@ -1,5 +1,6 @@
 ---
 description: Write this session's state on GitHub before a /compact (agent-squad)
+disable-model-invocation: true
 ---
 The CEO is about to compact this session's context. The summary that replaces it can lose what
 exists only in this conversation, so write that down on GitHub first. Do the following now, in

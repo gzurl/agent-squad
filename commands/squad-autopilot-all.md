@@ -1,5 +1,6 @@
 ---
 description: The CEO is away, the machine stays on; every squad goes on and parks decisions on GitHub (agent-squad)
+disable-model-invocation: true
 ---
 The CEO is away and leaves the machine on, for every squad open on it, and every squad flies on
 autopilot. The machine may still sleep: closing a MacBook's lid sleeps it whatever runs. Your role

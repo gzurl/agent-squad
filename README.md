@@ -452,6 +452,11 @@ the worktrees too.
 You type them in a Claude Code session of the squad. Each `-all` variant does the same for every
 squad on the machine.
 
+The commands that pause, steer, resume, upgrade or remove the squad, and `/squad-save-state`, are
+yours alone: no agent can run one on its own. When the CTO passes one on to DEV and QA, they read
+its file and follow their part, which still works. `/squad-watch` and `/squad-usage` the agents may
+run themselves, as autopilot does with the watch.
+
 | Command | Type it in | What it does |
 |---|---|---|
 | ⏸️&nbsp;`/squad-pause`<br>`/squad-pause-all` | the CTO's session | Stops the squad at a safe point, each agent's state saved on GitHub ([When you step away](#when-you-step-away)). |

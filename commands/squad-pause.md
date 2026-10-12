@@ -1,5 +1,6 @@
 ---
 description: The CEO needs the squad stopped at a safe point (agent-squad)
+disable-model-invocation: true
 ---
 The CEO needs the squad stopped at a safe point: to close the laptop, to use the machine for
 something else, or for any other reason. Act as if everything on this machine were about to

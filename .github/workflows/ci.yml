@@ -43,6 +43,8 @@ jobs:
         run: scripts/check-release.sh
       - name: The latest release is checked at most once a day, and once an hour while GitHub fails
         run: scripts/check-latest.sh
+      - name: The commands only the CEO types cannot be run by the model
+        run: scripts/check-commands.sh
 
   install:
     runs-on: ubuntu-latest
