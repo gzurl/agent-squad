@@ -247,26 +247,74 @@ function targetOf(noun: string, args: string[], home: string | null): BoardItem 
   return { item: `${noun === 'pr' ? 'PR ' : ''}#${target}`, url: base ? `${base}/${noun === 'pr' ? 'pull' : 'issues'}/${target}` : null }
 }
 
-// Whether a gh issue edit adds the in-progress label: `--add-label <labels>` or `--add-label=<labels>`,
-// the labels separated by commas.
-function addsInProgress(args: string[]): boolean {
-  const labels = args.flatMap((arg, i) => arg === '--add-label' ? [args[i + 1] ?? ''] : arg.startsWith('--add-label=') ? [arg.slice('--add-label='.length)] : [])
-  return labels.some(value => value.split(',').some(label => label.trim().endsWith('status:in-progress')))
+// The labels a gh call names with one of the flags: `<flag> <labels>`, or `--<flag>=<labels>`, the
+// labels separated by commas.
+function labelsOf(args: string[], flags: string[]): string[] {
+  return args
+    .flatMap((arg, i) => {
+      if (flags.includes(arg)) return [args[i + 1] ?? '']
+      const long = flags.find(flag => flag.startsWith('--') && arg.startsWith(flag + '='))
+      return long ? [arg.slice(long.length + 1)] : []
+    })
+    .flatMap(value => value.split(',').map(label => label.trim()))
+}
+
+// Whether a gh call adds the in-progress label: gh issue edit with --add-label, and gh issue create
+// with --label or -l (agent-squad #354).
+function addsInProgress(args: string[], flags = ['--add-label']): boolean {
+  return labelsOf(args, flags).some(label => label.endsWith('status:in-progress'))
+}
+
+// Whether a gh issue edit ends the work on its issue (agent-squad #354): it removes the in-progress
+// or the in-review label, and adds no status label, as the author does once the issue's PR is
+// merged (SQUAD.md §4.9).
+function endsWork(args: string[]): boolean {
+  return labelsOf(args, ['--remove-label']).some(label => /status:in-(progress|review)$/.test(label))
+    && !labelsOf(args, ['--add-label']).some(label => label.includes('status:'))
+}
+
+// The issues a PR's body closes, by GitHub's keywords: "Closes #12", "fixes #12", "Resolves: #12".
+function closedBy(body: string): number[] {
+  return [...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi)].map(found => Number(found[1]))
+}
+
+// The body a gh pr create gives its PR, as far as the board can tell: the text of --body or -b, or
+// the file that --body-file or -F names, as `bodies` holds it, read once the call has ended. Null
+// otherwise, as for --fill or a body from stdin.
+function bodyOf(args: string[], bodies: Record<string, string>): string | null {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (arg === '--body' || arg === '-b') return args[i + 1] ?? null
+    if (arg.startsWith('--body=')) return arg.slice('--body='.length)
+    if (arg === '--body-file' || arg === '-F') return bodies[args[i + 1] ?? ''] ?? null
+    if (arg.startsWith('--body-file=')) return bodies[arg.slice('--body-file='.length)] ?? null
+  }
+  return null
+}
+
+// The files a command's gh pr create calls take their body from, that the board can read: an
+// absolute path, written out, with no variable or command in it (agent-squad #354).
+function bodyFiles(command: string): string[] {
+  return commandsOf(command).map(unwrapped)
+    .filter(call => call[0] === 'gh' && call[1] === 'pr' && call[2] === 'create')
+    .flatMap(call => call.flatMap((arg, i) =>
+      arg === '--body-file' || arg === '-F' ? [call[i + 1] ?? ''] : arg.startsWith('--body-file=') ? [arg.slice('--body-file='.length)] : []))
+    .filter(path => path.startsWith('/') && !/[$`]/.test(path))
 }
 
 function sameItem(a: BoardItem, b: BoardItem): boolean {
   return a.item === b.item && a.url === b.url
 }
 
-// The PR gh pr create made, from the command line's output: the first line that is a PR's address
-// alone, as gh pr create prints it, and not a PR another call of the line names. Other calls print
-// addresses too: gh issue edit the issue's, gh pr comment or gh issue comment the comment's, which
-// goes on past the number (QA's finding on PR #294), and gh pr edit its PR's, alone (agent-squad
-// #299). A PR the line names by number is never the one it creates, whose number nobody knew when
-// the line was written.
-function createdIn(output: string, named: BoardItem[]): BoardItem | null {
+// The PR gh pr create made, or the issue gh issue create made (`kind` issues), from the command
+// line's output: the first line that is such an address alone, as both print it, and not one
+// another call of the line names. Other calls print addresses too: gh issue edit the issue's, gh pr
+// comment or gh issue comment the comment's, which goes on past the number (QA's finding on PR
+// #294), and gh pr edit its PR's, alone (agent-squad #299). An item the line names by number is
+// never the one it creates, whose number nobody knew when the line was written.
+function createdIn(output: string, named: BoardItem[], kind: 'pull' | 'issues' = 'pull'): BoardItem | null {
   for (const line of output.split('\n')) {
-    if (!/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(line.trim())) continue
+    if (!new RegExp(`^https://github\\.com/[^/\\s]+/[^/\\s]+/${kind}/\\d+$`).test(line.trim())) continue
     const found = itemAt(line)
     if (found && !named.some(other => other.item === found.item && (other.url === null || other.url === found.url))) return found
   }
@@ -333,24 +381,29 @@ function reviewedPR(call: string[], home: string | null): BoardItem | null {
 // What a command that worked does to the focus, each call in order (agent-squad #289), with or
 // without rtk before it:
 // - gh issue edit <n> adding the in-progress label: the issue becomes the focus;
-// - gh pr create: the PR it made becomes the focus, tied to the issue in focus;
+// - gh issue create adding the in-progress label: the issue it made becomes the focus (#354);
+// - gh pr create: the PR it made becomes the focus, tied to the issue its body closes, when the
+//   board can read that body, and to none otherwise (#354);
 // - gh pr checkout <n> or gh pr review <n>, or QA's way of doing each, a git fetch of the PR's
 //   pull/<n>/head and a gh api call that posts a review on it (agent-squad #334): the PR becomes the
 //   focus, and a PR already in it keeps its tie;
 // - gh pr merge <n>, gh pr close <n> or gh issue close <n>: that item leaves the focus, and with a
 //   PR the issue it is tied to;
+// - gh issue edit <n> removing the in-progress or in-review label and adding no status label, the
+//   author's step once the issue's PR is merged: the issue leaves the focus (#354);
 // - any other call, such as view, comment, another label edit or a gh api call that only reads,
 //   changes nothing.
 // It gives back the new focus.
-function focusAfter(before: Focus[], command: string, output: string, home: string | null): Focus[] {
+function focusAfter(before: Focus[], command: string, output: string, home: string | null,
+  bodies: Record<string, string> = {}): Focus[] {
   let after = before
   const enter = (next: Focus) => {
     after = [...after.filter(entry => !sameItem(entry, next)), next].slice(-FOCUS_LIMIT)
   }
   const calls = commandsOf(command).map(unwrapped)
   const named = calls.flatMap(call => {
-    const prCall = call[0] === 'gh' && call[1] === 'pr' && call[2] !== 'create'
-    const found = prCall ? targetOf('pr', call.slice(3), home) : fetchedPR(call, home) ?? reviewedPR(call, home)
+    const ghCall = call[0] === 'gh' && (call[1] === 'pr' || call[1] === 'issue') && call[2] !== 'create'
+    const found = ghCall ? targetOf(call[1], call.slice(3), home) : fetchedPR(call, home) ?? reviewedPR(call, home)
     return found ? [found] : []
   })
   for (const call of calls) {
@@ -364,8 +417,15 @@ function focusAfter(before: Focus[], command: string, output: string, home: stri
     const args = call.slice(3)
     if (noun === 'pr' && verb === 'create') {
       const created = createdIn(output, named)
-      const top = after.at(-1)
-      if (created) enter({ ...created, tied: top && !top.item.startsWith('PR ') ? { item: top.item, url: top.url } : null })
+      const closes = closedBy(bodyOf(args, bodies) ?? '')[0]
+      const tied = closes === undefined ? null
+        : { item: `#${closes}`, url: created?.url ? created.url.replace(/\/pull\/\d+$/, `/issues/${closes}`) : null }
+      if (created) enter({ ...created, tied })
+      continue
+    }
+    if (noun === 'issue' && verb === 'create') {
+      const created = addsInProgress(args, ['--label', '-l']) ? createdIn(output, named, 'issues') : null
+      if (created) enter({ ...created, tied: null })
       continue
     }
     const target = targetOf(noun, args, home)
@@ -375,6 +435,8 @@ function focusAfter(before: Focus[], command: string, output: string, home: stri
     } else if ((noun === 'pr' && (verb === 'merge' || verb === 'close')) || (noun === 'issue' && verb === 'close')) {
       const tied = after.find(entry => sameItem(entry, target))?.tied
       after = after.filter(entry => !sameItem(entry, target) && !(tied && sameItem(entry, tied)))
+    } else if (noun === 'issue' && verb === 'edit' && endsWork(args)) {
+      after = after.filter(entry => !sameItem(entry, target))
     }
   }
   return after
@@ -704,7 +766,17 @@ export const register: Register = on => {
     await resume($)
     if (me && e.tool === 'Bash' && !ran?.isError && !ran?.deny) {
       const input = e as any
-      const moved = focusAfter(focus, String(input.command ?? ''), String(ran?.result?.stdout ?? ''), repository)
+      const command = String(input.command ?? '')
+      // The body files its gh pr create calls name, read now that the call has ended.
+      const bodies: Record<string, string> = {}
+      for (const path of bodyFiles(command)) {
+        try {
+          bodies[path] = String(await $.fs.read(path))
+        } catch {
+          // A file the board cannot read ties the PR to nothing.
+        }
+      }
+      const moved = focusAfter(focus, command, String(ran?.result?.stdout ?? ''), repository, bodies)
       if (JSON.stringify(moved) !== JSON.stringify(focus)) {
         focus = moved
         await publish($)

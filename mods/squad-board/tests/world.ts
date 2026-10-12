@@ -27,6 +27,8 @@ export type World = {
   isError: boolean
   manifest: string | null
   latest: string | null
+  // Files the board may read by their absolute path, as a PR's body file (agent-squad #354).
+  files: Record<string, string>
 }
 
 // Sets the world up on the test's `on`, with the store holding `store` at the start.
@@ -45,6 +47,7 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
     isError: false,
     manifest: '{ "name": "squad-board", "version": "42.0.0" }',
     latest: null,
+    files: {},
   }
   on('store.get', ($, e) => ({ value: w.store.get(e.key) }))
   on('store.set', ($, e) => {
@@ -60,6 +63,7 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
   on('session.root', () => ({ value: '/work/proj' }))
   on('fs.read', ($, e) => {
     if (e.path === '/work/proj/.agent-squad/latest-release' && w.latest !== null) return { value: w.latest }
+    if (Object.hasOwn(w.files, e.path)) return { value: w.files[e.path] }
     if (w.manifest === null || !String(e.path).endsWith('/.claude-plugin/plugin.json')) throw new Error(`ENOENT: ${e.path}`)
     return { value: w.manifest }
   })
