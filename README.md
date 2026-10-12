@@ -335,8 +335,8 @@ answers a prompt for you, runs no command, and makes no network call. The latest
 board's notice names, is checked by the squad's hooks and scripts instead: when a session starts,
 once a day in a session that stays open, and when the CTO runs `/squad-resume` or `/squad-watch`.
 They never ask GitHub twice within a day, nor more than once an hour while it cannot be reached.
-After an upgrade, restart the three sessions to load the new board; until the CTO's session
-restarts, its line still shows the previous release. To turn it off, run the `claude plugin
+After an upgrade, restart the three sessions, with `/restart` in each, to load the new board; until
+the CTO's session restarts, its line still shows the previous release. To turn it off, run the `claude plugin
 disable` line the installer printed, in the main checkout; the same line with `enable` turns it
 back on.
 
@@ -364,7 +364,10 @@ release the project runs, what the new one changes and whether you need to do an
 installs it only when you say yes. The agents then re-read the rules that changed, so there is
 nothing else for you to do; the CTO asks you to compact the sessions only after a release that
 rewrites much of the charter. The upgrade also moves the squad board to the new release, and
-keeps it off if you turned it off. The release notes are in [CHANGELOG.md](CHANGELOG.md).
+keeps it off if you turned it off. When a release changes the board or the hooks, its notes say so,
+and the CTO asks you to restart the three sessions, with `/restart` in each: Claude Code's
+`/restart` keeps each session's conversation and name. The release notes are in
+[CHANGELOG.md](CHANGELOG.md).
 
 **To remove the squad from a project,** type `/squad-uninstall` in the CTO's session. The CTO shows
 you what would go and what would stay. When you say yes, it first merges a PR for what git tracks,
