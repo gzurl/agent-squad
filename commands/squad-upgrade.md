@@ -37,10 +37,11 @@ Work from the main checkout. The upstream repository is the one named on the `up
 4. **Bring the squad to a safe point,** on the CEO's yes, before installing anything: the install
    replaces the scripts that the hooks and the pre-push gate run, and the restart that step 8 asks
    for ends whatever a session is doing. Send DEV and QA one message each: "The CEO is upgrading
-   the squad (`/squad-upgrade`): follow the part for every agent in `squad-pause.md`, in the main
-   checkout's `.claude/commands/`, now, and tell me when you are at a safe point." That part ends
-   with each agent waiting for `/squad-resume`, which the CEO types once the sessions have
-   restarted (step 8). Get to a safe point yourself too, as that part says, apart from this
+   the squad and needs it at a safe point (`/squad-pause`): follow the part for every agent in
+   `squad-pause.md`, in the main checkout's `.claude/commands/`, now, and tell me when you are at a
+   safe point." Naming `/squad-pause` that way, in parentheses with a colon, is what lets the squad
+   board show DEV and QA as paused. That part ends with each agent waiting for `/squad-resume`,
+   which the CEO types once the sessions have restarted (step 8). Get to a safe point yourself too, as that part says, apart from this
    upgrade. Install only once each agent has said so, its state is on GitHub or it has said it
    works on neither, and `ListAgents` shows its session idle. A session that `ListAgents` shows as
    **waiting** is held by a question or a permission prompt in its own terminal, and reads no
