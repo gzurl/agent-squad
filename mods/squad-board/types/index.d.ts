@@ -8,7 +8,7 @@ export type BoardRole = 'CTO' | 'DEV' | 'QA'
 // at its prompt.
 export type BoardState = 'working' | 'permission' | 'question' | 'idle'
 
-// The issue or PR a session last acted on with gh: its label (`#12` for an issue, `PR #34` for a
+// An issue or PR a session works on: its label (`#12` for an issue, `PR #34` for a
 // pull request) and its web address, null when the session's repository is not on GitHub.
 export type BoardItem = { item: string; url: string | null }
 
@@ -30,8 +30,11 @@ export type BoardAgent = {
   paused?: boolean
   // Whether the session's last turn ended with a background shell still running (agent-squad #264).
   background?: boolean
-  // The issue or PR the session last acted on with gh; null before its first.
+  // The issue or PR the band shows: the latest of the session's focus; null with none.
   item?: BoardItem | null
+  // The issues and PRs the session's agent works on, the latest last, up to five, each PR it created
+  // tied to the issue in focus then (agent-squad #289).
+  focus?: (BoardItem & { tied?: BoardItem | null })[]
   // The CTO's session only: the waits it has already shown a toast for.
   toasted?: string[]
 }

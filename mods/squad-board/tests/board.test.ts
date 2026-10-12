@@ -7,7 +7,7 @@ import { asks, says, START, start, stops, turnEnd, turnStart, world } from './wo
 // above the prompt, between two blue rules, opening with the wordmark and the board's release, then
 // each agent of its own project in the order CTO, DEV, QA: its state, its signature and role, the
 // role in its colour, the CTO's context from 90%, then, unless the agent is idle, a colon and a link
-// to the issue or PR its session last acted on, `#123` or `PR #124`, cut at the end where the
+// to the issue or PR its session works on, `#123` or `PR #124`, cut at the end where the
 // terminal is narrow; a toast when an agent turns to wait for the CEO, once per wait. Everything
 // comes from the sessions' keys, nothing from GitHub.
 
@@ -39,7 +39,7 @@ function agent(role: string, project: string, fields: Record<string, unknown> = 
 // The line's prefix, as the world's plugin.json (version 42.0.0) makes it.
 const P = 'agent-squad (v42)'
 
-// The items the sessions of DEV and QA last acted on, as their keys hold them.
+// The items the sessions of DEV and QA work on, as their keys hold them.
 const ISSUE = { item: { item: '#205', url: 'https://github.com/o/r/issues/205' } }
 const PR = { item: { item: 'PR #210', url: 'https://github.com/o/r/pull/210' } }
 
@@ -274,7 +274,7 @@ describe('the line', () => {
     expect(drawn).toBe(`${P} │ ${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA`)
   })
 
-  test('each links the item its session last acted on, named an issue or a PR; one with no address, or not https, is no link', async ($, on) => {
+  test('each links the item its session works on, named an issue or a PR; one with no address, or not https, is no link', async ($, on) => {
     const w = world(on, {
       'proj/CTO': agent('CTO', 'proj', { sessionId: 'sid-1', state: 'working', item: { item: 'Issue #1', url: 'javascript:alert(1)' } }),
       'proj/DEV': agent('DEV', 'proj', { state: 'working', ...ISSUE }),
@@ -289,11 +289,11 @@ describe('the line', () => {
     expect(drawn).toBe(`${P} │ ${MARK.working} ${SIGN.CTO}CTO: #1 │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.paused} ${SIGN.QA}QA: PR #3`)
   })
 
-  test("the CTO's own gh call names its item on the band", async ($, on) => {
+  test("the CTO's own focus names its item on the band", async ($, on) => {
     const w = world(on)
     await start($, 'CTO:proj')
     await turnStart($)
-    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh issue edit 222 --add-label "x"' } as any)
+    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh issue edit 222 --add-label "🚧 status:in-progress"' } as any)
     await w.clock.advance(3_000)
     const { links } = await band($)
     expect(links.map(link => link.props.href)).toEqual(['https://github.com/o/r/issues/222'])
@@ -413,7 +413,7 @@ describe('an idle agent shows its role alone (agent-squad #247)', () => {
     const w = world(on)
     await start($, 'CTO:proj')
     await turnStart($)
-    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh pr view 243' } as any)
+    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh pr checkout 243' } as any)
     await w.clock.advance(3_000)
     const working = await band($)
     expect(await working.part('CTO')).toBe(` │ ${MARK.working} ${SIGN.CTO}CTO: https://github.com/o/r/pull/243PR #243`)
@@ -452,7 +452,7 @@ describe('a background shell after the turn (agent-squad #264)', () => {
     const w = world(on)
     await start($, 'CTO:proj')
     await turnStart($)
-    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh pr view 265' } as any)
+    await $.tool.call({ tool: 'Bash', tool_use_id: 'u-cto', command: 'gh pr checkout 265' } as any)
     await stops($, ['shell'])
     await w.clock.advance(3_000)
     const running = await band($)
