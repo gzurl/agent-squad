@@ -28,6 +28,9 @@ export type BoardAgent = {
   context: number | null
   // Whether the CEO paused the session (/squad-pause), until a resume or autopilot.
   paused?: boolean
+  // Whether the CEO has the squad on autopilot (/squad-autopilot), until a resume or a pause; the
+  // CTO's band shows it (agent-squad #244).
+  autopilot?: boolean
   // Whether the session's last turn ended with a background shell still running (agent-squad #264).
   background?: boolean
   // The issue or PR the band shows: the latest of the session's focus; null with none.
@@ -39,8 +42,9 @@ export type BoardAgent = {
   toasted?: string[]
 }
 
-// The agents' keys as the CTO's session last read them, and the time it read them.
-export type BoardAgents = { byRole: Partial<Record<BoardRole, BoardAgent>>; now: number }
+// The agents' keys as the CTO's session last read them, the time it read them, and the latest
+// release .agent-squad/latest-release names, as `v50` (null: none known, agent-squad #244).
+export type BoardAgents = { byRole: Partial<Record<BoardRole, BoardAgent>>; now: number; latest?: string | null }
 
 declare module 'claude-code' {
   interface PluginState {
