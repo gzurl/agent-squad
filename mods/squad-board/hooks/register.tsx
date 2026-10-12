@@ -3,9 +3,10 @@ import type { Register } from 'claude-code'
 
 import type { BoardAgent, BoardAgents, BoardItem, BoardRole, BoardState } from '../types'
 
-// The squad board (agent-squad #205, #212, #217, #222, #235, #240). Every session of a squad
+// The squad board (agent-squad #205, #212, #217, #222, #235, #240, #289). Every session of a squad
 // publishes its own state in this mod's store, under `<project>/<role>`, and only that key: what it
-// is doing, whether the CEO paused it, and the last issue or PR its agent acted on with gh. The
+// is doing, whether the CEO paused it, and the issue or PR its agent is focused on, which its own
+// gh calls declare (focusAfter, below). The
 // CTO's session reads its project's keys and draws them on one line above its prompt, after the
 // wordmark and the board's release, and shows a toast when an agent waits for the CEO. The band shows each session's own state, not GitHub's: nothing is read from
 // GitHub, and no command is run. A session whose name is not a squad role's does nothing. The
@@ -60,8 +61,9 @@ const CONTEXT_FROM = 90
 const agents = atom({ plugin: 'squad-board', key: 'agents' } as const, { byRole: {}, now: 0 } as BoardAgents)
 
 // This session: the title it started with, who it is once that title names a squad role, whether
-// its work has started, what it is doing, whether the CEO paused it, the last item its agent acted
-// on, and its repository's web address. A reload starts all of it over (recover, below).
+// its work has started, what it is doing, whether the CEO paused it, and its repository's web
+// address; its focus is kept below, with the rules that move it. A reload starts all of it over
+// (recover, below).
 let title: string | null = null
 let me: { project: string; role: BoardRole; name: string } | null = null
 let isStarted = false
@@ -72,7 +74,6 @@ let since = 0
 let isPaused = false
 // Whether the session's last turn ended with a background shell still running, as its Stop said.
 let hasShell = false
-let item: BoardItem | null = null
 let repository: string | null = null
 // The CTO's session only: the release its board belongs to, as `v42`, read once when the board starts.
 let release: string | null = null
@@ -130,78 +131,164 @@ function itemAt(text: string): BoardItem | null {
   return { item: `${found[3] === 'pull' ? 'PR ' : ''}#${found[4]}`, url: `https://github.com/${found[1]}/${found[2]}/${found[3]}/${found[4]}` }
 }
 
-// A command as the parser reads it (agent-squad #225), scanned as the shell does: each quoted string
-// becomes '', and each heredoc's body is left out, from the line after its `<<WORD` or `<<-WORD`,
-// the word quoted or not, up to the line that holds the word alone. A `<<` inside quotes opens no
-// heredoc, nor does a here-string (`<<<`). A single quote ends at the next one; a double quote
-// ends at the next one that no backslash escapes, and may span lines. A `#` that starts a word
-// outside quotes starts a comment, which runs to the end of its line and opens nothing (#227).
-function bareOf(command: string): string {
-  let bare = ''
+// A command as the shell splits it (agent-squad #225, #289): its simple commands, in order, each a
+// list of words. A quoted string is part of a word, its quotes gone, so that a label keeps its text
+// and a body is one word that is never read as a command; each heredoc's body is left out, from the
+// line after its `<<WORD` or `<<-WORD`, the word quoted or not, up to the line that holds the word
+// alone. A `<<` inside quotes opens no heredoc, nor does a here-string (`<<<`). A single quote ends
+// at the next one; a double quote ends at the next one that no backslash escapes, and may span
+// lines. A `#` that starts a word outside quotes, or follows a `<` or `>`, starts a comment, which
+// runs to the end of its line and opens nothing (#227). A newline, `;`, `&`, `|`, `(` and `)` end a
+// command, outside quotes, where a backslash at the end of a line joins the next one to it.
+function commandsOf(command: string): string[][] {
+  const commands: string[][] = []
+  let words: string[] = []
+  let word: string | null = null
   let quote: string | null = null
+  let continued = false
   const ends: string[] = []
+  const endWord = () => {
+    if (word !== null) words.push(word)
+    word = null
+  }
+  const endCommand = () => {
+    endWord()
+    if (words.length > 0) commands.push(words)
+    words = []
+  }
   for (const line of command.split('\n')) {
     // A heredoc's body: skipped whole, up to the line that ends it.
-    if (quote === null && ends.length > 0) {
+    if (quote === null && !continued && ends.length > 0) {
       if (line.trim() === ends[0]) ends.shift()
       continue
     }
+    continued = false
     let i = 0
     while (i < line.length) {
       const c = line[i]
       if (quote !== null) {
-        if (quote === '"' && c === '\\') i += 2
-        else {
+        if (quote === '"' && c === '\\') {
+          if (i + 1 < line.length) word += line[i + 1]
+          i += 2
+        } else {
           if (c === quote) quote = null
+          else word += c
           i += 1
         }
         continue
       }
-      if (c === '#' && (i === 0 || /[\s;&|()<>]/.test(line[i - 1]))) break
+      if (c === '#' && (word === null || /[<>]$/.test(word))) break
       const heredoc = line[i - 1] === '<' ? null : /^<<-?\s*(['"]?)([A-Za-z_]\w*)\1/.exec(line.slice(i))
       if (heredoc) {
         ends.push(heredoc[2])
-        bare += '<<'
+        endWord()
         i += heredoc[0].length
       } else if (c === '\\') {
-        bare += line.slice(i, i + 2)
+        if (i + 1 < line.length) word = (word ?? '') + line[i + 1]
+        else continued = true
         i += 2
       } else if (c === '"' || c === "'") {
         quote = c
-        bare += "''"
+        word = word ?? ''
+        i += 1
+      } else if (/[;&|()]/.test(c)) {
+        endCommand()
+        i += 1
+      } else if (/\s/.test(c)) {
+        endWord()
         i += 1
       } else {
-        bare += c
+        word = (word ?? '') + c
         i += 1
       }
     }
-    if (quote === null) bare += '\n'
+    if (continued) continue
+    if (quote === null) endCommand()
+    else word += '\n'
   }
-  return bare
+  endCommand()
+  return commands
 }
 
-// The issue or PR a gh command acts on (agent-squad #222): the first `gh issue` or `gh pr` the
-// command runs, at its start or after a separator, with its heredoc bodies and its quoted text left
-// out (bareOf), so that a body or a title is never read as a command or as its target.
-// - issue edit, comment, view or close, and pr view, checkout, review, comment, merge or edit:
-//   their first number or GitHub address, flags before it or not; `--repo owner/name` names
-//   another repository than the session's;
-// - pr create: the address of the new PR, which gh prints.
-// Null for any other command, and for one that names no number.
-function itemOf(command: string, output: string, home: string | null): BoardItem | null {
-  const bare = bareOf(command)
-  const call = /(?:^|[\n;&|(]\s*)(?:rtk\s+)?gh\s+(issue|pr)\s+([a-z]+)\b([^\n;&|)]*)/.exec(bare)
-  if (!call) return null
-  const [, noun, verb, rest] = call
-  const verbs = noun === 'issue' ? ['edit', 'comment', 'view', 'close'] : ['create', 'view', 'checkout', 'review', 'comment', 'merge', 'edit']
-  if (!verbs.includes(verb)) return null
-  if (verb === 'create') return itemAt(output)
-  const target = rest.trim().split(/\s+/).find(token => /^(\d+|https:\/\/\S+)$/.test(token))
+// The session's focus (agent-squad #289): the issues and PRs its agent works on, the latest last,
+// up to FOCUS_LIMIT. The band shows the latest. A PR the session created is tied to the issue in
+// focus when it was created, so that ending the PR ends its issue too.
+type Focus = BoardItem & { tied?: BoardItem | null }
+const FOCUS_LIMIT = 5
+let focus: Focus[] = []
+// The item the band shows: the latest focus, without its tie; null with none.
+function itemNow(): BoardItem | null {
+  const latest = focus.at(-1)
+  return latest ? { item: latest.item, url: latest.url } : null
+}
+
+// The issue or PR a gh call names: its first number or GitHub address, flags before it or not;
+// `--repo owner/name` names another repository than the session's. Null when it names none.
+function targetOf(noun: string, args: string[], home: string | null): BoardItem | null {
+  const target = args.find(arg => /^(\d+|https:\/\/\S+)$/.test(arg))
   if (!target) return null
   if (target.startsWith('https://')) return itemAt(target)
-  const other = /(?:^|\s)(?:-R|--repo)[\s=]([^\s/]+\/[^\s/]+)/.exec(rest)
-  const base = other ? `https://github.com/${other[1]}` : home
+  const repo = args.findIndex(arg => arg === '-R' || arg === '--repo')
+  const other = repo >= 0 ? args[repo + 1] : args.find(arg => arg.startsWith('--repo='))?.slice('--repo='.length)
+  const base = other && /^[^\s/]+\/[^\s/]+$/.test(other) ? `https://github.com/${other}` : home
   return { item: `${noun === 'pr' ? 'PR ' : ''}#${target}`, url: base ? `${base}/${noun === 'pr' ? 'pull' : 'issues'}/${target}` : null }
+}
+
+// Whether a gh issue edit adds the in-progress label: `--add-label <labels>` or `--add-label=<labels>`,
+// the labels separated by commas.
+function addsInProgress(args: string[]): boolean {
+  const labels = args.flatMap((arg, i) => arg === '--add-label' ? [args[i + 1] ?? ''] : arg.startsWith('--add-label=') ? [arg.slice('--add-label='.length)] : [])
+  return labels.some(value => value.split(',').some(label => label.trim().endsWith('status:in-progress')))
+}
+
+function sameItem(a: BoardItem, b: BoardItem): boolean {
+  return a.item === b.item && a.url === b.url
+}
+
+// The PR gh pr create made, from the command line's output: the first line that is a PR's address
+// alone, as gh pr create prints it. Other calls on the line print addresses too: gh issue edit the
+// issue's, and gh pr comment or gh issue comment the comment's, which goes on past the number (QA's
+// finding on PR #294).
+function createdIn(output: string): BoardItem | null {
+  const line = output.split('\n').find(text => /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(text.trim()))
+  return line ? itemAt(line) : null
+}
+
+// What a command that worked does to the focus, each gh call in order (agent-squad #289):
+// - gh issue edit <n> adding the in-progress label: the issue becomes the focus;
+// - gh pr create: the PR it made becomes the focus, tied to the issue in focus;
+// - gh pr checkout <n> or gh pr review <n>: the PR becomes the focus, which is QA's case, and a PR
+//   already in it keeps its tie;
+// - gh pr merge <n>, gh pr close <n> or gh issue close <n>: that item leaves the focus, and with a
+//   PR the issue it is tied to;
+// - any other call, such as view, comment or another label edit, changes nothing.
+// It gives back the new focus.
+function focusAfter(before: Focus[], command: string, output: string, home: string | null): Focus[] {
+  let after = before
+  const enter = (next: Focus) => {
+    after = [...after.filter(entry => !sameItem(entry, next)), next].slice(-FOCUS_LIMIT)
+  }
+  for (const words of commandsOf(command)) {
+    const call = words[0] === 'rtk' ? words.slice(1) : words
+    if (call[0] !== 'gh' || (call[1] !== 'issue' && call[1] !== 'pr')) continue
+    const [, noun, verb] = call
+    const args = call.slice(3)
+    if (noun === 'pr' && verb === 'create') {
+      const created = createdIn(output)
+      const top = after.at(-1)
+      if (created) enter({ ...created, tied: top && !top.item.startsWith('PR ') ? { item: top.item, url: top.url } : null })
+      continue
+    }
+    const target = targetOf(noun, args, home)
+    if (!target) continue
+    if ((noun === 'issue' && verb === 'edit' && addsInProgress(args)) || (noun === 'pr' && (verb === 'checkout' || verb === 'review'))) {
+      enter({ ...target, tied: after.find(entry => sameItem(entry, target))?.tied ?? null })
+    } else if ((noun === 'pr' && (verb === 'merge' || verb === 'close')) || (noun === 'issue' && verb === 'close')) {
+      const tied = after.find(entry => sameItem(entry, target))?.tied
+      after = after.filter(entry => !sameItem(entry, target) && !(tied && sameItem(entry, tied)))
+    }
+  }
+  return after
 }
 
 // The step-away commands of SQUAD.md §6 a prompt carries, typed (the prompt starts with the
@@ -243,7 +330,7 @@ function markOf(role: BoardRole, agent: BoardAgent): string {
 }
 
 // An agent's part: its mark, the CTO's context once it reaches CONTEXT_FROM, and the item its
-// session last acted on while the agent has something in hand (agent-squad #247): an idle agent
+// session works on while the agent has something in hand (agent-squad #247): an idle agent
 // shows its role alone, and its key keeps the item for when it works again. With no key, or one
 // gone stale, the unknown mark, with the item of the work whose session went silent.
 function partOf(role: BoardRole, agent: BoardAgent | undefined, now: number): Part {
@@ -316,7 +403,8 @@ async function publish($: any) {
     context: usage.context?.percent ?? null,
     paused: isPaused,
     background: hasShell,
-    item,
+    item: itemNow(),
+    focus,
   }
   if (me.role === 'CTO') agent.toasted = toasted
   await $.store.set(keyOf(me.project, me.role), agent)
@@ -349,7 +437,7 @@ async function recover($: any) {
       since = value.since
       isPaused = value.paused === true
       hasShell = value.background === true
-      item = value.item ?? null
+      focus = Array.isArray(value.focus) ? value.focus : value.item ? [value.item] : []
       toasted = value.toasted ?? []
       return
     }
@@ -366,7 +454,7 @@ async function leave($: any, sessionId: string) {
   state = 'idle'
   tool = null
   hasShell = false
-  item = null
+  focus = []
 }
 
 // The CTO's session: reads its project's keys for the board, and shows a toast for each wait of
@@ -465,15 +553,15 @@ export const register: Register = on => {
     await become($, isQuestion ? 'question' : 'permission', isQuestion ? null : e.tool_name)
     return next(e)
   })
-  // A tool call ends a wait; a gh call that worked names the item the session acts on.
+  // A tool call ends a wait; a command that worked moves the session's focus, as its gh calls say.
   on('tool.call', async ($, e, next) => {
     const ran: any = await next(e)
     await resume($)
     if (me && e.tool === 'Bash' && !ran?.isError && !ran?.deny) {
       const input = e as any
-      const found = itemOf(String(input.command ?? ''), String(ran?.result?.stdout ?? ''), repository)
-      if (found && (found.item !== item?.item || found.url !== item?.url)) {
-        item = found
+      const moved = focusAfter(focus, String(input.command ?? ''), String(ran?.result?.stdout ?? ''), repository)
+      if (JSON.stringify(moved) !== JSON.stringify(focus)) {
+        focus = moved
         await publish($)
       }
     }
