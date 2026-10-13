@@ -8,9 +8,9 @@
     edit, then reads the labels back, and fails unless that state alone is there. It reads the
     item's kind before it writes, so that an issue command given a PR's number writes nothing
     (#375, found by QA).
-  - **The charter names it** wherever it tells an agent to set or remove a status label: §3, §4.2,
-    §4.5 to §4.7 and §4.9. The board follows it, and the merge gate's message on two states names
-    it.
+  - **The charter names it** wherever it tells an agent to set or remove a status label: §1's
+    quick references, §3, §4.2, §4.5 to §4.7 and §4.9. The board follows it, and the merge gate's
+    message on two states names it.
 - **The squad's labels are created by a script** (#369, the CEO's idea). `squad-setup-labels.sh`
   creates the labels of `BOOTSTRAP.md`'s table that the repository lacks, and corrects those whose
   color or description differs. It never deletes one, and `--check` only lists them, exiting 3 on
@@ -28,7 +28,8 @@
     §6).
   - **Check the labels once:** v54's `/squad-upgrade` does not run `squad-setup-labels.sh`, so
     run `squad-setup-labels.sh --check` after this upgrade. v55 adds no label, so it should find
-    none missing.
+    none missing. A label it lists as different, in color or description, the script corrects to
+    the table's: run it, unless the project chose those words or that color on purpose.
   - **A milestone already in progress** gets its plan issue: the CTO opens it and pins it (§3).
 
 ## v54 — 2026-10-12
