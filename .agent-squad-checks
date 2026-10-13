@@ -22,3 +22,4 @@ scripts/check-latest.sh
 scripts/check-commands.sh
 scripts/check-sessions.sh
 scripts/check-set-status.sh
+scripts/check-setup-labels.sh
