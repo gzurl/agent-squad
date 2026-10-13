@@ -757,7 +757,9 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     const w = world(on)
     await start($, 'CTO:proj')
     await runs($, w, 'gh pr checkout 90')
-    await w.clock.advance(600_000)
+    // A heartbeat and a tick past it: every timer of the board has run since the call, in 21 ticks
+    // rather than the 200 of ten minutes (agent-squad #379).
+    await w.clock.advance(63_000)
     expect(w.runs).toEqual([])
   })
 })
