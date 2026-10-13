@@ -62,6 +62,7 @@ gh api --paginate --slurp "repos/$repo/issues?milestone=$number&state=all&per_pa
 jq -c 'add // [] | map(select(.pull_request == null)
   | {number, title, state, body: (.body // "" | gsub("\r"; "")), labels: [.labels[] | {name}]})' \
   "$work/issues.pages" > "$work/issues.json" || die "cannot read the issues of the milestone"
+# shellcheck disable=SC2016 # the $ are GraphQL's variables
 gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F milestone="$number" -f query='
   query($owner: String!, $name: String!, $milestone: Int!) {
     repository(owner: $owner, name: $name) { milestone(number: $milestone) { issues(first: 100, states: CLOSED) { nodes {
@@ -147,8 +148,10 @@ table="$(jq -nr -L "$here" --slurpfile issues "$work/issues.json" --slurpfile pr
        else {state: "⚪ not started", next: "\($owner): start it"} end)
     | {step: "#\($issue.number) \($issue.title | short)", who: ($owner // "—")} + .;
   ($issues | map(select(plan_issue | not))) as $items
-  | ($items | map(select(.state == "open") | "#\(.number)") | join(", ")) as $open
-  | (if $open == "" then null else "waits for \($open)" end) as $waits
+  # What a step that cannot start yet waits for: the open issues, by number, or how many, past three.
+  | ($items | map(select(.state == "open")) | sort_by(.number) | map("#\(.number)")) as $open
+  | (if $open == [] then null elif ($open | length) > 3 then "waits for \($open | length) issues"
+     else "waits for \($open | join(", "))" end) as $waits
   | ([$issues[] | select(.state == "open" and plan_issue)] | first) as $plan
   | ($plan != null and ($plan | labelled("needs-ceo"))) as $asked
   # The release'"'"'s own steps: the README read everywhere; the version PR, the tag, the Release and
