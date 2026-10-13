@@ -218,7 +218,9 @@ describe('the line', () => {
     const w = world(on)
     await start($, 'CTO:proj')
     w.manifest = '{ "name": "squad-board", "version": "43.0.0" }'
-    await w.clock.advance(600_000)
+    // A heartbeat and a tick past it: every timer of the board has run since the change. Ten
+    // minutes, 200 ticks, once took more than the test's 5 s under the coverage job (agent-squad #379).
+    await w.clock.advance(63_000)
     const { drawn } = await band($)
     expect(drawn.endsWith(`   ${P}`)).toBe(true)
   })
@@ -310,9 +312,11 @@ describe('the line', () => {
   test('nothing is read from GitHub, and no host command runs, however long the board is drawn', async ($, on) => {
     const w = world(on, { 'proj/DEV': agent('DEV', 'proj', ISSUE) })
     await start($, 'CTO:proj')
-    for (let minute = 0; minute < 10; minute++) {
+    // Drawn every 61 s, the last time with DEV's key past three minutes, stale: every timer of the
+    // board runs several times, in 81 ticks rather than the 200 of ten minutes (agent-squad #379).
+    for (let draw = 0; draw < 4; draw++) {
       await (await band($)).ui.unmount()
-      await w.clock.advance(60_000)
+      await w.clock.advance(61_000)
     }
     expect(w.runs).toEqual([])
   })
