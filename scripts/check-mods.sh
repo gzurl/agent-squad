@@ -5,7 +5,9 @@
 # session ($.session.send, $.prompt.submit), a tool, an agent or the model ($.tool.*, $.agent.*,
 # $.model.*), or a host command, which can reach the network as well ($.process.*: since
 # agent-squad #222 the board reads nothing from GitHub); none hooks tool.check, whose ask auto mode
-# settles with no dialog (agent-squad #199).
+# settles with no dialog (agent-squad #199). A test that fails is named, with the error under it,
+# since the output's last lines may hold only passes: a copy of the first plugin, with one test that
+# fails on purpose, proves it (agent-squad #373).
 # Claude Code runs with a home of its own, so this check touches neither the user's settings nor
 # ~/.claude.json, and with its non-essential traffic off. It needs Claude Code 2.1.287 or later,
 # the first with mods.
@@ -26,6 +28,10 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 claude_run() {
   HOME="$lab" DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude "$@" </dev/null 2>&1
 }
+# `failures <output>` prints the tests that failed in claude plugin test's output: each test's
+# (fail) line and the error block indented under it. The output's last lines alone may hold only
+# passes, as the coverage job's did (agent-squad #373).
+failures() { awk '/^\(fail\) / { block = 1; print; next } block && /^ / { print; next } { block = 0 }' <<<"$1"; }
 
 # Claude Code, with mods.
 if ! command -v claude >/dev/null; then
@@ -115,8 +121,31 @@ while IFS= read -r source; do
   if [ "$code" -eq 0 ] && [ "${ran:-0}" -gt 0 ] && grep -qE '^ 0 fail$' <<<"$out"; then
     pass "$plugin passes its $ran tests"
   else
-    fail "$plugin: claude plugin test exited $code: $(tail -n 30 <<<"$out")"
+    named="$(failures "$out")"
+    fail "$plugin: claude plugin test exited $code. ${named:+The tests that failed:
+$named
+}Its last lines:
+$(tail -n 10 <<<"$out")"
   fi
 done <<<"$sources"
+
+# 3. A test that fails is named, with its error (agent-squad #373): a copy of the first plugin, with
+#    one more test, which fails on purpose.
+first="mods/$(head -n 1 <<<"$sources" | sed 's|^\./||')"
+cp -R "$root/$first" "$lab/broken" && cat > "$lab/broken/tests/zz-fails-on-purpose.test.ts" <<'TEST'
+import { expect, test } from 'claude-code/testing'
+
+test('a test that fails on purpose, for check-mods.sh', () => {
+  expect('what it got').toBe('what it wanted')
+})
+TEST
+out="$(claude_run plugin test "$lab/broken")"
+named="$(failures "$out")"
+if [[ "$(head -n 1 <<<"$named")" == "(fail) a test that fails on purpose, for check-mods.sh ["* ]] \
+  && grep -qF 'Expected: "what it wanted"' <<<"$named" && [ "$(grep -c '^(fail) ' <<<"$named")" -eq 1 ]; then
+  pass "a test that fails is named, with its error, and no other"
+else
+  fail "a test that fails on purpose in a copy of $first is not named with its error: ${named:-nothing named}"
+fi
 
 exit "$status"
