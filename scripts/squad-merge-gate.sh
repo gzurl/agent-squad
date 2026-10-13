@@ -86,7 +86,7 @@ labels="$(gh api "repos/$repo/pulls/$pr" \
 waits_for_ceo="${labels%%$'\t'*}" states="${labels#*$'\t'}"
 case "${states%%$'\t'*}" in
   0|1) ;;
-  *) fail "PR carries ${states%%$'\t'*} state labels, where one is the rule: ${states#*$'\t'}. Keep only the current one (✅ status:approved, if QA approved the head) and remove the others" ;;
+  *) fail "PR carries ${states%%$'\t'*} state labels, where one is the rule: ${states#*$'\t'}. Set the current one with squad-set-status.sh, which removes the others: squad-set-status.sh pr $pr approved, if QA approved the head" ;;
 esac
 case ", ${states#*$'\t'}, " in
   *", ✅ status:approved, "*) ;;

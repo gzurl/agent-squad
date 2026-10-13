@@ -281,6 +281,32 @@ function endsWork(args: string[]): boolean {
     && !labelsOf(args, ['--add-label']).some(label => label.includes('status:'))
 }
 
+// The words of a call without its redirections: `>file`, `</dev/null`, `2>` (a `2>&1` the parser
+// split at its `&`), and an operator alone, as in `> file`, with the word it redirects to.
+function withoutRedirections(words: string[]): string[] {
+  const kept: string[] = []
+  for (let i = 0; i < words.length; i++) {
+    const operator = /^\d*(>>|>|<<<|<)/.exec(words[i])?.[0]
+    if (operator === undefined) kept.push(words[i])
+    else if (operator === words[i]) i += 1
+  }
+  return kept
+}
+
+// The item and the state a call of the playbook's squad-set-status.sh sets (agent-squad #367):
+// `<path to it>/squad-set-status.sh <issue|pr> <n> <state>`, however the path is written, as
+// "$p/scripts/squad-set-status.sh" or through git rev-parse --git-common-dir, in the session's
+// repository, where the script edits it. Null for any other call, and for one the script refuses
+// for its arguments.
+function statusSet(call: string[], home: string | null): { target: BoardItem; noun: string; state: string } | null {
+  const words = withoutRedirections(call)
+  if (words.length !== 4 || !/(^|\/)squad-set-status\.sh$/.test(words[0])) return null
+  const [, noun, n, state] = words
+  const known = noun === 'issue' ? ['in-progress', 'in-review', 'blocked', 'none'] : noun === 'pr' ? ['in-progress', 'in-review', 'approved', 'none'] : []
+  const target = /^\d+$/.test(n) && known.includes(state) ? targetOf(noun, [n], home) : null
+  return target && { target, noun, state }
+}
+
 // The issues a PR's body closes, by GitHub's keywords: "Closes #12", "fixes #12", "Resolves: #12".
 function closedBy(body: string): number[] {
   return [...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi)].map(found => Number(found[1]))
@@ -399,6 +425,10 @@ function reviewedPR(call: string[], home: string | null): BoardItem | null {
 //   PR the issue it is tied to;
 // - gh issue edit <n> removing the in-progress or in-review label and adding no status label, the
 //   author's step once the issue's PR is merged: the issue leaves the focus (#354);
+// - squad-set-status.sh issue <n> in-progress, the playbook's way of setting the label (agent-squad
+//   #367): the issue becomes the focus; any other state of the issue, or none, which the script
+//   sets by removing the in-progress label: the issue leaves the focus. A PR's state changes
+//   nothing, as gh pr edit does not;
 // - any other call, such as view, comment, another label edit or a gh api call that only reads,
 //   changes nothing.
 // It gives back the new focus.
@@ -411,13 +441,23 @@ function focusAfter(before: Focus[], command: string, output: string, home: stri
   const calls = commandsOf(command).map(unwrapped)
   const named = calls.flatMap(call => {
     const ghCall = call[0] === 'gh' && (call[1] === 'pr' || call[1] === 'issue') && call[2] !== 'create'
-    const found = ghCall ? targetOf(call[1], call.slice(3), home) : fetchedPR(call, home) ?? reviewedPR(call, home)
+    const found = ghCall ? targetOf(call[1], call.slice(3), home) : statusSet(call, home)?.target ?? fetchedPR(call, home) ?? reviewedPR(call, home)
     return found ? [found] : []
   })
   for (const call of calls) {
     const opened = fetchedPR(call, home) ?? reviewedPR(call, home)
     if (opened) {
       enter({ ...opened, tied: after.find(entry => sameItem(entry, opened))?.tied ?? null })
+      continue
+    }
+    const set = statusSet(call, home)
+    if (set) {
+      const { target } = set
+      if (set.noun === 'issue' && set.state === 'in-progress') {
+        enter({ ...target, tied: after.find(entry => sameItem(entry, target))?.tied ?? null })
+      } else if (set.noun === 'issue') {
+        after = after.filter(entry => !sameItem(entry, target))
+      }
       continue
     }
     if (call[0] !== 'gh' || (call[1] !== 'issue' && call[1] !== 'pr')) continue

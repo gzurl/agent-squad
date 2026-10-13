@@ -292,10 +292,11 @@ not cost: most of the input is read from the cache, which is billed far below fr
 Above the prompt of the CTO's session, between two blue rules, one line shows every agent of the
 project, in the order CTO, DEV, QA, as the CTO's reports on the agents read: its state, its
 signature and role, then, while the agent has something in hand, a colon and a link to the issue
-(`#123`) or pull request (`PR #124`) it works on. The agent's own `gh` calls set that item: an issue it labels
-`status:in-progress`, when it edits the issue or creates it so, a PR it creates, and a PR it
-checks out or reviews. Merging or closing the item ends it, and so does taking an issue's status
-label off with none put on, the author's step once the issue's PR is merged. A PR the agent
+(`#123`) or pull request (`PR #124`) it works on. The agent's own calls set that item: an issue it
+labels `status:in-progress`, whether with `squad-set-status.sh`, by editing the issue or by
+creating it so, a PR it creates, and a PR it checks out or reviews. Merging or closing the item
+ends it. So does setting the issue to another state with `squad-set-status.sh`, or taking its
+status label off with none put on, as the author does once the issue's PR is merged. A PR the agent
 created takes with it the issue its body closes (`Closes #123`), when the board can read that
 body: given inline, or in a file named by its absolute path. The band then shows the item before
 it, or the role alone. Reading, commenting and other label edits change nothing. An idle
