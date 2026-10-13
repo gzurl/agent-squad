@@ -12,13 +12,27 @@
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2
-set_status="$root/scripts/squad-set-status.sh"
 
 # The lab goes under TMPDIR, through a template: macOS's mktemp -d alone ignores TMPDIR.
 lab="${TMPDIR:-/tmp}"
 lab="$(mktemp -d "${lab%/}/squad-check-set-status.XXXXXX")" || exit 2
 trap 'rm -rf "$lab"' EXIT
 status=0
+
+# The script runs from a copy beside a stub squad-plan.sh, which it calls once a state is read back
+# (agent-squad #370). The stub logs each call to $PLAN_CALLS, with what it read on its input, prints
+# what the real one prints, and fails when STUB_PLAN=fail.
+mkdir -p "$lab/playbook/scripts" && cp "$root/scripts/squad-set-status.sh" "$lab/playbook/scripts/"
+set_status="$lab/playbook/scripts/squad-set-status.sh"
+cat > "$lab/playbook/scripts/squad-plan.sh" <<'PLAN'
+#!/usr/bin/env bash
+printf '%s | input: %s\n' "$*" "$(cat)" >> "$PLAN_CALLS"
+echo "| 1 | #12 a row of the table |"
+[ "${STUB_PLAN:-}" != fail ] || { echo "HTTP 502: Bad Gateway" >&2; echo "plan: cannot read the open issues, as gh says above" >&2; exit 1; }
+echo "plan: #9 updated"
+PLAN
+chmod +x "$lab/playbook/scripts/squad-plan.sh"
+export PLAN_CALLS="$lab/plan-calls"
 
 pass() { echo "  ok      $1" >&2; }
 fail() { echo "  FAILED  $1" >&2; status=1; }
@@ -82,7 +96,7 @@ export PATH="$lab/bin:$PATH" LABELS="$lab/labels" CALLS="$lab/calls"
 # names, unless ITEM_KIND says otherwise.
 labels() { printf '%s\n' "$@" > "$LABELS"; }
 run() {
-  : > "$CALLS"
+  : > "$CALLS" && : > "$PLAN_CALLS"
   out="$(echo "the caller's input" | ITEM_KIND="${ITEM_KIND:-${1:-}}" "$set_status" "$@" 2>&1)"
   code=$?
 }
@@ -186,7 +200,29 @@ STUB_READ=fail run issue 5 none
 check "an item whose kind cannot be read: exit 1, with gh's message, and no edit" \
   bash -c '[ "$1" -eq 1 ] && [ "$2" = "HTTP 502: Bad Gateway"$'\''\n'\''"status FAILED: cannot read issue #5, as gh says above; nothing was written" ] && [ "$3" = "api " ]' _ "$code" "$out" "$(calls)"
 
-# 7. Bad usage exits 2, saying why and how to use it, before anything reaches GitHub.
+# 7. The plan's table follows a state read back, and only then (agent-squad #370): squad-plan.sh
+#    --update runs once, with no input of the caller's, and prints nothing. Its failure is one
+#    warning, and the state's exit status stands.
+labels "$IN_PROGRESS"
+run issue 12 in-review
+check "a state read back: squad-plan.sh --update runs once, with no input, and prints nothing" \
+  bash -c '[ "$1" -eq 0 ] && [ "$2" = "status: issue #12 is $3" ] && [ "$(cat "$4")" = "--update | input: " ]' _ "$code" "$out" "$IN_REVIEW" "$PLAN_CALLS"
+STUB_PLAN=fail run issue 12 none
+check "a failed table update: exit 0 still, the state's line, then one warning" \
+  bash -c '[ "$1" -eq 0 ] && [ "$2" = "status: issue #12 has no status label"$'\''\n'\''"status: warning: the plan'\''s table could not be updated; the next update corrects it" ]' _ "$code" "$out"
+for failing in "STUB_EDIT=ignored issue 12 in-review" "ITEM_KIND=pr issue 12 none" "STUB_EDIT=fail issue 12 none" "STUB_READ=back pr 12 approved" "issue 12 review"; do
+  labels "$IN_PROGRESS"
+  # The words: an assignment for the stubs, or none, then the arguments.
+  read -ra env_and_args <<<"$failing"
+  if [[ "${env_and_args[0]}" == *=* ]]; then
+    export "${env_and_args[0]?}" && run "${env_and_args[@]:1}" && unset "${env_and_args[0]%%=*}"
+  else
+    run "${env_and_args[@]}"
+  fi
+  check "no table update after a run that fails ($failing)" bash -c '[ "$1" -ne 0 ] && [ ! -s "$2" ]' _ "$code" "$PLAN_CALLS"
+done
+
+# 8. Bad usage exits 2, saying why and how to use it, before anything reaches GitHub.
 usage="usage: squad-set-status.sh <issue|pr> <number> <in-progress|in-review|blocked|approved|none>"
 while IFS='|' read -r reason args; do
   # shellcheck disable=SC2086 # the arguments are split on purpose
