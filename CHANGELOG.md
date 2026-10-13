@@ -1,5 +1,33 @@
 # Changelog
 
+## v57 — 2026-10-14
+- **`/squad-usage` finds a project's transcripts on Windows, and reports no silent zero** (#389,
+  reported by fctcode in #388).
+  - **On Windows, under Git Bash,** `squad-tokens.sh` names Claude Code's directory for the project
+    from the main checkout's Windows path, which `cygpath -w` gives, and matches it ignoring case,
+    since the drive letter's case varies with how the session was started. It used to name it from
+    git's POSIX path, which Claude Code does not use there, and found nothing. Nothing changes on
+    macOS and Linux.
+  - **No silent zero:** by default, when neither a transcript directory nor the history has the
+    project, it says where it looked and exits 1. It used to report "No token usage recorded", with
+    0, which read like a measurement. `/squad-usage` gives the CEO that message, and says that
+    nothing was counted. `--all` and `--project` are unchanged, since they group by session name.
+- **A release's plan issue is the parent of its milestone's issues** (#391, the CEO's idea).
+  - `squad-plan.sh --update`, which `squad-set-status.sh` runs at every state change and
+    `/squad-watch` at each pass, keeps the plan issue's sub-issues in step with its milestone, its
+    closed issues included. GitHub then shows each issue's parent, and the plan issue shows a bar of
+    how many are done. An issue that already has another parent stays under it, as do the issues
+    past the 100 sub-issues GitHub allows, and the script's line says so. A sub-issue that cannot
+    be read or written stops no other plan: every table is still written, and the run exits 1. It
+    all goes through `gh api`, which any `gh` can call.
+  - **An accepted outside report shows the squad issue that answers it:** on the CEO's yes, the CTO
+    marks the report as blocked by that issue, so that each issue's page shows the other (§3).
+  - The README says so: *The plan, pinned on GitHub* for the sub-issues, and *Contributing* for an
+    outside report.
+- **Upgrading from v56:** restart the three sessions, as `/squad-upgrade` asks, since §3 changes.
+  Nothing else: no label, file or setting changes. The next `squad-set-status.sh` or `/squad-watch`
+  makes a plan in progress the parent of its milestone's issues.
+
 ## v56 — 2026-10-13
 - **A release's version PR names its plan issue, and closes none** (#384, the CEO's decision).
   v55's plan showed the version step twice: the row of #380, an issue opened only so that the
