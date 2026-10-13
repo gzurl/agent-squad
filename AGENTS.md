@@ -134,7 +134,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
 Met while writing this repository's scripts: `gh api --slurp` cannot be combined with `--jq` (pipe
 into `jq` instead); `addPullRequestReviewThreadReply` takes a `pullRequestReviewThreadId`; `jq`
 takes one variable name per `--arg`; zsh does not word-split unquoted variables, so multi-file
-loops belong in bash.
+loops belong in bash. A wait loop on `pgrep -f "<command>"` can outlive its command: macOS's
+`pgrep` leaves out its own ancestors, so one such loop ends, but a second loop with the same text
+matches the first, and each keeps the other running. Wait on the background task's own
+notification, or on something the awaited command leaves behind, such as its log or its exit file
+(#382).
 
 ## Local services and ports
 None.
