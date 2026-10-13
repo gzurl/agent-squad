@@ -4,7 +4,8 @@
 # open PRs with their reviews and CI, the repository's files, its tags and its Releases. Each table
 # is compared whole. A milestone with nothing started, one half done, with a PR under review, one
 # with changes requested and one approved, and one complete, in a project and in a repository that
-# tracks SQUAD.md; the plan issue rewritten between its markers, and left alone when only the time
+# tracks SQUAD.md; the release's version PR open in each of its states, and the PRs that are not it
+# (agent-squad #384); the plan issue rewritten between its markers, and left alone when only the time
 # changed; no open milestone, and a milestone without a plan issue; a failed read or write; bad
 # usage. Nothing reaches GitHub.
 # shellcheck disable=SC2016 # the checks' bash -c bodies take their values as arguments
@@ -143,17 +144,21 @@ set_issue() {
   shift 2
   jq --argjson n "$number" "$@" "map(if .number == \$n then $change else . end)" "$W/issues.json" > "$W/new" && mv "$W/new" "$W/issues.json"
 }
-# `pr <number> <issue it closes> <head> <ci: pass, fail, pending or none> [draft] [<reviewer requested>]`
-# adds an open PR signed by DEV.
-pr() {
-  jq --argjson n "$1" --argjson closes "$2" --arg head "$3" --arg ci "$4" --arg draft "${5:-}" --arg requested "${6:-}" \
-    '. + [{number: $n, isDraft: ($draft == "draft"), headRefOid: $head, body: "**👨🏼‍💻[DEV]:** Closes #\($closes).",
-      closingIssuesReferences: [{number: $closes}], reviewRequests: (if $requested == "" then [] else [{login: $requested}] end),
+# `open_pr <number> <description> <issue GitHub links to it, or ""> <head> <ci: pass, fail, pending or
+# none> [draft] [<reviewer requested>]` adds an open PR.
+open_pr() {
+  jq --argjson n "$1" --arg body "$2" --arg linked "$3" --arg head "$4" --arg ci "$5" --arg draft "${6:-}" --arg requested "${7:-}" \
+    '. + [{number: $n, isDraft: ($draft == "draft"), headRefOid: $head, body: $body,
+      closingIssuesReferences: [$linked | select(. != "") | {number: tonumber}],
+      reviewRequests: (if $requested == "" then [] else [{login: $requested}] end),
       statusCheckRollup: {pass: [{__typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS"}, {__typename: "StatusContext", state: "SUCCESS"}],
         fail: [{__typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS"}, {__typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE"}],
         pending: [{__typename: "CheckRun", status: "IN_PROGRESS", conclusion: ""}], none: []}[$ci]}]' "$W/prs.json" > "$W/new"
   mv "$W/new" "$W/prs.json"
 }
+# `pr <number> <issue it closes> <head> <ci> [draft] [<reviewer requested>]` adds an open PR signed by
+# DEV that closes the issue.
+pr() { open_pr "$1" "**👨🏼‍💻[DEV]:** Closes #$2." "$2" "${@:3}"; }
 # `review <pr> <commit> <verdict>` adds QA's review of a commit to a PR, by the repository's owner.
 review() {
   [ -f "$W/reviews-$1.json" ] || echo '[]' > "$W/reviews-$1.json"
@@ -319,7 +324,68 @@ expect_steps "installed here: every step done" \
 check "with the header counting the issues closed, the plan issue left out" \
   bash -c '[[ "$(head -1 <<<"$1")" == *" · 1 of 1 issues closed · "* ]]' _ "$out"
 
-# 5. A project's README read, every issue closed: not asked yet, then waiting for the CEO.
+# 5. The release's version PR (agent-squad #384), upstream: the open PR whose description names the
+#    plan issue ("Part of #10") and that closes no issue. None of these is it, each numbered above
+#    it so that the highest-numbered would be one of them: a PR that names the plan issue and closes
+#    an issue of the milestone, which is that issue's PR; one that names it and that GitHub links to
+#    an issue outside the milestone, which its description does not name; one that names #100; and
+#    one that names another issue. Then the version PR in review, with changes requested, approved,
+#    and a second one above it, whose description says "part of"; once SQUAD.md has the milestone's
+#    version, done while one is still open; and a draft while an issue is still open.
+world && upstream 54 && plan_issue 10
+issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
+issue 2 open "Second" "👨🏼‍💻 owner:dev" "👀 status:in-review"
+open_pr 30 "**👨🏼‍💻[DEV]:** Closes #2, part of #10." 2 bbbbbbb2222 pass
+open_pr 31 "**👨🏼‍💻[DEV]:** Part of #10." 99 ccccccc3333 pass
+open_pr 32 "**👷🏼‍♂️[CTO]:** Part of #100." "" ddddddd4444 pass
+open_pr 33 "**👷🏼‍♂️[CTO]:** Part of #2." "" eeeeeee5555 pass
+run
+cat > "$lab/expected" <<EOF
+🗺️ **[v55 — the labels](https://github.com/o/r/milestone/40)** · 1 of 2 issues closed · updated $time
+
+| | 📌 Step | 👤 Who | 🚦 State | ⏭️ Next |
+|---|---|---|---|---|
+| 1 | #1 Done | DEV | ✅ closed by PR #11 | — |
+| 2 | #2 Second | DEV | 👀 PR #30 in review (\`bbbbbbb\`), CI ✅ | QA: review |
+| 3 | Version PR | CTO | ⚪ waits for #2 | — |
+| 4 | README read | CEO | ⚪ waits for the version PR | — |
+| 5 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |
+EOF
+check "PRs that name the plan issue or another, none the version PR: exit 0" bash -c '[ "$1" -eq 0 ]' _ "$code"
+check "the table is the one expected, the PR that closes #2 on its row" same "$lab/expected"
+check "the reviews of the issue's PR are read, and those of the others not" \
+  bash -c 'grep -q "pulls/30/reviews" "$1" && ! grep -q "pulls/3[123]/reviews" "$1"' _ "$CALLS"
+# `expect_version <description> <row>` runs the script and checks its Version PR row.
+expect_version() {
+  run
+  check "$1" bash -c '[ "$1" = "$2" ]' _ "$(grep -F '| Version PR |' <<<"$out")" "$2"
+}
+set_issue 2 '.state = "closed" | .closer = 30'
+expect_version "every issue closed, none of those PRs the version PR: the CTO opens it" \
+  "| 3 | Version PR | CTO | ⚪ not started | CTO: open it |"
+open_pr 20 "**👷🏼‍♂️[CTO]:** Part of #10." "" aaaaaaa1111 pending
+expect_version "the version PR open, no verdict: QA reviews it" \
+  "| 3 | Version PR | CTO | 👀 PR #20 in review (\`aaaaaaa\`), CI ⏳ | QA: review |"
+review 20 aaaaaaa1111 CHANGES-REQUESTED
+expect_version "changes requested on its head: its author answers" \
+  "| 3 | Version PR | CTO | 👀 PR #20 changes requested (\`aaaaaaa\`), CI ⏳ | CTO: answer the review |"
+review 20 aaaaaaa1111 APPROVED
+expect_version "approved: its author merges it" \
+  "| 3 | Version PR | CTO | 👀 PR #20 approved (\`aaaaaaa\`), CI ⏳ | CTO: merge |"
+open_pr 21 "**👷🏼‍♂️[CTO]:** v55, part of #10." "" fffffff6666 pass
+expect_version "two version PRs: the highest-numbered, whatever the case of its words" \
+  "| 3 | Version PR | CTO | 👀 PR #21 in review (\`fffffff\`), CI ✅ | QA: review |"
+upstream 55
+expect_version "SQUAD.md at the milestone's version, a version PR still open: done" \
+  "| 3 | Version PR | CTO | ✅ done | — |"
+world && upstream 54 && plan_issue 10
+issue 2 open "Second" "👨🏼‍💻 owner:dev"
+open_pr 20 "**👷🏼‍♂️[CTO]:** Part of #10." "" aaaaaaa1111 none draft
+expect_version "a draft version PR while an issue is still open: the row shows the draft" \
+  "| 2 | Version PR | CTO | 👀 PR #20 draft (\`aaaaaaa\`), no CI | CTO: finish the draft |"
+check "whose reviews are not read" bash -c '! grep -q "pulls/20/reviews" "$1"' _ "$CALLS"
+
+# 6. A project's README read, every issue closed: not asked yet, then waiting for the CEO.
 world
 issue 1 closed "Done" "👨🏼‍💻 owner:dev"
 plan_issue 10
@@ -327,7 +393,7 @@ expect_steps "a project, every issue closed: the CTO asks the CEO" "| 2 | README
 set_issue 10 '.labels += [{name: "👨🏻‍💼 needs-ceo"}]'
 expect_steps "a project, the plan issue labelled needs-ceo: the CEO reads it" "| 2 | README read | CEO | ⏳ waits for the CEO | CEO: read it |"
 
-# 6. --update: the table between the markers, the text around them kept; then nothing written
+# 7. --update: the table between the markers, the text around them kept; then nothing written
 #    while only the time changes, and written again when the table does.
 world
 issue 1 open "First" "👨🏼‍💻 owner:dev"
@@ -362,7 +428,7 @@ check "a state changed: it writes again" \
 run
 check "and a run without --update writes nothing" bash -c '[ "$1" -eq 0 ] && ! grep -q "^plan: " <<<"$2"' _ "$(edits)" "$out"
 
-# 7. Two plan issues, in a repository that tracks SQUAD.md: v55's, with the release's own steps, and a
+# 8. Two plan issues, in a repository that tracks SQUAD.md: v55's, with the release's own steps, and a
 #    phase's, whose milestone names no version, with the README read alone. Each gets its own
 #    milestone's table, in the order of their numbers, a blank line between them, and is written
 #    with it. A plan issue with no milestone gets one line, and nothing written.
@@ -398,7 +464,7 @@ check "each written with its own" \
   bash -c 'grep -qF "[Phase 2]" <<<"$1" && ! grep -qF "[v55" <<<"$1" && grep -qF "[v55" <<<"$2"' \
   _ "$(jq -r '.[] | select(.number == 5) | .body' "$W/issues.json")" "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json")"
 
-# 8. GitHub that cannot be read or written: exit 1, with gh's message and what failed.
+# 9. GitHub that cannot be read or written: exit 1, with gh's message and what failed.
 world && upstream 55 && issue 1 open "First" && pr 12 1 aaaaaaa1111 pass
 plan_issue 10
 while IFS='|' read -r failing message; do
@@ -419,7 +485,7 @@ releases|cannot read the Releases, as gh says above
 issue edit|cannot write the plan issue #10, as gh says above
 CASES
 
-# 9. Bad usage, and a checkout without the squad: exit 2, before anything reaches GitHub.
+# 10. Bad usage, and a checkout without the squad: exit 2, before anything reaches GitHub.
 for args in "--updat" "--update --update" "update"; do
   # shellcheck disable=SC2086 # the arguments are split on purpose
   run $args
