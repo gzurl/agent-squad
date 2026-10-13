@@ -2,7 +2,8 @@
 # The plan of each release in progress (agent-squad #370): a table the CEO reads at a glance, on a
 # phone too. A release in progress is a milestone with an open plan issue: an issue of that
 # milestone, pinned so that the CEO finds it on GitHub (SQUAD.md §3), whose description holds the
-# markers <!-- squad-plan:start --> and <!-- squad-plan:end -->. Each open plan issue gets its own
+# markers <!-- squad-plan:start --> and <!-- squad-plan:end -->, each on a line of its own, the
+# start before the end; an issue that quotes them inline is none. Each open plan issue gets its own
 # milestone's table, so that a milestone left open by mistake takes none, and a project's milestones
 # need no particular name.
 #
@@ -43,6 +44,13 @@ squad="$(dirname "$common")/.agent-squad"
 here="$(dirname "$0")"
 now="${SQUAD_NOW:-$(date +%s)}"
 markers="<!-- squad-plan:start --> and <!-- squad-plan:end -->"
+# A plan issue's markers stand on lines of their own, the start before the end: an issue that only
+# quotes them, as one that describes the plan does, is none, and a row of the table. `plan_parts`
+# splits a description into what comes before the table, the table, and what comes after; `marked`
+# tells a plan issue's description.
+plan_defs='def plan_parts: ("\n" + . + "\n")
+    | capture("^(?<before>[\\s\\S]*?\n)<!-- squad-plan:start -->\n(?<table>[\\s\\S]*?)(?<=\n)<!-- squad-plan:end -->\n(?<after>[\\s\\S]*)$");
+  def marked: [plan_parts] != [];'
 
 # 1. The open plan issues, each with its milestone. What GitHub answers goes to jq through files of
 #    a work directory.
@@ -52,8 +60,8 @@ work="$(mktemp -d "${work%/}/squad-plan.XXXXXX")" || die "cannot make a work dir
 trap 'rm -rf "$work"' EXIT
 gh api --paginate --slurp "repos/$repo/issues?state=open&per_page=100" </dev/null > "$work/open.pages" \
   || die "cannot read the open issues, as gh says above"
-jq -c 'add // [] | map(select(.pull_request == null and (.body // "" | contains("<!-- squad-plan:start -->") and contains("<!-- squad-plan:end -->"))))
-  | sort_by(.number)[] | {number, body: (.body | gsub("\r"; "")), labels: [.labels[] | {name}],
+jq -c "$plan_defs"'add // [] | map(select(.pull_request == null) | .body = (.body // "" | gsub("\r"; "")) | select(.body | marked))
+  | sort_by(.number)[] | {number, body, labels: [.labels[] | {name}],
     milestone: (.milestone | if . then {number, title, url: .html_url} else null end)}' "$work/open.pages" > "$work/plans.jsonl" \
   || die "cannot read the open issues"
 if [ ! -s "$work/plans.jsonl" ]; then
@@ -124,10 +132,10 @@ table() {
   jq -nr -L "$here" --slurpfile issues "$work/issues.json" --slurpfile prs "$work/prs.json" \
     --slurpfile verdicts "$work/verdicts.json" --slurpfile closers "$work/closers.json" \
     --argjson plan "$plan" --argjson release "$release" --argjson now "$now" '
-    include "squad-steps";
+    include "squad-steps";'"$plan_defs"'
     $issues[0] as $issues | $prs[0] as $prs | $verdicts[0] as $verdicts | $closers[0] as $closers
     | def labelled($end): any(.labels[].name; endswith($end));
-    def plan_issue: (.body | contains("<!-- squad-plan:start -->")) and (.body | contains("<!-- squad-plan:end -->"));
+    def plan_issue: .body | marked;
     def priority: if labelled("P1") then 1 elif labelled("P2") then 2 elif labelled("P3") then 3 else 4 end;
     # A title short enough for a phone, cut at a word, and safe in a table cell.
     def short: (if length > 48 then (.[0:47] | sub(" [^ ]*$"; "")) + "…" else . end) | gsub("\\|"; "\\|");
@@ -202,11 +210,11 @@ table() {
 rewrite() {
   local number
   number="$(jq -r .number <<<"$1")"
-  jq -r --arg table "$2" '"<!-- squad-plan:start -->" as $start | "<!-- squad-plan:end -->" as $end
-    | (.body | split($start)) as $parts | ($parts[1:] | join($start) | split($end)) as $rest
+  jq -r --arg table "$2" "$plan_defs"'.body | plan_parts as $parts
     | def timeless: gsub(" · updated [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}"; "") | ltrimstr("\n") | rtrimstr("\n");
-    if ($rest[0] | timeless) == ($table | timeless) then empty
-    else $parts[0] + $start + "\n" + $table + "\n" + $end + ($rest[1:] | join($end)) end' <<<"$1" > "$work/body.md"
+    if ($parts.table | timeless) == ($table | timeless) then empty
+    else $parts.before + "<!-- squad-plan:start -->\n" + $table + "\n<!-- squad-plan:end -->\n" + $parts.after | .[1:-1] end' \
+    <<<"$1" > "$work/body.md"
   if [ ! -s "$work/body.md" ]; then
     echo "plan: #$number unchanged"
   else

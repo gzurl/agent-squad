@@ -162,11 +162,17 @@ upstream() {
 }
 PLAN_BODY=$'The plan of v55.\n\n<!-- squad-plan:start -->\nnothing yet\n<!-- squad-plan:end -->\n\nThe CEO reads the README here.'
 
-# 1. No open plan issue: an open issue with one marker only, a closed one with both, and a PR whose
-#    description holds both are none. One line, exit 0, nothing read past the open issues, and
+# 1. No open plan issue: an open issue with one marker only, one that quotes both inline, as an
+#    issue describing the plan does, one with both in the wrong order, one with either marker inline
+#    and the other on a line of its own, a closed one with both, and a PR whose description holds
+#    both are none. One line, exit 0, nothing read past the open issues, and
 #    nothing written, with --update too.
 world
-issue 1 open "One marker" && set_issue 1 '.body = "<!-- squad-plan:start --> only"'
+issue 1 open "One marker" && set_issue 1 '.body = "<!-- squad-plan:start -->\nonly"'
+issue 4 open "Quotes the markers" && set_issue 4 '.body = "Its table goes between `<!-- squad-plan:start -->` and `<!-- squad-plan:end -->`."'
+issue 5 open "The markers in the wrong order" && set_issue 5 '.body = "<!-- squad-plan:end -->\n<!-- squad-plan:start -->"'
+issue 6 open "The start inline" && set_issue 6 '.body = "From `<!-- squad-plan:start -->`\n<!-- squad-plan:end -->"'
+issue 7 open "The end inline" && set_issue 7 '.body = "<!-- squad-plan:start -->\nup to <!-- squad-plan:end -->"'
 plan_issue 2 && set_issue 2 '.state = "closed"'
 plan_issue 3 && set_issue 3 '.pull_request = {}'
 for args in "" --update; do
@@ -178,23 +184,27 @@ for args in "" --update; do
 done
 
 # 2. Nothing started, in a project: rows by priority then number, a long title cut at a word, a pipe
-#    kept out of the table, an issue without an owner, and the README read waiting for the open
-#    issues, with the plan issue left out of rows and counts.
+#    kept out of the table, an issue without an owner, an issue that only quotes the markers, which
+#    is a row like any other, and the README read waiting for the open issues, with the plan issue
+#    left out of rows and counts.
 world
 issue 3 open "Third, a feature" "👨🏼‍💻 owner:dev" "🟡 P2"
 issue 1 open "First, the most urgent" "👷🏼‍♂️ owner:cto" "🔴 P1"
 issue 2 open "Second | with a pipe, and a title long enough to be cut at a word"
+issue 4 open "Quotes the markers" "👨🏼‍💻 owner:dev" "🔵 P3"
+set_issue 4 '.body = "Its table goes between `<!-- squad-plan:start -->` and `<!-- squad-plan:end -->`."'
 plan_issue 10
 run
 cat > "$lab/expected" <<EOF
-**[v55 — the labels](https://github.com/o/r/milestone/40)** · 0 of 3 issues closed · updated $time
+**[v55 — the labels](https://github.com/o/r/milestone/40)** · 0 of 4 issues closed · updated $time
 
 | | Step | Who | State | Next |
 |---|---|---|---|---|
 | 1 | #1 First, the most urgent | CTO | ⚪ not started | CTO: start it |
 | 2 | #3 Third, a feature | DEV | ⚪ not started | DEV: start it |
-| 3 | #2 Second \| with a pipe, and a title long enough… | — | ⚪ not started | CTO: give it an owner |
-| 4 | README read | CEO | ⚪ waits for #1, #2, #3 | — |
+| 3 | #4 Quotes the markers | DEV | ⚪ not started | DEV: start it |
+| 4 | #2 Second \| with a pipe, and a title long enough… | — | ⚪ not started | CTO: give it an owner |
+| 5 | README read | CEO | ⚪ waits for 4 issues | — |
 EOF
 check "nothing started, in a project: the table as expected, exit 0" bash -c '[ "$1" -eq 0 ]' _ "$code"
 check "the table is the one expected" same "$lab/expected"
@@ -331,6 +341,11 @@ set_issue 10 '.body |= gsub("\n"; "\r\n")'
 run --update
 check "a description saved with CRLF line ends, as the web page saves it, is no change either" \
   bash -c '[ "$1" -eq 0 ] && [ "$(tail -1 <<<"$2")" = "plan: #10 unchanged" ]' _ "$(edits)" "$out"
+set_issue 10 '.body = "<!-- squad-plan:start -->\n<!-- squad-plan:end -->"'
+run --update
+check "a description that holds its markers alone, nothing between them: the table goes between" \
+  bash -c '[ "$1" -eq 1 ] && [ "$2" = "<!-- squad-plan:start -->"$'\''\n'\''"$3"$'\''\n'\''"<!-- squad-plan:end -->" ]' \
+  _ "$(edits)" "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json")" "$table"
 set_issue 1 '.labels += [{name: "🚧 status:in-progress"}]'
 run --update
 check "a state changed: it writes again" \
