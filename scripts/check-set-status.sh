@@ -5,7 +5,9 @@
 # the one it adds, and leaves the other labels alone; `none` removes all four; the read-back passes
 # only on exactly the state asked for. A read-back that finds two states, or a status label with
 # another emoji, fails; so do a failed edit and a failed read, with gh's message. Bad usage exits 2
-# with nothing sent to GitHub, and the script passes gh no input of its own. Nothing reaches GitHub.
+# with nothing sent to GitHub, and the script passes gh no input of its own. A number of the other
+# kind, an issue's for a PR or the converse, is refused before anything is written (agent-squad
+# #375). Nothing reaches GitHub.
 # shellcheck disable=SC2016 # the checks' bash -c bodies take their values as arguments
 set -u
 
@@ -37,7 +39,9 @@ IN_PROGRESS="🚧 status:in-progress" IN_REVIEW="👀 status:in-review" BLOCKED=
 # `gh <issue|pr> edit <n> --add-label <l> --remove-label <l>...` applies the edit, unless
 # STUB_EDIT=fail, which fails as gh does on a label the repository lacks, or STUB_EDIT=ignored,
 # which changes nothing, as when someone else edits the labels at the same moment. `gh api
-# repos/{owner}/{repo}/issues/<n> --jq <filter>` answers with the labels, unless STUB_READ=fail.
+# repos/{owner}/{repo}/issues/<n> --jq <filter>` answers with the labels, and with a pull_request
+# key when ITEM_KIND is pr, as the API answers for a PR, unless STUB_READ=fail, which fails every
+# read, or STUB_READ=back, which fails every read after the first.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -60,9 +64,13 @@ case "$1 $2" in
     done
     echo "https://github.com/o/r/issues/1" ;;
   "api repos/{owner}/{repo}/issues/"*)
-    if [ "${STUB_READ:-}" = fail ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+    if [ "${STUB_READ:-}" = fail ] || { [ "${STUB_READ:-}" = back ] && [ "$(grep -c '^api$' "$CALLS")" -ge 2 ]; }; then
+      echo "HTTP 502: Bad Gateway" >&2
+      exit 1
+    fi
     [ "$3" = --jq ] || exit 1
-    jq -R . "$LABELS" | jq -s '{labels: map({name: .})}' | jq -r "$4" ;;
+    jq -R . "$LABELS" | jq -s --arg kind "${ITEM_KIND:-issue}" \
+      '{labels: map({name: .})} + (if $kind == "pr" then {pull_request: {}} else {} end)' | jq -r "$4" ;;
   *) exit 1 ;;
 esac
 GH
@@ -70,16 +78,23 @@ chmod +x "$lab/bin/gh"
 export PATH="$lab/bin:$PATH" LABELS="$lab/labels" CALLS="$lab/calls"
 
 # `labels <label>...` gives the item those labels; `run <args>...` runs the script on it, with an
-# input of its own, into out and code, after clearing the log.
+# input of its own, into out and code, after clearing the log. The item is of the kind the run
+# names, unless ITEM_KIND says otherwise.
 labels() { printf '%s\n' "$@" > "$LABELS"; }
 run() {
   : > "$CALLS"
-  out="$(echo "the caller's input" | "$set_status" "$@" 2>&1)"
+  out="$(echo "the caller's input" | ITEM_KIND="${ITEM_KIND:-${1:-}}" "$set_status" "$@" 2>&1)"
   code=$?
 }
-# `edited_with <arg>...` passes when the script's one edit had exactly those arguments.
+# `edited_with <arg>...` passes when the script made one edit, with exactly those arguments.
 # shellcheck disable=SC2317,SC2329 # invoked through check
-edited_with() { [ "$(sed -n '2,/^input: /p' "$CALLS" | sed '$d')" = "$(printf '%s\n' "$@")" ]; }
+edited_with() {
+  [ "$(awk '/^call$/ { block = ""; inside = 1; next }
+    inside && /^input: / { if (block ~ /^(issue|pr)\nedit\n/) printf "%s", block; inside = 0; next }
+    inside { block = block $0 "\n" }' "$CALLS")" = "$(printf '%s\n' "$@")" ]
+}
+# `calls` prints the first word of each call the last run made, in order.
+calls() { awk 'previous == "call" { printf "%s ", $0 } { previous = $0 }' "$CALLS"; }
 # `carries <label>...` passes when the item's labels are those, in any order.
 # shellcheck disable=SC2317,SC2329 # invoked through check
 carries() { [ "$(sort "$LABELS")" = "$(printf '%s\n' "$@" | sort)" ]; }
@@ -102,8 +117,8 @@ for kind in issue pr; do
     check "$kind $state: exit 0, saying so" bash -c '[ "$1" -eq 0 ] && [ "$2" = "$3" ]' _ "$code" "$out" "status: $name is $label"
     check "$kind $state: one edit, which adds the label and removes the other three, never the one it adds" \
       edited_with "$kind" edit 12 --add-label "$label" "${others[@]}"
-    check "$kind $state: then one read-back, and no other call" \
-      bash -c '[ "$(grep -c "^call$" "$1")" -eq 2 ] && grep -qxF "repos/{owner}/{repo}/issues/12" "$1"' _ "$CALLS"
+    check "$kind $state: a read of its kind before the edit, a read-back after it, and no other call" \
+      bash -c '[ "$1" = "api $2 api " ] && [ "$(grep -cxF "repos/{owner}/{repo}/issues/12" "$3")" -eq 2 ]' _ "$(calls)" "$kind" "$CALLS"
     check "$kind $state: the item carries the label, and its other labels as they were" carries "🔴 P1" "$label" "👨🏼‍💻 owner:dev"
   done
 done
@@ -148,14 +163,30 @@ STUB_EDIT=fail run issue 5 blocked
 check "a failed edit: exit 1, with gh's message" \
   bash -c '[ "$1" -eq 1 ] && grep -qxF "failed to update https://github.com/o/r/issues/5: '\''⛔ status:blocked'\'' not found" <<<"$2"' _ "$code" "$out"
 check "and what the item carries, read back" has "status FAILED: cannot edit issue #5, as gh says above; it carries $IN_PROGRESS"
-STUB_READ=fail run pr 5 approved
-check "a failed read: exit 1, with gh's message, and nothing more" \
+STUB_READ=back run pr 5 approved
+check "a failed read-back: exit 1, with gh's message, and nothing more" \
   bash -c '[ "$1" -eq 1 ] && [ "$2" = "HTTP 502: Bad Gateway"$'\''\n'\''"status FAILED: cannot read the labels of PR #5, as gh says above" ]' _ "$code" "$out"
-STUB_EDIT=fail STUB_READ=fail run issue 5 none
+STUB_EDIT=fail STUB_READ=back run issue 5 none
 check "both: exit 1, naming both, and nothing more" \
   bash -c '[ "$1" -eq 1 ] && [ "$(tail -1 <<<"$2")" = "status FAILED: cannot edit issue #5, as gh says above; cannot read the labels of issue #5, as gh says above" ] && [ "$(grep -c "^status" <<<"$2")" -eq 1 ]' _ "$code" "$out"
 
-# 6. Bad usage exits 2, saying why and how to use it, before anything reaches GitHub.
+# 6. A number of the other kind is refused before anything is written (agent-squad #375): the
+#    API answers issues/<n> for a PR too, and gh issue edit would edit it. So is an item whose kind
+#    cannot be read.
+labels "$IN_REVIEW"
+ITEM_KIND="pr" run issue 372 none
+check "an issue command on a PR's number: exit 1, saying so" \
+  bash -c '[ "$1" -eq 1 ] && [ "$2" = "status FAILED: #372 is a PR, not an issue; nothing was written" ]' _ "$code" "$out"
+check "after one read, and no edit" bash -c '[ "$1" = "api " ]' _ "$(calls)"
+check "the PR keeps its state" carries "$IN_REVIEW"
+ITEM_KIND="issue" run pr 367 approved
+check "a PR command on an issue's number: exit 1, saying so, and no edit" \
+  bash -c '[ "$1" -eq 1 ] && [ "$2" = "status FAILED: #367 is an issue, not a PR; nothing was written" ] && [ "$3" = "api " ]' _ "$code" "$out" "$(calls)"
+STUB_READ=fail run issue 5 none
+check "an item whose kind cannot be read: exit 1, with gh's message, and no edit" \
+  bash -c '[ "$1" -eq 1 ] && [ "$2" = "HTTP 502: Bad Gateway"$'\''\n'\''"status FAILED: cannot read issue #5, as gh says above; nothing was written" ] && [ "$3" = "api " ]' _ "$code" "$out" "$(calls)"
+
+# 7. Bad usage exits 2, saying why and how to use it, before anything reaches GitHub.
 usage="usage: squad-set-status.sh <issue|pr> <number> <in-progress|in-review|blocked|approved|none>"
 while IFS='|' read -r reason args; do
   # shellcheck disable=SC2086 # the arguments are split on purpose
