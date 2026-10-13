@@ -1,5 +1,24 @@
 # Changelog
 
+## v56 — 2026-10-13
+- **A release's version PR names its plan issue, and closes none** (#384, the CEO's decision).
+  v55's plan showed the version step twice: the row of #380, an issue opened only so that the
+  version PR had one to close, and the table's own *Version PR* row.
+  - **The charter's exception:** §3's *Every PR MUST close an issue* exempts a release's version
+    PR, the one that sets the release's version and writes its CHANGELOG entry. It names the plan
+    issue with `Part of #N` instead, since the plan issue stays open until the release is out.
+    §4.2's and §5's first checklist items say the same. The plan issue takes no status label from
+    it, and stays open after its merge: §4.2's last item and §4.9's clean-up act only on an issue
+    the PR closes.
+  - **The plan's *Version PR* row shows the open version PR** as an issue's row shows its PR: its
+    number, whether it is a draft, in review, approved or has changes requested, its head, its CI,
+    and whose the next step is. `squad-plan.sh` takes for it the open PR that names the plan issue
+    with `Part of #N` and closes no issue, the highest-numbered of several. In a project, whose
+    plan has no *Version PR* row, the table stays as it was.
+- **Upgrading from v55:** restart the three sessions, as `/squad-upgrade` asks, since charter rules
+  change (§3, §4.2, §4.9, §5). Nothing else: no label, file or setting changes. The exception binds
+  once v56 is installed, so v56's own PR still closed its issue.
+
 ## v55 — 2026-10-13
 - **A status label is set in one command, and read back** (#367, found by rogue-trader's DEV). An
   issue there was closed carrying two states, after a `gh issue edit` whose result went unread,

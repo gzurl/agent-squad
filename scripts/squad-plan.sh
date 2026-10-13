@@ -12,9 +12,10 @@
 # squad-steps.jq, which the stall detector shares. Then the release's own steps: the CEO's read of
 # the README, which SQUAD.md §3 asks of every milestone, and, where the repository tracks SQUAD.md
 # with a Version: line, as the method's own repository does, and the milestone's title starts with
-# vN, the version PR before it, and the tag, the Release and the install here after it. Everything
-# comes from GitHub, except the install, which comes from .agent-squad/install.log of the main
-# checkout.
+# vN, the version PR before it, and the tag, the Release and the install here after it. While the
+# version PR is open, its row shows it as an issue's row shows its PR: the version PR names the plan
+# issue ("Part of #N") and closes no issue (SQUAD.md §3, agent-squad #384). Everything comes from
+# GitHub, except the install, which comes from .agent-squad/install.log of the main checkout.
 #
 # --update rewrites what lies between each plan issue's markers, and only when the table changed,
 # its time left out. Editing a description notifies nobody, and updates by several agents converge,
@@ -106,12 +107,18 @@ table() {
       value: (.timelineItems.nodes[0].closer // {} | .number // .associatedPullRequests.nodes[0].number)}] | from_entries' \
     "$work/closers.pages" > "$work/closers.json" || die "cannot read the PRs that closed the milestone's issues"
 
-  # The open PRs that close one of its issues, and the latest verdict on each.
+  # The open PRs that close one of its issues; the release's version PR, the open PR that names the
+  # plan issue ("Part of #N") and closes no issue, the highest-numbered of several, as a list of one
+  # or none (agent-squad #384); and the latest verdict on each.
   jq -c -L "$here" --slurpfile issues "$work/issues.json" 'include "squad-steps";
     [$issues[0][].number] as $ours | map(select(any(closes[]; IN($ours[]))))' "$work/open-prs.json" > "$work/prs.json" \
     || die "cannot read the open pull requests"
+  jq -c -L "$here" --argjson plan_issue "$(jq .number <<<"$plan")" 'include "squad-steps";
+    map(select(closes == [] and any(.body // "" | scan("(?i)\\bpart of #([0-9]+)"); .[0] | tonumber == $plan_issue)))
+    | sort_by(.number) | .[-1:]' "$work/open-prs.json" > "$work/version-pr.json" \
+    || die "cannot read the open pull requests"
   : > "$work/verdicts.jsonl"
-  for pr in $(jq -r '.[] | select(.isDraft | not) | .number' "$work/prs.json"); do
+  for pr in $(jq -r '.[] | select(.isDraft | not) | .number' "$work/prs.json" "$work/version-pr.json"); do
     gh api --paginate --slurp "repos/$repo/pulls/$pr/reviews" </dev/null > "$work/reviews.json" \
       || die "cannot read the reviews of PR #$pr, as gh says above"
     jq -c -L "$here" --arg n "$pr" 'include "squad-steps"; {($n): latest_verdict}' "$work/reviews.json" >> "$work/verdicts.jsonl" \
@@ -137,10 +144,11 @@ table() {
   # The table, in the CEO's format (agent-squad #370): a title line, then one row per issue, then
   # the release's own steps, all in English; the CTO translates the cells in its terminal.
   jq -nr -L "$here" --slurpfile issues "$work/issues.json" --slurpfile prs "$work/prs.json" \
-    --slurpfile verdicts "$work/verdicts.json" --slurpfile closers "$work/closers.json" \
-    --argjson plan "$plan" --argjson release "$release" --argjson now "$now" '
+    --slurpfile version_prs "$work/version-pr.json" --slurpfile verdicts "$work/verdicts.json" \
+    --slurpfile closers "$work/closers.json" --argjson plan "$plan" --argjson release "$release" --argjson now "$now" '
     include "squad-steps";'"$plan_defs"'
-    $issues[0] as $issues | $prs[0] as $prs | $verdicts[0] as $verdicts | $closers[0] as $closers
+    $issues[0] as $issues | $prs[0] as $prs | $version_prs[0][0] as $version_pr | $verdicts[0] as $verdicts
+    | $closers[0] as $closers
     | def labelled($end): any(.labels[].name; endswith($end));
     def plan_issue: .body | marked;
     def priority: if labelled("P1") then 1 elif labelled("P2") then 2 elif labelled("P3") then 3 else 4 end;
@@ -153,8 +161,17 @@ table() {
         elif any($results[]; IN("FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE")) then "CI ❌"
         elif any($results[]; IN("PENDING", "EXPECTED")) then "CI ⏳"
         else "CI ✅" end;
+    # An open PR: where it stands, with its head and its CI, and its next step and whose it is, the
+    # step the stall detector gives a PR.
+    def pr_cells:
+      $verdicts[.number | tostring] as $v | pr_step($verdicts) as $step
+      | {state: ("👀 PR #\(.number) "
+          + (if .isDraft then "draft" elif $v == null or $v.commit != .headRefOid then "in review"
+             elif $v.verdict == "APPROVED" then "approved" else "changes requested" end)
+          + " (`\(.headRefOid[0:7])`), \(ci)"),
+         next: (if $step.owner == "requested" then $step.short else "\($step.owner): \($step.short)" end)};
     # An issue: where it stands, and its next step and whose it is. Its open PR, the latest that
-    # closes it, takes the step the stall detector gives a PR.
+    # closes it, stands for it.
     def row:
       . as $issue | owner as $owner
       | ([$prs[] | select(any(closes[]; . == $issue.number))] | sort_by(.number) | last) as $pr
@@ -162,13 +179,7 @@ table() {
            {state: ("✅ closed" + ($closers[.number | tostring] // null | if . then " by PR #\(.)" else "" end)), next: "—"}
          elif labelled("needs-ceo") then {state: "👨🏻‍💼 waits for the CEO", next: "CEO: decide"}
          elif labelled("status:blocked") then {state: "⛔ blocked", next: "\($owner // "CTO"): unblock it"}
-         elif $pr != null then
-           $verdicts[$pr.number | tostring] as $v | ($pr | pr_step($verdicts)) as $step
-           | {state: ("👀 PR #\($pr.number) "
-               + (if $pr.isDraft then "draft" elif $v == null or $v.commit != $pr.headRefOid then "in review"
-                  elif $v.verdict == "APPROVED" then "approved" else "changes requested" end)
-               + " (`\($pr.headRefOid[0:7])`), \($pr | ci)"),
-              next: (if $step.owner == "requested" then $step.short else "\($step.owner): \($step.short)" end)}
+         elif $pr != null then $pr | pr_cells
          elif labelled("status:in-progress") then issue_step as $step | {state: "🚧 in progress", next: "\($step.owner): \($step.short)"}
          elif labelled("status:in-review") then issue_step as $step | {state: "👀 in review, no open PR", next: "\($step.owner): \($step.short)"}
          elif $owner == null then {state: "⚪ not started", next: "CTO: give it an owner"}
@@ -181,16 +192,19 @@ table() {
        else "waits for \($open | join(", "))" end) as $waits
     | ($plan | labelled("needs-ceo")) as $asked
     # The release'"'"'s own steps: the README read everywhere; the version PR, the tag, the Release
-    # and the install where the repository tracks SQUAD.md with a Version: line.
+    # and the install where the repository tracks SQUAD.md with a Version: line. The version PR,
+    # while it is open, shows as an issue'"'"'s PR does, whether the milestone'"'"'s issues are closed or not.
     | (if $release == null then
          [{step: "README read", who: "CEO",
            state: (if $asked then "⏳ waits for the CEO" elif $waits then "⚪ \($waits)" else "⚪ not asked yet" end),
            next: (if $asked then "CEO: read it" elif $waits then "—" else "CTO: ask the CEO" end)}]
        else
          ($release.charter >= $release.version) as $versioned
-         | [{step: "Version PR", who: "CTO",
-             state: (if $versioned then "✅ done" elif $waits then "⚪ \($waits)" else "⚪ not started" end),
-             next: (if $versioned or $waits then "—" else "CTO: open it" end)},
+         | [{step: "Version PR", who: "CTO"}
+            + (if $versioned then {state: "✅ done", next: "—"}
+               elif $version_pr != null then $version_pr | pr_cells
+               elif $waits then {state: "⚪ \($waits)", next: "—"}
+               else {state: "⚪ not started", next: "CTO: open it"} end),
             {step: "README read", who: "CEO",
              state: (if $release.tagged then "✅ done" elif $asked then "⏳ waits for the CEO"
                      elif $versioned | not then "⚪ waits for the version PR" else "⚪ not asked yet" end),
