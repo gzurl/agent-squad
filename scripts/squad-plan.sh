@@ -23,14 +23,18 @@
 # step with its milestone (agent-squad #391): each issue of the milestone, open or closed, the plan
 # issues left out, is one, and a sub-issue that left the milestone is removed. An issue with
 # another parent stays under it: GitHub refuses a second parent, and moving it could undo someone's
-# structure. The sub-issues go through gh api, which any gh can call.
+# structure. GitHub allows 100 sub-issues per issue, so those past that stay out, said on the line.
+# Sub-issues are matched by id, and parents by URL, since either may be another repository's. They
+# go through gh api, which any gh can call. A sub-issue that cannot be read or written stops no
+# other plan: every table is still written, and the run ends with exit status 1.
 #
 # Usage: squad-plan.sh [--update]
 # Output: each table, in Markdown, a blank line between two; with --update, after each table, one
 #   line: "plan: #371 updated" or "plan: #371 unchanged", then what changed in its sub-issues, as
-#   "; sub-issues added: #12, #13", "; sub-issues removed: #9", and "; #14 left under its parent
-#   #20" for an issue with another parent. A plan issue with no milestone gets one line that says
-#   so, and with no open plan issue, one line says so, and nothing else.
+#   "; sub-issues added: #12, #13", "; sub-issues removed: #9", "; #30 not added: GitHub allows
+#   100 sub-issues", past three issues their count, and "; #14 left under its parent #20" for an
+#   issue with another parent. A plan issue with no milestone gets one line that says so, and with
+#   no open plan issue, one line says so, and nothing else.
 # Exit: 0 done; 1 GitHub could not be read, or a plan issue or its sub-issues could not be
 #   written, with gh's message; 2 bad usage, or not run from a checkout of a project the squad is
 #   installed in.
@@ -52,6 +56,8 @@ squad="$(dirname "$common")/.agent-squad"
 here="$(dirname "$0")"
 now="${SQUAD_NOW:-$(date +%s)}"
 markers="<!-- squad-plan:start --> and <!-- squad-plan:end -->"
+# GitHub's limit on an issue's sub-issues (its documentation, "Adding sub-issues").
+limit=100
 # A plan issue's markers stand on lines of their own, the start before the end: an issue that only
 # quotes them, as one that describes the plan does, is none, and a row of the table. `plan_parts`
 # splits a description into what comes before the table, the table, and what comes after; `marked`
@@ -69,7 +75,7 @@ trap 'rm -rf "$work"' EXIT
 gh api --paginate --slurp "repos/$repo/issues?state=open&per_page=100" </dev/null > "$work/open.pages" \
   || die "cannot read the open issues, as gh says above"
 jq -c "$plan_defs"'add // [] | map(select(.pull_request == null) | .body = (.body // "" | gsub("\r"; "")) | select(.body | marked))
-  | sort_by(.number)[] | {number, body, labels: [.labels[] | {name}],
+  | sort_by(.number)[] | {number, url, body, labels: [.labels[] | {name}],
     milestone: (.milestone | if . then {number, title, url: .html_url} else null end)}' "$work/open.pages" > "$work/plans.jsonl" \
   || die "cannot read the open issues"
 if [ ! -s "$work/plans.jsonl" ]; then
@@ -93,15 +99,15 @@ fi
 table() {
   local plan="$1" number version release=null tagged installed
   number="$(jq -r .milestone.number <<<"$plan")"
-  # Its issues, open and closed, each with its id and the number of its parent, if it has one, for
-  # the sub-issues; and the PR that closed each closed one, from its closing event: the PR itself,
+  # Its issues, open and closed, each with its id and its parent's URL, if it has one, for the
+  # sub-issues; and the PR that closed each closed one, from its closing event: the PR itself,
   # or the PR of the commit that closed it, as a squash merge's commit (QA's finding on PR #377).
   # The closed issues come by pages of 100, as the issues do.
   gh api --paginate --slurp "repos/$repo/issues?milestone=$number&state=all&per_page=100" </dev/null > "$work/issues.pages" \
     || die "cannot read the issues of the milestone, as gh says above"
   jq -c 'add // [] | map(select(.pull_request == null)
     | {number, id, title, state, body: (.body // "" | gsub("\r"; "")), labels: [.labels[] | {name}],
-       parent: ((.parent_issue_url // "" | capture("/issues/(?<n>[0-9]+)$").n | tonumber) // null)})' \
+       parent: .parent_issue_url})' \
     "$work/issues.pages" > "$work/issues.json" || die "cannot read the issues of the milestone"
   # shellcheck disable=SC2016 # the $ are GraphQL's variables
   gh api graphql --paginate --slurp -F owner="${repo%%/*}" -F name="${repo#*/}" -F milestone="$number" -f query='
@@ -255,37 +261,45 @@ rewrite() {
 
 # `adopt <plan issue>` makes the plan issue's sub-issues its milestone's issues, as table() last
 # read them (agent-squad #391), and says what changed, as the end of the plan issue's line: the
-# issues it added, the sub-issues it removed, and each issue left under another parent.
+# issues it added, the sub-issues it removed, the issues GitHub's limit keeps out, and each issue
+# left under another parent. A sub-issue or a parent of another repository is named with it.
 adopt() {
   local number pair
   number="$(jq -r .number <<<"$1")"
   gh api --paginate --slurp "repos/$repo/issues/$number/sub_issues?per_page=100" </dev/null > "$work/subs.pages" \
     || die "cannot read the sub-issues of #$number, as gh says above"
-  jq -c --argjson plan "$number" --slurpfile subs "$work/subs.pages" "$plan_defs"'
-    ($subs[0] | add // [] | map({number, id})) as $subs
-    | map(select(.body | marked | not)) as $items
-    | {add: [$items[] | select(.parent == null and (.number | IN($subs[].number) | not)) | {number, id}],
-       remove: [$subs[] | select(.number | IN($items[].number) | not)],
-       others: [$items[] | select(.parent != null and .parent != $plan) | {number, parent}]}
-    | map_values(sort_by(.number))' "$work/issues.json" > "$work/adopt.json" \
-    || die "cannot read the sub-issues of #$number"
+  jq -c --arg plan "$(jq -r .url <<<"$1")" --arg repo "$repo" --argjson limit "$limit" --slurpfile subs "$work/subs.pages" "$plan_defs"'
+    # An issue as the line names it, from its repository and number: "#12", or "owner/name#12".
+    def named($r; $n): if $r == $repo then "#\($n)" else "\($r)#\($n)" end;
+    ($subs[0] | add // [] | map({id, number, name: named(.repository_url // "" | sub("^.*/repos/"; ""); .number)})) as $subs
+    | map(select(.body | marked | not) | {id, number, name: "#\(.number)", parent}) | sort_by(.number) as $items
+    | [$subs[] | select(.id | IN($items[].id) | not)] as $remove
+    | [$items[] | select(.parent == null and (.id | IN($subs[].id) | not))] as $missing
+    | ([$limit - ($subs | length) + ($remove | length), 0] | max) as $room
+    | {add: $missing[:$room], full: $missing[$room:], remove: ($remove | sort_by(.name)),
+       others: [$items[] | select(.parent != null and .parent != $plan)
+         | .parent |= (capture("/repos/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)$") | named(.r; .n))]}' \
+    "$work/issues.json" > "$work/adopt.json" || die "cannot read the sub-issues of #$number"
+  for pair in $(jq -r '.remove[] | "\(.name):\(.id)"' "$work/adopt.json"); do
+    gh api -X DELETE "repos/$repo/issues/$number/sub_issue" -F sub_issue_id="${pair##*:}" </dev/null >/dev/null \
+      || die "cannot remove ${pair%:*} from the sub-issues of #$number, as gh says above"
+  done
   for pair in $(jq -r '.add[] | "\(.number):\(.id)"' "$work/adopt.json"); do
     gh api -X POST "repos/$repo/issues/$number/sub_issues" -F sub_issue_id="${pair#*:}" </dev/null >/dev/null \
       || die "cannot add #${pair%%:*} to the sub-issues of #$number, as gh says above"
   done
-  for pair in $(jq -r '.remove[] | "\(.number):\(.id)"' "$work/adopt.json"); do
-    gh api -X DELETE "repos/$repo/issues/$number/sub_issue" -F sub_issue_id="${pair#*:}" </dev/null >/dev/null \
-      || die "cannot remove #${pair%%:*} from the sub-issues of #$number, as gh says above"
-  done
-  jq -r 'def numbers: map("#\(.number)") | join(", ");
-    [(if .add != [] then "sub-issues added: \(.add | numbers)" else empty end),
-     (if .remove != [] then "sub-issues removed: \(.remove | numbers)" else empty end),
-     (.others[] | "#\(.number) left under its parent #\(.parent)")] | map("; " + .) | join("")' "$work/adopt.json"
+  jq -r --argjson limit "$limit" '# The issues a line names: each, or past three, how many.
+    def names: if length > 3 then "\(length) issues" else map(.name) | join(", ") end;
+    [(if .add != [] then "sub-issues added: \(.add | names)" else empty end),
+     (if .remove != [] then "sub-issues removed: \(.remove | names)" else empty end),
+     (if .full != [] then "\(.full | names) not added: GitHub allows \($limit) sub-issues" else empty end),
+     (.others[] | "\(.name) left under its parent \(.parent)")] | map("; " + .) | join("")' "$work/adopt.json"
 }
 
 # 3. Each plan issue's table, and with --update, the table written into it and its sub-issues kept
-#    in step, on one line.
-first=true
+#    in step, on one line. Sub-issues that cannot be read or written leave the other plans to be
+#    written, and the run exits 1 at its end.
+first=true failed=false
 while IFS= read -r plan; do
   $first || echo
   first=false
@@ -297,7 +311,8 @@ while IFS= read -r plan; do
   echo "$text"
   if $update; then
     written="$(rewrite "$plan" "$text")" || exit 1
-    related="$(adopt "$plan")" || exit 1
+    related="$(adopt "$plan")" || failed=true
     echo "plan: #$(jq -r .number <<<"$plan") $written$related"
   fi
 done < "$work/plans.jsonl"
+! $failed || exit 1

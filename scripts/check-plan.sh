@@ -87,14 +87,16 @@ case "$endpoint" in
   "repos/o/r/issues?milestone="*"&state=all&per_page=100")
     milestone="${endpoint#repos/o/r/issues?milestone=}"
     json="$(jq --argjson m "${milestone%%&*}" 'map(select(.milestone == $m)
-      | .parent_issue_url = (if .parent then "https://api.github.com/repos/o/r/issues/\(.parent)" else null end)
+      | .parent_issue_url = (if .parent | type == "string" then .parent
+          elif .parent then "https://api.github.com/repos/o/r/issues/\(.parent)" else null end)
       | del(.closer, .commit, .milestone, .parent))' "$W/issues.json")" ;;
-  # The sub-issues (agent-squad #391): an issue's are those whose parent it is. Adding one that
-  # already has a parent fails, as GitHub refuses a second parent, and removing one that is not
-  # there fails too. Both take the sub-issue's id, not its number.
+  # The sub-issues (agent-squad #391): an issue's are those whose parent it is, of any repository.
+  # Adding one that already has a parent fails, as GitHub refuses a second parent, and so does
+  # adding a 101st, past GitHub's limit; removing one that is not there fails too. Both take the
+  # sub-issue's id, not its number.
   "repos/o/r/issues/"*"/sub_issues?per_page=100")
     parent="${endpoint#repos/o/r/issues/}"
-    json="$(jq --argjson p "${parent%%/*}" '[.[] | select(.parent == $p) | {number, id, state, title}]' "$W/issues.json")" ;;
+    json="$(jq --argjson p "${parent%%/*}" '[.[] | select(.parent == $p) | {number, id, state, title, repository_url}]' "$W/issues.json")" ;;
   repos/o/r/issues/*/sub_issues|repos/o/r/issues/*/sub_issue)
     parent="${endpoint#repos/o/r/issues/}" parent="${parent%%/*}"
     case "$method:$endpoint" in
@@ -102,7 +104,8 @@ case "$endpoint" in
       DELETE:*/sub_issue) before="$parent" after=null ;;
       *) exit 1 ;;
     esac
-    jq -e --argjson id "$sub" --argjson before "$before" 'any(.[]; .id == $id and .parent == $before)' "$W/issues.json" >/dev/null \
+    jq -e --argjson id "$sub" --argjson before "$before" --argjson after "$after" \
+      'any(.[]; .id == $id and .parent == $before) and ($after == null or ([.[] | select(.parent == $after)] | length) < 100)' "$W/issues.json" >/dev/null \
       || { echo "HTTP 422: Validation Failed" >&2; exit 1; }
     jq --argjson id "$sub" --argjson after "$after" 'map(if .id == $id then .parent = $after else . end)' "$W/issues.json" > "$W/issues.new"
     mv "$W/issues.new" "$W/issues.json"
@@ -153,7 +156,8 @@ world() {
 issue() {
   jq --argjson n "$1" --arg state "$2" --arg title "$3" --argjson m "${M:-40}" '. + [{number: $n, id: (9000 + $n), state: $state,
       title: $title, body: "", milestone: $m, parent: null, labels: [$ARGS.positional[] | {name: .}],
-      html_url: "https://github.com/o/r/issues/\($n)"}]' \
+      html_url: "https://github.com/o/r/issues/\($n)", url: "https://api.github.com/repos/o/r/issues/\($n)",
+      repository_url: "https://api.github.com/repos/o/r"}]' \
     "$W/issues.json" --args "${@:4}" > "$W/new"
   mv "$W/new" "$W/issues.json"
 }
@@ -490,10 +494,8 @@ check "each written with its own" \
   bash -c 'grep -qF "[Phase 2]" <<<"$1" && ! grep -qF "[v55" <<<"$1" && grep -qF "[v55" <<<"$2"' \
   _ "$(jq -r '.[] | select(.number == 5) | .body' "$W/issues.json")" "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json")"
 
-# 9. GitHub that cannot be read or written: exit 1, with gh's message and what failed. #2, a
-#    sub-issue of the plan that left its milestone, is to be removed, after #1 is added.
+# 9. GitHub that cannot be read or written: exit 1, with gh's message and what failed.
 world && upstream 55 && issue 1 open "First" && pr 12 1 aaaaaaa1111 pass
-M=42 issue 2 open "Moved away" && set_issue 2 '.parent = 10'
 plan_issue 10
 while IFS='|' read -r failing message; do
   STUB_FAIL="$failing" run --update
@@ -511,6 +513,18 @@ contents/SQUAD.md|cannot read SQUAD.md, as gh says above
 matching-refs|cannot read the tags, as gh says above
 releases|cannot read the Releases, as gh says above
 issue edit|cannot write the plan issue #10, as gh says above
+CASES
+#    Sub-issues that cannot be read, added or removed stop no other plan (QA's finding on PR #393):
+#    the later plan, #12, still gets its table, and the run exits 1 at its end. #2, a sub-issue of
+#    #10 that left its milestone, is to be removed, and #1 added.
+while IFS='|' read -r failing message; do
+  world && issue 1 open "First" && M=42 issue 2 open "Moved away" && set_issue 2 '.parent = 10'
+  plan_issue 10 && M=42 plan_issue 12
+  STUB_FAIL="$failing" run --update
+  check "$failing failing: exit 1, $message, and the later plan still written" \
+    bash -c '[ "$1" -eq 1 ] && grep -qxF "HTTP 502: Bad Gateway" <<<"$2" && grep -qxF "plan: $3" <<<"$2" && grep -q "^plan: #12 updated" <<<"$2" \
+      && grep -qF "[Phase 2]" <<<"$4"' _ "$code" "$out" "$message" "$(jq -r '.[] | select(.number == 12) | .body' "$W/issues.json")"
+done <<'CASES'
 sub_issues?per_page|cannot read the sub-issues of #10, as gh says above
 -X POST|cannot add #1 to the sub-issues of #10, as gh says above
 -X DELETE|cannot remove #2 from the sub-issues of #10, as gh says above
@@ -563,5 +577,46 @@ run --update
 check "run again: nothing written, and the line says only what stays under another parent" \
   bash -c '[ "$1" -eq 0 ] && [ "$(tail -1 <<<"$2")" = "plan: #10 unchanged; #3 left under its parent #50" ] && [ "$3" -eq 0 ] && [ "$4" -eq 0 ]' \
   _ "$code" "$out" "$(adoptions)" "$(edits)"
+
+#     GitHub allows 100 sub-issues per issue (QA's finding on PR #393): a milestone of 102 closed
+#     issues gets its first 100, the line names the two left out, and the exit status stays 0. The
+#     later plan still gets its table and its sub-issue. Run again, nothing is written.
+world
+M=42 plan_issue 5
+jq '. + [range(100; 202) | {number: ., id: (9000 + .), state: "closed", title: "Old \(.)", body: "", milestone: 42,
+  parent: null, labels: [], html_url: "https://github.com/o/r/issues/\(.)", url: "https://api.github.com/repos/o/r/issues/\(.)",
+  repository_url: "https://api.github.com/repos/o/r"}]' "$W/issues.json" > "$W/new" && mv "$W/new" "$W/issues.json"
+issue 1 open "First" && plan_issue 10
+run --update
+check "past GitHub's 100 sub-issues, the rest are named on the line, exit 0, and the later plan is written" \
+  bash -c '[ "$1" -eq 0 ] && grep -qxF "plan: #5 updated; sub-issues added: 100 issues; #200, #201 not added: GitHub allows 100 sub-issues" <<<"$2" \
+    && grep -qxF "plan: #10 updated; sub-issues added: #1" <<<"$2" && [ "$3" -eq 100 ]' \
+  _ "$code" "$out" "$(jq '[.[] | select(.parent == 5)] | length' "$W/issues.json")"
+run --update
+check "run again: nothing written, the two still named" \
+  bash -c '[ "$1" -eq 0 ] && grep -qxF "plan: #5 unchanged; #200, #201 not added: GitHub allows 100 sub-issues" <<<"$2" && [ "$3" -eq 0 ]' \
+  _ "$code" "$out" "$(adoptions)"
+#     #100 leaves the milestone: it is removed before #200 is added, which makes room for it, at 100.
+set_issue 100 '.milestone = null'
+run --update
+check "a sub-issue that left is removed first, which makes room for the next issue, at 100" \
+  bash -c '[ "$1" -eq 0 ] && grep -qxF "plan: #5 updated; sub-issues added: #200; sub-issues removed: #100; #201 not added: GitHub allows 100 sub-issues" <<<"$2" && [ "$3" -eq 100 ]' \
+  _ "$code" "$out" "$(jq '[.[] | select(.parent == 5)] | length' "$W/issues.json")"
+
+#     Sub-issues are matched by id and parents by URL, since either may be another repository's
+#     (QA's finding on PR #393): another repository's #1, a sub-issue of the plan, is removed and
+#     named with its repository, and this repository's #1 is still added; #2, under another
+#     repository's #10, is left there, not taken for the plan's child.
+world
+plan_issue 10
+issue 1 open "Ours" && issue 2 open "Under another repository's #10"
+set_issue 2 '.parent = "https://api.github.com/repos/other/r/issues/10"'
+jq '. + [{number: 1, id: 7001, state: "open", title: "Theirs", body: "", milestone: null, parent: 10, labels: [],
+  html_url: "https://github.com/other/r/issues/1", url: "https://api.github.com/repos/other/r/issues/1",
+  repository_url: "https://api.github.com/repos/other/r"}]' "$W/issues.json" > "$W/new" && mv "$W/new" "$W/issues.json"
+run --update
+check "another repository's sub-issue and parent are told apart from this one's by id and URL" \
+  bash -c '[ "$1" -eq 0 ] && [ "$(tail -1 <<<"$2")" = "plan: #10 updated; sub-issues added: #1; sub-issues removed: other/r#1; #2 left under its parent other/r#10" ]' \
+  _ "$code" "$out"
 
 exit "$status"

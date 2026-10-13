@@ -258,8 +258,9 @@ repository's issues. It holds a table of the release: one row per issue, with wh
 whose the next step is, then the release's own steps, such as your read of the README. The table
 changes whenever an agent changes the state of an issue or a pull request, and at every pass of
 `/squad-watch`, so that you can follow the release from your phone. `/squad-resume` shows you the
-same table. The plan issue also lists the release's issues as its sub-issues, with GitHub's bar of
-how many are done, and each of them names the plan issue as its parent.
+same table. The plan issue also lists the release's issues as its sub-issues, up to the 100
+GitHub allows, with GitHub's bar of how many are done, and each of them names the plan issue as its
+parent.
 
 Whenever the CTO reports on the agents, during these commands or when you ask how they are doing,
 each agent gets a line of its own, always in the order CTO, DEV, QA, with an emoji for its state:
