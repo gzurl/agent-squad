@@ -6,8 +6,11 @@
 # content block, and a forked session copies the responses of the one it came from.
 #
 # By default it reports the project it runs from: the sessions launched from its main checkout,
-# whatever their names. --all reports every project on the machine, one block per project, and the
-# sessions whose names carry no role as "other sessions"; --project <name> reports that block only.
+# whatever their names. When neither a transcript directory nor the history has that project, it
+# says where it looked and stops, rather than report that nothing was used (agent-squad #389).
+# --all reports every project on the machine, one block per project, and the sessions whose names
+# carry no role as "other sessions"; --project <name> reports that block only. Both read the
+# sessions' names, not their directories.
 #
 # Every run merges what the transcripts hold into .agent-squad/tokens.tsv of the main checkout,
 # which git ignores, so that the history outlives Claude Code's cleanup of old transcripts, and
@@ -17,8 +20,9 @@
 #
 # Usage: squad-tokens.sh [--all | --project <name>] [--since <YYYY-MM-DD | Nd>] [--by-day] [--tsv]
 # Exit: 0 reported; 1 a transcript or the history could not be read, which is how a change in
-#       their format shows (nothing is counted as zero); 2 bad usage, or not run from a checkout
-#       of a project the squad is installed in.
+#       their format shows (nothing is counted as zero), or, by default, neither a transcript
+#       directory nor the history has the project; 2 bad usage, or not run from a checkout of a
+#       project the squad is installed in.
 set -euo pipefail
 
 usage() { sed -n 's/^# Usage: //p' "$0" | sed 's/^/usage: /' >&2; exit 2; }
@@ -52,9 +56,19 @@ history="$root/.agent-squad/tokens.tsv"
 header=$'day\tdir\tsession\ttranscript\tagent\tmodel\tresponses\tinput\tcache_write\tcache_read\toutput'
 
 # Claude Code keeps a session's transcript in a directory named after the directory it was
-# launched from, every character other than a letter or a digit replaced by "-".
+# launched from, every character other than a letter or a digit replaced by "-". On Windows it
+# names it from the Windows path, which Git Bash's cygpath gives, and the case of that name varies,
+# the drive letter's first (agent-squad #389): there a name is the project's ignoring case.
 projects="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
-here="${root//[^A-Za-z0-9]/-}"
+launched="$root" fold=false ignoring=""
+if command -v cygpath >/dev/null 2>&1; then
+  launched="$(cygpath -w "$root" </dev/null)" || die "cygpath cannot give the Windows path of $root"
+  fold=true ignoring=", ignoring case,"
+fi
+here="${launched//[^A-Za-z0-9]/-}"
+# `ours`, in jq: whether a directory's name is the project's, given $here and $fold.
+# shellcheck disable=SC2016 # a jq program: its $names are jq's
+ours='def ours: if $fold then ascii_downcase == ($here | ascii_downcase) else . == $here end;'
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work" "$history.$$"' EXIT
@@ -159,11 +173,22 @@ jq -nr --slurpfile stored "$work/stored" --slurpfile fresh "$work/fresh" --slurp
   >"$history.$$"
 mv "$history.$$" "$history"
 
-# 5. The report, from the merged history: one block per project, its agents in the order CTO, DEV,
+# 5. By default, the project must be known: a transcript directory on the machine is its, or a row
+#    of the history is, whatever the period. Otherwise nothing was found to count, which is not a
+#    count of zero (agent-squad #389). The names go through a file: jq stops reading at the first
+#    match, which would break a pipe into it.
+if [ "$scope" = here ]; then
+  { for dir in "$projects"/*/; do dir="${dir%/}"; printf '%s\n' "${dir##*/}"; done
+    tail -n +2 "$history" | cut -f 2; } >"$work/names"
+  known="$(jq -Rn --arg here "$here" --argjson fold "$fold" "$ours"' any(inputs; ours)' "$work/names")"
+  [ "$known" = true ] || die "found nothing of $(basename "$root") to count: no Claude Code directory named $here$ignoring in $projects, and no row of it in $history"
+fi
+
+# 6. The report, from the merged history: one block per project, its agents in the order CTO, DEV,
 #    QA and then the sessions without a role, and a subtotal; then the subtotals per role, the
 #    other sessions and the total. --by-day repeats it for each day; --tsv prints one row per agent.
-tail -n +2 "$history" | jq -Rnr --arg scope "$scope" --arg here "$here" --arg name "$(basename "$root")" \
-  --arg project "$project" --arg since "$since" --argjson by_day "$by_day" --argjson tsv "$tsv" '
+tail -n +2 "$history" | jq -Rnr --arg scope "$scope" --arg here "$here" --argjson fold "$fold" --arg name "$(basename "$root")" \
+  --arg project "$project" --arg since "$since" --argjson by_day "$by_day" --argjson tsv "$tsv" "$ours"'
 def parse_name:
   first(capture("^(?<role>CTO|DEV|QA):(?<project>.+)$"), capture("^(?<project>.+):(?<role>CTO|DEV|QA)$"),
         {role: null, project: null});
@@ -190,7 +215,7 @@ def report:
  | {day: .[0], dir: .[1], agent: .[4], model: .[5], responses: (.[6] | tonumber), input: (.[7] | tonumber),
     cache_write: (.[8] | tonumber), cache_read: (.[9] | tonumber), output: (.[10] | tonumber)}
  | select(.day >= $since)
- | select($scope == "all" or .dir == $here)
+ | select($scope == "all" or (.dir | ours))
  | (.agent | parse_name) as $n
  | .role = $n.role
  | .project = (if $scope == "here" then $name else $n.project end)
