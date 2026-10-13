@@ -89,7 +89,8 @@ while IFS=$'\t' read -r what name color description diff; do
       else
         echo "labels: FAILED  $name could not be written, as gh says above" >&2
         failed=$((failed + 1))
-      fi ;;
+      fi
+      ;;
   esac
 done <<<"$plan"
 
