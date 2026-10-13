@@ -381,6 +381,79 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     focusIs(w, null)
   })
 
+  // agent-squad #367: the playbook's squad-set-status.sh sets the status label, and the board reads
+  // it as it reads gh issue edit, however the script is reached: in progress, the issue becomes the
+  // focus; in review, blocked or none, it leaves it.
+  const SET = '"$p/scripts/squad-set-status.sh"'
+  const scriptForms: [string, { item: string; url: string | null }][] = [
+    [`p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" && ${SET} issue 81 in-progress`, issue(81)],
+    ['"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-set-status.sh" issue 82 in-progress', issue(82)],
+    ['/work/proj/.agent-squad/playbook/scripts/squad-set-status.sh issue 83 in-progress </dev/null >/dev/null', issue(83)],
+    [`out=$(${SET} issue 84 in-progress 2>&1)`, issue(84)],
+    [`rtk proxy ${SET} issue 85 in-progress > /tmp/status.out`, issue(85)],
+    ['squad-set-status.sh issue 86 in-progress', issue(86)],
+  ]
+  for (const [command, item] of scriptForms) {
+    test(`squad-set-status.sh sets it: ${command}`, async ($, on) => {
+      const w = world(on)
+      await start($, 'DEV:proj')
+      await runs($, w, command, 'status: issue is 🚧 status:in-progress\n')
+      focusIs(w, item)
+    })
+  }
+
+  for (const state of ['in-review', 'blocked', 'none']) {
+    test(`squad-set-status.sh issue <n> ${state} ends the issue: the band shows the item before it`, async ($, on) => {
+      const w = world(on)
+      await start($, 'DEV:proj')
+      await runs($, w, `${SET} issue 89 in-progress && ${SET} issue 90 in-progress`)
+      focusIs(w, issue(90))
+      await runs($, w, `${SET} issue 90 ${state}`)
+      focusIs(w, issue(89))
+      await runs($, w, `${SET} issue 89 ${state} >/dev/null`)
+      focusIs(w, null)
+    })
+  }
+
+  test("squad-set-status.sh on a PR, and a call the script refuses or that only names it, change nothing", async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, `${SET} issue 50 in-progress`)
+    for (const command of [
+      `${SET} pr 120 in-progress`, `${SET} pr 120 in-review`, `${SET} pr 120 approved`, `${SET} pr 50 none`,
+      `${SET} issue 91 approved`, `${SET} issue 50 approved`, `${SET} issue 50 bogus`, `${SET} issues 91 in-progress`,
+      `${SET} issue 91a in-progress`, `${SET} issue 91 in-progress now`, `${SET} issue 50 none now`, `${SET} issue 91`,
+      `${SET} pr 50 blocked`, `echo ${SET} issue 91 in-progress`, 'squad-set-status.shx issue 91 in-progress',
+      'other-squad-set-status.sh issue 50 none', "printf '%s' 'squad-set-status.sh issue 50 none'",
+    ]) {
+      await runs($, w, command, '')
+      focusIs(w, issue(50))
+    }
+  })
+
+  test('the normal flow through squad-set-status.sh: the issue, its PR, in review, merged: the role alone', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, `${SET} issue 117 in-progress`)
+    focusIs(w, issue(117))
+    await runs($, w, 'gh pr create --title "fix: x" --body "Closes #117"', 'https://github.com/o/r/pull/120\n')
+    focusIs(w, pr(120))
+    await runs($, w, `${SET} pr 120 in-review && ${SET} issue 117 in-review`)
+    expect(w.store.get('proj/DEV')).toMatchObject({ item: pr(120), focus: [{ ...pr(120), tied: issue(117) }] })
+    await runs($, w, 'head=$(squad-merge-gate.sh 120) && gh pr merge 120 --squash --match-head-commit "$head"')
+    focusIs(w, null)
+    await runs($, w, `${SET} issue 117 none`)
+    focusIs(w, null)
+  })
+
+  test('an issue squad-set-status.sh names on the line is never the one gh issue create made', async ($, on) => {
+    const w = world(on)
+    await start($, 'DEV:proj')
+    await runs($, w, `${SET} issue 117 none && gh issue create --title x --label "🚧 status:in-progress"`,
+      'https://github.com/o/r/issues/117\nhttps://github.com/o/r/issues/130\n')
+    focusIs(w, issue(130))
+  })
+
   // QA's finding on PR #294: the other calls of a line print addresses too, gh issue edit the
   // issue's and a comment the comment's, before or after the one gh pr create prints.
   const created: [string, string, string][] = [

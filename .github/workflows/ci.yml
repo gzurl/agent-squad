@@ -47,6 +47,8 @@ jobs:
         run: scripts/check-commands.sh
       - name: The sessions still on an older release than the installed one are named
         run: scripts/check-sessions.sh
+      - name: A status label is set in one edit, and read back
+        run: scripts/check-set-status.sh
 
   install:
     runs-on: ubuntu-latest
