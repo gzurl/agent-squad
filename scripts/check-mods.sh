@@ -129,10 +129,12 @@ $(tail -n 10 <<<"$out")"
   fi
 done <<<"$sources"
 
-# 3. A test that fails is named, with its error (agent-squad #373): a copy of the first plugin, with
-#    one more test, which fails on purpose.
+# 3. A test that fails is named, with its error (agent-squad #373): a copy of the first plugin
+#    whose tests are one test that fails on purpose. Its own tests are left out, so that one of them
+#    failing does not fail this check too (QA's finding on PR #378).
 first="mods/$(head -n 1 <<<"$sources" | sed 's|^\./||')"
-cp -R "$root/$first" "$lab/broken" && cat > "$lab/broken/tests/zz-fails-on-purpose.test.ts" <<'TEST'
+cp -R "$root/$first" "$lab/broken" && rm -rf "$lab/broken/tests" && mkdir "$lab/broken/tests" \
+  && cat > "$lab/broken/tests/fails-on-purpose.test.ts" <<'TEST'
 import { expect, test } from 'claude-code/testing'
 
 test('a test that fails on purpose, for check-mods.sh', () => {
