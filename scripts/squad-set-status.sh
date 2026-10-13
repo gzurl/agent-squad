@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 # Set the status label of an issue or a PR as SQUAD.md §3 asks, in one command that cannot be half
-# run (agent-squad #367). One gh edit adds the state's label and removes every other status label,
-# never listing the one it adds among those it removes, since the removal would win and leave none.
-# Then the item's labels are read back from the API: the script exits 0 only when its status labels
-# are exactly the one asked for, or none for `none`. Labels that are not status labels are left as
-# they are. It works from any worktree of a project, on the repository its checkout names, as gh
-# reads it there. The four status labels must exist in that repository (BOOTSTRAP.md row 7), since
-# gh refuses to remove a label the repository lacks.
+# run (agent-squad #367). It first reads the item's kind, and refuses a number of the other kind
+# before anything is written, since the API answers for a PR as for an issue and gh issue edit would
+# edit a PR (agent-squad #375). Then one gh edit adds the state's label and removes every other
+# status label, never listing the one it adds among those it removes, since the removal would win
+# and leave none. Then the item's labels are read back from the API: the script exits 0 only when
+# its status labels are exactly the one asked for, or none for `none`. Labels that are not status
+# labels are left as they are. It works from any worktree of a project, on the repository its
+# checkout names, as gh reads it there. The four status labels must exist in that repository
+# (BOOTSTRAP.md row 7), since gh refuses to remove a label the repository lacks.
 #
 # Usage: squad-set-status.sh <issue|pr> <number> <state>
 #   <state>: in-progress, in-review, blocked (an issue only), approved (a PR only), or none
 # Output: one line, such as
 #   status: issue #12 is 🚧 status:in-progress
 #   status: PR #34 has no status label
-# Exit: 0 set and read back; 1 the edit or the read failed, or the item carries other status labels
-#       than the one asked for, saying what it carries; 2 bad usage, before anything reaches GitHub.
+# Exit: 0 set and read back; 1 the item is of the other kind, nothing written; the edit or a read
+#       failed; or the item carries other status labels than the one asked for, saying what it
+#       carries; 2 bad usage, before anything reaches GitHub.
 set -u
 usage="usage: squad-set-status.sh <issue|pr> <number> <in-progress|in-review|blocked|approved|none>"
 # `refuse <reason>` stops on bad usage.
@@ -46,6 +49,17 @@ case "$kind:$state" in
   issue:approved) refuse "approved is a PR's state, not an issue's (SQUAD.md §3)" ;;
   pr:blocked) refuse "blocked is an issue's state, not a PR's (SQUAD.md §3)" ;;
   *) refuse "the state is in-progress, in-review, blocked, approved or none, not '$state'" ;;
+esac
+
+# The item's kind, read before anything is written (agent-squad #375): the API answers issues/<n>
+# for a PR too, and gh issue edit would edit a PR, so a number of the other kind is refused here.
+if ! actual="$(gh api "repos/{owner}/{repo}/issues/$number" --jq 'if has("pull_request") then "pr" else "issue" end' </dev/null)"; then
+  echo "status FAILED: cannot read $name, as gh says above; nothing was written" >&2
+  exit 1
+fi
+case "$kind:$actual" in
+  issue:pr) echo "status FAILED: #$number is a PR, not an issue; nothing was written" >&2; exit 1 ;;
+  pr:issue) echo "status FAILED: #$number is an issue, not a PR; nothing was written" >&2; exit 1 ;;
 esac
 
 # One edit: the state's label added, and every other status label removed, all four for none.
