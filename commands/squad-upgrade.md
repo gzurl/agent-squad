@@ -59,6 +59,13 @@ Work from the main checkout. The upstream repository is the one named on the `up
      version, and the last line of `.agent-squad/install.log` must end with `-> <tag>`. If either
      does not, or if `--check` fails an item that the installer does not list under *By hand*,
      stop and report it.
+   - **Then the labels** (agent-squad #369): run
+     `.agent-squad/playbook/scripts/squad-setup-labels.sh --check`, which compares the repository's
+     labels with the new release's table. On exit 3, a label the release adds or changes is missing
+     or differs: run the script without `--check`, which creates or corrects it, and keep the
+     lines it printed for step 8. On exit 1, GitHub could not be read: report it in step 8, and
+     run the script again later. The labels it lists as not in the table are the project's own:
+     leave them.
 
    Delete the file when you are done.
 6. **Commit what the installer lists under *By hand*,** such as a `.gitignore` line or a
@@ -71,10 +78,11 @@ Work from the main checkout. The upstream repository is the one named on the `up
    loaded, and that they stay at their safe point until `/squad-resume`. Re-read the sections
    yourself.
 8. **Report to the CEO**, in the CEO's language: the version installed, `--check`'s result, the
-   installer's PR, and what DEV and QA were told. Say that the rules need nothing more from the
-   CEO: the agents have re-read the rules that changed, and each session loads the full text at
-   its next compaction. Only when the release rewrites much of the charter, recommend that the CEO
-   type `/squad-save-state` and then `/compact` in each session, the CTO's included, and say why.
+   installer's PR, the labels created or corrected, and what DEV and QA were told. Say that the
+   rules need nothing more from the CEO: the agents have re-read the rules that changed, and each
+   session loads the full text at its next compaction. Only when the release rewrites much of the
+   charter, recommend that the CEO type `/squad-save-state` and then `/compact` in each session, the
+   CTO's included, and say why.
    Then guide the CEO through the restart, which is the CEO's to type: a session loads the new
    release of the squad board, and any hook the release adds, only when it starts, and a session
    that restarts takes no turn until something writes to it. First run

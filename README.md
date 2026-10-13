@@ -381,7 +381,8 @@ installs it only when you say yes. Before installing, it brings DEV and QA to a 
 `/squad-pause` does, since the install replaces the scripts their hooks and pushes run. The
 agents then re-read the rules that changed, so the rules need nothing more from you; the CTO asks
 you to compact the sessions only after a release that rewrites much of the charter. The upgrade
-also moves the squad board to the new release, and keeps it off if you turned it off. Then the
+also moves the squad board to the new release, and keeps it off if you turned it off, and the CTO
+creates any label the release adds. Then the
 CTO asks you to restart the three sessions, with `/restart` in each, the CTO's last, which keeps
 each session's conversation and name: until a session restarts, it keeps the board it started
 with, and a hook the release adds waits for it too, so the CTO's line shows the previous release,

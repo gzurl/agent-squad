@@ -21,3 +21,4 @@ scripts/check-release.sh
 scripts/check-latest.sh
 scripts/check-commands.sh
 scripts/check-sessions.sh
+scripts/check-setup-labels.sh
