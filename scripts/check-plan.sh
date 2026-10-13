@@ -71,14 +71,15 @@ case "$endpoint" in
   graphql)
     json="$(jq --argjson m "$milestone" '{data: {repository: {milestone: {issues: {nodes: [.[]
       | select(.milestone == $m and .state == "closed" and .pull_request == null)
-      | {number, timelineItems: {nodes: (if .closer then [{closer: {number: .closer}}] else [{}] end)}}]}}}}}' "$W/issues.json")" ;;
+      | {number, timelineItems: {nodes: (if .closer then [{closer: {number: .closer}}]
+          elif .commit then [{closer: {associatedPullRequests: {nodes: [.commit | numbers | {number: .}]}}}] else [{}] end)}}]}}}}}' "$W/issues.json")" ;;
   "repos/o/r/issues?state=open&per_page=100")
     json="$(jq --slurpfile milestones "$W/milestones.json" '[.[] | select(.state == "open") | del(.closer) | . as $issue
-      | .milestone = ($milestones[0] | map(select(.number == $issue.milestone)) | first | if . then {number, title, html_url} else null end)]' \
+      | del(.commit) | .milestone = ($milestones[0] | map(select(.number == $issue.milestone)) | first | if . then {number, title, html_url} else null end)]' \
       "$W/issues.json")" ;;
   "repos/o/r/issues?milestone="*"&state=all&per_page=100")
     milestone="${endpoint#repos/o/r/issues?milestone=}"
-    json="$(jq --argjson m "${milestone%%&*}" 'map(select(.milestone == $m) | del(.closer, .milestone))' "$W/issues.json")" ;;
+    json="$(jq --argjson m "${milestone%%&*}" 'map(select(.milestone == $m) | del(.closer, .commit, .milestone))' "$W/issues.json")" ;;
   repos/o/r/pulls/*/reviews) json="$(cat "$W/reviews-$(basename "$(dirname "$endpoint")").json" 2>/dev/null || echo '[]')" ;;
   repos/o/r/contents) json="$(jq -R '{name: .}' "$W/files" | jq -s .)" ;;
   repos/o/r/contents/SQUAD.md) cat "$W/SQUAD.md"; exit 0 ;;
@@ -196,9 +197,9 @@ set_issue 4 '.body = "Its table goes between `<!-- squad-plan:start -->` and `<!
 plan_issue 10
 run
 cat > "$lab/expected" <<EOF
-**[v55 — the labels](https://github.com/o/r/milestone/40)** · 0 of 4 issues closed · updated $time
+🗺️ **[v55 — the labels](https://github.com/o/r/milestone/40)** · 0 of 4 issues closed · updated $time
 
-| | Step | Who | State | Next |
+| | 📌 Step | 👤 Who | 🚦 State | ⏭️ Next |
 |---|---|---|---|---|
 | 1 | #1 First, the most urgent | CTO | ⚪ not started | CTO: start it |
 | 2 | #3 Third, a feature | DEV | ⚪ not started | DEV: start it |
@@ -219,6 +220,8 @@ check "and a project's repository reads no SQUAD.md, tag or Release" bash -c '! 
 world && upstream 54 && plan_issue 10
 issue 1 closed "Closed by its PR" "👨🏼‍💻 owner:dev" "🟡 P2" && set_issue 1 '.closer = 11'
 issue 2 closed "Closed by hand" "👷🏼‍♂️ owner:cto" "🟡 P2"
+issue 22 closed "Closed by its PR's squash commit" "👨🏼‍💻 owner:dev" "🟡 P2" && set_issue 22 '.commit = 18'
+issue 23 closed "Closed by a commit of no PR" "👨🏼‍💻 owner:dev" "🟡 P2" && set_issue 23 '.commit = "none"'
 issue 3 open "Under review" "👨🏼‍💻 owner:dev" "🟡 P2" "👀 status:in-review"
 issue 4 open "Changes requested" "👨🏼‍💻 owner:dev" "🟡 P2" "👀 status:in-review"
 issue 5 open "Approved" "👨🏼‍💻 owner:dev" "🟡 P2" "👀 status:in-review"
@@ -237,24 +240,26 @@ pr 16 99 eeeeeee5555 pass
 pr 17 20 fffffff6666 pass "" alice && review 17 fffffff6666 APPROVED
 run
 cat > "$lab/expected" <<EOF
-**[v55 — the labels](https://github.com/o/r/milestone/40)** · 2 of 11 issues closed · updated $time
+🗺️ **[v55 — the labels](https://github.com/o/r/milestone/40)** · 4 of 13 issues closed · updated $time
 
-| | Step | Who | State | Next |
+| | 📌 Step | 👤 Who | 🚦 State | ⏭️ Next |
 |---|---|---|---|---|
 | 1 | #1 Closed by its PR | DEV | ✅ closed by PR #11 | — |
 | 2 | #2 Closed by hand | CTO | ✅ closed | — |
 | 3 | #3 Under review | DEV | 👀 PR #12 in review (\`aaaaaaa\`), CI ✅ | QA: review |
 | 4 | #4 Changes requested | DEV | 👀 PR #13 changes requested (\`bbbbbbb\`), CI ❌ | DEV: answer the review |
 | 5 | #5 Approved | DEV | 👀 PR #14 approved (\`ccccccc\`), CI ⏳ | DEV: merge |
-| 6 | #6 In progress | QA | 🚧 in progress | QA: carry on |
-| 7 | #7 Blocked | DEV | ⛔ blocked | DEV: unblock it |
-| 8 | #8 Waits for the CEO | DEV | 👨🏻‍💼 waits for the CEO | CEO: decide |
-| 9 | #9 A draft | DEV | 👀 PR #15 draft (\`ddddddd\`), no CI | DEV: finish the draft |
-| 10 | #20 Approved, a reviewer requested | DEV | 👀 PR #17 approved (\`fffffff\`), CI ✅ | wait for alice |
-| 11 | #21 In review, no open PR | DEV | 👀 in review, no open PR | DEV: carry on |
-| 12 | Version PR | CTO | ⚪ waits for 9 issues | — |
-| 13 | README read | CEO | ⚪ waits for the version PR | — |
-| 14 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |
+| 6 | #22 Closed by its PR's squash commit | DEV | ✅ closed by PR #18 | — |
+| 7 | #23 Closed by a commit of no PR | DEV | ✅ closed | — |
+| 8 | #6 In progress | QA | 🚧 in progress | QA: carry on |
+| 9 | #7 Blocked | DEV | ⛔ blocked | DEV: unblock it |
+| 10 | #8 Waits for the CEO | DEV | 👨🏻‍💼 waits for the CEO | CEO: decide |
+| 11 | #9 A draft | DEV | 👀 PR #15 draft (\`ddddddd\`), no CI | DEV: finish the draft |
+| 12 | #20 Approved, a reviewer requested | DEV | 👀 PR #17 approved (\`fffffff\`), CI ✅ | wait for alice |
+| 13 | #21 In review, no open PR | DEV | 👀 in review, no open PR | DEV: carry on |
+| 14 | Version PR | CTO | ⚪ waits for 9 issues | — |
+| 15 | README read | CEO | ⚪ waits for the version PR | — |
+| 16 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |
 EOF
 check "half done, upstream: exit 0" bash -c '[ "$1" -eq 0 ]' _ "$code"
 check "the table is the one expected" same "$lab/expected"
@@ -365,17 +370,17 @@ run --update
 cat > "$lab/expected" <<EOF
 plan: #3 is a plan issue with no milestone, so it has no table
 
-**[Phase 2](https://github.com/o/r/milestone/42)** · 1 of 1 issues closed · updated $time
+🗺️ **[Phase 2](https://github.com/o/r/milestone/42)** · 1 of 1 issues closed · updated $time
 
-| | Step | Who | State | Next |
+| | 📌 Step | 👤 Who | 🚦 State | ⏭️ Next |
 |---|---|---|---|---|
 | 1 | #2 Done in phase 2 | DEV | ✅ closed | — |
 | 2 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
 plan: #5 updated
 
-**[v55 — the labels](https://github.com/o/r/milestone/40)** · 0 of 1 issues closed · updated $time
+🗺️ **[v55 — the labels](https://github.com/o/r/milestone/40)** · 0 of 1 issues closed · updated $time
 
-| | Step | Who | State | Next |
+| | 📌 Step | 👤 Who | 🚦 State | ⏭️ Next |
 |---|---|---|---|---|
 | 1 | #1 First | DEV | ⚪ not started | DEV: start it |
 | 2 | Version PR | CTO | ⚪ waits for #1 | — |

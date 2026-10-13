@@ -85,20 +85,26 @@ fi
 table() {
   local plan="$1" number version release=null tagged installed
   number="$(jq -r .milestone.number <<<"$plan")"
-  # Its issues, open and closed, and the PR that closed each closed one, from its closing event.
+  # Its issues, open and closed, and the PR that closed each closed one, from its closing event:
+  # the PR itself, or the PR of the commit that closed it, as a squash merge's commit (QA's finding
+  # on PR #377). The closed issues come by pages of 100, as the issues do.
   gh api --paginate --slurp "repos/$repo/issues?milestone=$number&state=all&per_page=100" </dev/null > "$work/issues.pages" \
     || die "cannot read the issues of the milestone, as gh says above"
   jq -c 'add // [] | map(select(.pull_request == null)
     | {number, title, state, body: (.body // "" | gsub("\r"; "")), labels: [.labels[] | {name}]})' \
     "$work/issues.pages" > "$work/issues.json" || die "cannot read the issues of the milestone"
   # shellcheck disable=SC2016 # the $ are GraphQL's variables
-  gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F milestone="$number" -f query='
-    query($owner: String!, $name: String!, $milestone: Int!) {
-      repository(owner: $owner, name: $name) { milestone(number: $milestone) { issues(first: 100, states: CLOSED) { nodes {
-        number timelineItems(itemTypes: [CLOSED_EVENT], last: 1) { nodes { ... on ClosedEvent { closer { ... on PullRequest { number } } } } }
+  gh api graphql --paginate --slurp -F owner="${repo%%/*}" -F name="${repo#*/}" -F milestone="$number" -f query='
+    query($owner: String!, $name: String!, $milestone: Int!, $endCursor: String) {
+      repository(owner: $owner, name: $name) { milestone(number: $milestone) {
+        issues(first: 100, states: CLOSED, after: $endCursor) { pageInfo { hasNextPage endCursor } nodes {
+          number timelineItems(itemTypes: [CLOSED_EVENT], last: 1) { nodes { ... on ClosedEvent { closer {
+            ... on PullRequest { number } ... on Commit { associatedPullRequests(first: 1) { nodes { number } } } } } } }
       } } } } }' \
-    --jq '[.data.repository.milestone.issues.nodes[] | {key: (.number | tostring), value: .timelineItems.nodes[0].closer.number}] | from_entries' \
-    </dev/null > "$work/closers.json" || die "cannot read the PRs that closed the milestone's issues, as gh says above"
+    </dev/null > "$work/closers.pages" || die "cannot read the PRs that closed the milestone's issues, as gh says above"
+  jq -c '[.[].data.repository.milestone.issues.nodes[] | {key: (.number | tostring),
+      value: (.timelineItems.nodes[0].closer // {} | .number // .associatedPullRequests.nodes[0].number)}] | from_entries' \
+    "$work/closers.pages" > "$work/closers.json" || die "cannot read the PRs that closed the milestone's issues"
 
   # The open PRs that close one of its issues, and the latest verdict on each.
   jq -c -L "$here" --slurpfile issues "$work/issues.json" 'include "squad-steps";
@@ -128,7 +134,8 @@ table() {
         installed: $installed}' "$work/releases.json")" || die "cannot read the Releases"
   fi
 
-  # The table: a header line, then one row per issue, then the release's own steps.
+  # The table, in the CEO's format (agent-squad #370): a title line, then one row per issue, then
+  # the release's own steps, all in English; the CTO translates the cells in its terminal.
   jq -nr -L "$here" --slurpfile issues "$work/issues.json" --slurpfile prs "$work/prs.json" \
     --slurpfile verdicts "$work/verdicts.json" --slurpfile closers "$work/closers.json" \
     --argjson plan "$plan" --argjson release "$release" --argjson now "$now" '
@@ -197,9 +204,9 @@ table() {
                     elif $release.published | not then "CTO: publish the Release" else "CTO: install it here" end)}]
        end) as $steps
     | ($items | sort_by(priority, .number) | map(row)) + $steps
-    | "**[\($plan.milestone.title)](\($plan.milestone.url))** · \($items | map(select(.state == "closed")) | length) of \($items | length) issues closed · updated \($now | strflocaltime("%Y-%m-%d %H:%M"))",
+    | "🗺️ **[\($plan.milestone.title)](\($plan.milestone.url))** · \($items | map(select(.state == "closed")) | length) of \($items | length) issues closed · updated \($now | strflocaltime("%Y-%m-%d %H:%M"))",
       "",
-      "| | Step | Who | State | Next |",
+      "| | 📌 Step | 👤 Who | 🚦 State | ⏭️ Next |",
       "|---|---|---|---|---|",
       (to_entries[] | "| \(.key + 1) | \(.value.step) | \(.value.who) | \(.value.state) | \(.value.next) |")' \
     || die "cannot build the table"
