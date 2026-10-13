@@ -80,11 +80,12 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   they disagree. A PR that only touches files kept out of the tarball (this file, the CI, this
   repository's own checks and tests) does not bump the version.
 - A release built over several PRs lands on `main` one PR at a time, each naming the release's
-  parent issue; only its **last** PR bumps `Version:` and writes the CHANGELOG entry. Projects
-  install tags only, so `main` between two tags is never installed. This repository runs the
-  installed release too; what its agents run from `main` is only its own checks list, CI and
-  tests, which each intermediate PR keeps working, recording in this file anything that changes
-  for the agents.
+  parent issue; only its **last** PR bumps `Version:` and writes the CHANGELOG entry. That last
+  PR, the release's version PR, names the plan issue with `Part of #N` and closes no issue
+  (SQUAD.md §3), and the plan's table shows it on its *Version PR* row. Projects install tags
+  only, so `main` between two tags is never installed. This repository runs the installed release
+  too; what its agents run from `main` is only its own checks list, CI and tests, which each
+  intermediate PR keeps working, recording in this file anything that changes for the agents.
 - `install.sh`, at the root, is the one file projects run from `main` instead of from a tag: the
   one-line install fetches it from `main`, and it runs the chosen tag's own
   `scripts/squad-install.sh`. [.gitattributes](.gitattributes) keeps it out of the tarball, so a PR
