@@ -1,5 +1,37 @@
 # Changelog
 
+## v55 — 2026-10-13
+- **A status label is set in one command, and read back** (#367, found by rogue-trader's DEV). An
+  issue there was closed carrying two states, after a `gh issue edit` whose result went unread,
+  and only the merge gate checked the rule, on PRs alone.
+  - **`squad-set-status.sh <issue|pr> <n> <state>`** sets the state and removes the others in one
+    edit, then reads the labels back, and fails unless that state alone is there. It reads the
+    item's kind before it writes, so that an issue command given a PR's number writes nothing
+    (#375, found by QA).
+  - **The charter names it** wherever it tells an agent to set or remove a status label: §1's
+    quick references, §3, §4.2, §4.5 to §4.7 and §4.9. The board follows it, and the merge gate's
+    message on two states names it.
+- **The squad's labels are created by a script** (#369, the CEO's idea). `squad-setup-labels.sh`
+  creates the labels of `BOOTSTRAP.md`'s table that the repository lacks, and corrects those whose
+  color or description differs. It never deletes one, and `--check` only lists them, exiting 3 on
+  a gap. `BOOTSTRAP.md` row 7 and `/squad-upgrade` run it, so that an entry that adds a label
+  needs no *By hand* line for it.
+- **A pinned plan issue shows the release in progress** (#370, the CEO's idea). Each release in
+  progress has a plan issue, pinned, whose table `squad-plan.sh --update` writes: one row per
+  issue, with its state and whose the next step is, then the release's own steps (§3).
+  - **It follows the work:** `squad-set-status.sh` runs it at every state change, and
+    `/squad-watch` at each pass. `/squad-resume` shows the table, its cells in the CEO's language.
+  - **§6's emoji rule** names the table. The next step comes from `squad-steps.jq`, which the
+    stall detector now shares.
+- **Upgrading from v54:**
+  - **Restart the three sessions,** as `/squad-upgrade` asks, since charter rules change (§3, §4,
+    §6).
+  - **Check the labels once:** v54's `/squad-upgrade` does not run `squad-setup-labels.sh`, so
+    run `squad-setup-labels.sh --check` after this upgrade. v55 adds no label, so it should find
+    none missing. A label it lists as different, in color or description, the script corrects to
+    the table's: run it, unless the project chose those words or that color on purpose.
+  - **A milestone already in progress** gets its plan issue: the CTO opens it and pins it (§3).
+
 ## v54 — 2026-10-12
 - **The squad shows which sessions still run an older release** (#361, proposed by
   rogue-trader's CEO). After an upgrade, a session keeps its old board and hooks until its
