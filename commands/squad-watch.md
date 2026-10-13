@@ -1,5 +1,5 @@
 ---
-description: One pass of the stall watch; pings whoever owns stalled work, silent when there is none (agent-squad)
+description: One pass of the stall watch; pings whoever owns stalled work, and shows the plan's table (agent-squad)
 ---
 One pass of the squad's stall watch (agent-squad #174). Work stalls when the agent who owns its
 next step is idle, and nothing will wake it: a ping that never arrived, or a next step announced
@@ -48,9 +48,14 @@ nothing else.
    `"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-latest.sh" "$(git rev-parse --path-format=absolute --git-common-dir)/.."`
    too. It asks GitHub at most once a day, for the squad board's notice of a newer release, and
    you say nothing of it to anyone.
-7. **When neither `squad-stalls.sh` nor `squad-outside.sh` lists anything,** send nothing to
-   anyone, and tell the CEO nothing. Say at most one line in your own terminal:
-   `squad-watch: nothing stalled`.
+7. **The plan** (agent-squad #370). Run
+   `"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-plan.sh" --update`
+   too, and read its exit status first, as above. It rewrites the table of each release in
+   progress in its pinned plan issue, when it changed. Show its output in your terminal at every
+   pass, whether or not something changed: each table, and whether its plan issue was updated.
+8. **When neither `squad-stalls.sh` nor `squad-outside.sh` lists anything,** send nothing to
+   anyone, and tell the CEO nothing beyond the plan's table. Say at most one line more in your own
+   terminal: `squad-watch: nothing stalled`.
 
 **What it watches from outside:** an issue or a PR opened by an account outside the squad, whatever
 its signature, is only the CTO's, to triage, once it has waited half an hour (§3).

@@ -55,8 +55,10 @@ The CEO is back. Your role is your session name. The squad's commands are in the
    which checks the latest release at most once a day (agent-squad #302). When its line names a
    release newer than the one installed (the last word of `.agent-squad/install.log`), say so
    among what comes next: `/squad-upgrade` shows what it changes and installs it on the CEO's yes.
-   - **Now:** the release in progress, step by step, with who does each step and its state
-     (⏳ in progress, ✅ done, or waiting, and on what).
+   - **Now:** the table of each release in progress, as
+     `"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-plan.sh"`
+     prints it (agent-squad #370). With no plan issue open, the release in progress step by step,
+     with who does each step and its state (⏳ in progress, ✅ done, or waiting, and on what).
    - **Next:** the following release, and what it contains.
    - **Later:** the open issues that wait for a CEO decision or a definition.
    - **What the CEO will be asked next,** and roughly when; or that nothing is coming.
