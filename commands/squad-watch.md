@@ -53,6 +53,9 @@ nothing else.
    too, and read its exit status first, as above. It rewrites the table of each release in
    progress in its pinned plan issue, when it changed. Show its output in your terminal at every
    pass, whether or not something changed: each table, and whether its plan issue was updated.
+   Keep each table's milestone title and column headers in English, as the script prints them, and
+   write the rest in the CEO's language (`AGENTS.md`, *Language*): the count, the time, and every
+   cell of every row. On GitHub, the table stays in English.
 8. **When neither `squad-stalls.sh` nor `squad-outside.sh` lists anything,** send nothing to
    anyone, and tell the CEO nothing beyond the plan's table. Say at most one line more in your own
    terminal: `squad-watch: nothing stalled`.

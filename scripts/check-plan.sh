@@ -56,19 +56,23 @@ case "$1 $2" in
   "api "*) shift ;;
   *) exit 1 ;;
 esac
-filter="" slurp=false endpoint="" milestone=""
+filter="" slurp=false paginate=false endpoint="" milestone="" query=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --jq) filter="$2"; shift 2 ;;
     --slurp) slurp=true; shift ;;
-    --paginate) shift ;;
+    --paginate) paginate=true; shift ;;
     -F) [[ "$2" != milestone=* ]] || milestone="${2#milestone=}"; shift 2 ;;
-    -H|-f) shift 2 ;;
+    -f) [[ "$2" != query=* ]] || query="${2#query=}"; shift 2 ;;
+    -H) shift 2 ;;
     *) endpoint="$1"; shift ;;
   esac
 done
 case "$endpoint" in
   graphql)
+    # The closed issues come by pages, as gh paginates a query that takes $endCursor.
+    # shellcheck disable=SC2016 # GraphQL's variable, not the shell's
+    $paginate && $slurp && [[ "$query" == *'after: $endCursor'* ]] || exit 1
     json="$(jq --argjson m "$milestone" '{data: {repository: {milestone: {issues: {nodes: [.[]
       | select(.milestone == $m and .state == "closed" and .pull_request == null)
       | {number, timelineItems: {nodes: (if .closer then [{closer: {number: .closer}}]
