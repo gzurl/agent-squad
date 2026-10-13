@@ -34,10 +34,12 @@ check() {
 # shellcheck disable=SC2317,SC2329 # invoked through check
 has() { grep -qxF -- "$1" <<<"$out"; }
 
-# The table, counted here with a pattern of this check's own: its rows, between its heading and the
-# next one, as "name<TAB>color<TAB>description".
-rows="$(awk '/^## / { inside = ($0 == "## Labels") } inside && /^\| `/' "$root/BOOTSTRAP.md" \
-  | awk -F' \\| ' '{ gsub(/^\| `|`$/, "", $1); gsub(/`/, "", $2); sub(/ \|$/, "", $3); print $1 "\t" $2 "\t" $3 }')"
+# The table, counted here with a pattern of this check's own: every line that starts with `|`
+# between its heading and the next one, after the header and the line under it, as
+# "name<TAB>color<TAB>description", whether or not its name and color are in backticks. A row the
+# script cannot read then fails this check (QA's finding on PR #374).
+rows="$(awk '/^## / { inside = ($0 == "## Labels") } inside && /^\|/ { if (++n > 2) print }' "$root/BOOTSTRAP.md" \
+  | awk -F' \\| ' '{ gsub(/^\| `?|`$/, "", $1); gsub(/`/, "", $2); sub(/ \|$/, "", $3); print $1 "\t" $2 "\t" $3 }')"
 count="$(grep -c . <<<"$rows")"
 check "the table of BOOTSTRAP.md has labels to check against ($count)" [ "$count" -gt 0 ]
 # `row <n>` prints the name of the table's nth label, and `color_of`/`described` its color and
@@ -186,6 +188,16 @@ for bootstrap in missing "# Bootstrap"$'\n'"## Labels"$'\n'"none here"; do
   check "a table that cannot be read ($([ "$bootstrap" = missing ] && echo missing || echo empty)): exit 2, and nothing sent" \
     bash -c '[ "$1" -eq 2 ] && [ "$2" = "labels: no label can be read from the Labels table of $3/scripts/../BOOTSTRAP.md" ] && [ ! -s "$4" ]' \
     _ "$code" "$out" "$lab/playbook" "$CALLS"
+done
+# A row that does not read as the table's shape, its name or its color out of backticks, is refused
+# by name, and nothing is compared: the label would otherwise never be created, with --check saying
+# every label is there (QA's finding on PR #374).
+for bad in '| 🆕 new | `112233` | A new label |' '| `🆕 new` | 112233 | A new label |'; do
+  awk -v bad="$bad" '{ print } /status:blocked/ { print bad }' "$root/BOOTSTRAP.md" > "$lab/playbook/BOOTSTRAP.md"
+  run_in "$project" "$lab/playbook/scripts/squad-setup-labels.sh" --check
+  check "a row out of the table's shape ($bad): exit 2, naming it, and nothing sent" \
+    bash -c '[ "$1" -eq 2 ] && [ "$2" = "labels: a row of the Labels table of $3/scripts/../BOOTSTRAP.md cannot be read, so it compared and wrote nothing: $4" ] && [ ! -s "$5" ]' \
+      _ "$code" "$out" "$lab/playbook" "$bad" "$CALLS"
 done
 
 exit "$status"

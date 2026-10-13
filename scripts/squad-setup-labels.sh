@@ -39,13 +39,21 @@ if [ -z "$common" ] || [ ! -d "$(dirname "$common")/.agent-squad/playbook" ]; th
   exit 2
 fi
 bootstrap="$(dirname "$0")/../BOOTSTRAP.md"
-# Each row of the table, as `| `<name>` | `<color>` | <description> |`, between its heading and the
-# next one: one JSON object per label.
+# Every row of the table, which is every line that starts with `|` between its heading and the
+# next one, after the header and the line under it. Each reads as
+# `| `<name>` | `<color>` | <description> |`, one JSON object per label. A row that does not is
+# refused by name, since a label the script skipped would read as there, and never be created
+# (QA's finding on PR #374).
 # shellcheck disable=SC2016 # the backticks are the table's, around each name and color
-table="$(awk '/^## / { inside = ($0 == "## Labels") } inside' "$bootstrap" 2>/dev/null \
-  | jq -R 'capture("^\\| `(?<name>[^`]+)` \\| `(?<color>[0-9A-Fa-f]{6})` \\| (?<description>.*) \\|$")' | jq -s .)"
+table="$(awk '/^## / { inside = ($0 == "## Labels") } inside && /^\|/ { if (++rows > 2) print }' "$bootstrap" 2>/dev/null \
+  | jq -R '. as $row | capture("^\\| `(?<name>[^`]+)` \\| `(?<color>[0-9A-Fa-f]{6})` \\| (?<description>.*) \\|$") // {unread: $row}' | jq -s .)"
 if [ "$(jq length <<<"$table")" -eq 0 ]; then
   echo "labels: no label can be read from the Labels table of $bootstrap" >&2
+  exit 2
+fi
+unread="$(jq -r 'first(.[] | .unread // empty)' <<<"$table")"
+if [ -n "$unread" ]; then
+  echo "labels: a row of the Labels table of $bootstrap cannot be read, so it compared and wrote nothing: $unread" >&2
   exit 2
 fi
 

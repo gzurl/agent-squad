@@ -63,9 +63,10 @@ Work from the main checkout. The upstream repository is the one named on the `up
      `.agent-squad/playbook/scripts/squad-setup-labels.sh --check`, which compares the repository's
      labels with the new release's table. On exit 3, a label the release adds or changes is missing
      or differs: run the script without `--check`, which creates or corrects it, and keep the
-     lines it printed for step 8. On exit 1, GitHub could not be read: report it in step 8, and
-     run the script again later. The labels it lists as not in the table are the project's own:
-     leave them.
+     lines it printed for step 8. If that run exits 1, report in step 8 the labels it could not
+     write, and run it again later. On exit 1 from `--check`, GitHub could not be read: report it
+     in step 8, and run the script again later. The labels it lists as not in the table are the
+     project's own: leave them.
 
    Delete the file when you are done.
 6. **Commit what the installer lists under *By hand*,** such as a `.gitignore` line or a
