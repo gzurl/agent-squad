@@ -94,10 +94,7 @@ jq -ce 'add // [] | map({number, html_url, created_at, author_association, user:
 for number in $(jq -r '.[] | select(.isDraft | not) | .number' "$work/prs.json"); do
   gh api --paginate --slurp "repos/$repo/pulls/$number/reviews" > "$work/reviews.json" 2>/dev/null \
     || die "cannot read the reviews of PR #$number"
-  jq -c --arg n "$number" '{($n): (add // []
-    | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body | test("QA-VERDICT: "))))
-    | last | if . == null then null
-      else {commit: .commit_id, verdict: (.body | split("\n") | map(select(test("QA-VERDICT: "))) | last | sub(".*QA-VERDICT: "; ""))} end)}' \
+  jq -c -L "$(dirname "$0")" --arg n "$number" 'include "squad-steps"; {($n): latest_verdict}' \
     "$work/reviews.json" >> "$work/verdicts.jsonl" || die "cannot read the reviews of PR #$number"
 done
 jq -sc 'add // {}' "$work/verdicts.jsonl" > "$work/verdicts.json" || exit 1
@@ -107,9 +104,10 @@ jq -sc 'add // {}' "$work/verdicts.jsonl" > "$work/verdicts.json" || exit 1
 #    or with new activity, is forgotten.
 { [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . \
   || echo '[]'; } > "$work/reported.json"
-result="$(jq -nc --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issues.json" \
+result="$(jq -nc -L "$(dirname "$0")" --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issues.json" \
   --slurpfile verdicts "$work/verdicts.json" --slurpfile opened "$work/opened.json" \
   --slurpfile reported "$work/reported.json" --argjson sessions "$sessions" --argjson now "$now" '
+  include "squad-steps";
   $prs[0] as $prs | $issues[0] as $issues | $verdicts[0] as $verdicts | $opened[0] as $opened
   | $reported[0] as $reported
   | def local: strflocaltime("%Y-%m-%d %H:%M");
@@ -121,35 +119,12 @@ result="$(jq -nc --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issu
   # GitHub names it or as the description says ("Closes #N").
   def declared: any((.labels // [])[].name; endswith("needs-ceo") or endswith("status:blocked"));
   ($issues | map({key: (.number | tostring), value: declared}) | from_entries) as $waits
-  | def closes: [(.closingIssuesReferences // [])[].number]
-      + [.body // "" | scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?) #([0-9]+)") | .[0] | tonumber];
-  def waits: declared or any(closes[]; $waits[tostring] // false);
-  def author: (.body // "" | split("\n") | first // "" | gsub("\\*\\*"; "")) as $line
-    | first(("QA", "DEV", "CTO") as $role
-        | select($line | startswith({QA: "👩🏼‍🔬", DEV: "👨🏼‍💻", CTO: "👷🏼‍♂️"}[$role] + "[\($role)]:")) | $role) // null;
-  # A PR: the reviewer reviews a head with no verdict on it; the author answers changes asked on
-  # the head, merges an approved head, and finishes a draft. Without an author, the CTO finds one.
-  # An approved head with a review still requested on GitHub, from a user or a team, waits for
-  # that reviewer instead, who is none of the squad sessions.
-  def pr_step:
-    author as $author | (if $author == "QA" then "DEV" else "QA" end) as $reviewer
-    | .headRefOid[0:7] as $head | $verdicts[.number | tostring] as $v
-    | if $author == null then {owner: "CTO", step: "find its author: its description is not signed"}
-      elif .isDraft then {owner: $author, step: "finish the draft"}
-      elif $v == null or $v.commit != .headRefOid then {owner: $reviewer, step: "review its head \($head)"}
-      elif $v.verdict == "CHANGES-REQUESTED" then {owner: $author, step: "answer the changes requested on \($head)"}
-      elif $v.verdict == "APPROVED" and (.reviewRequests // []) != [] then
-        ([.reviewRequests[] | .login // .slug // .name] | join(", ")) as $who
-        | {owner: "requested", reviewers: $who, step: "wait for the review requested from \($who) on GitHub, before the merge"}
-      elif $v.verdict == "APPROVED" then {owner: $author, step: "merge it: QA approved its head \($head)"}
-      else {owner: $reviewer, step: "review its head \($head)"} end;
-  # An issue in progress: its owner label names the role; without one, the CTO gives it an owner.
-  def issue_step:
-    ([.labels[].name | capture("owner:(?<role>cto|dev|qa)$").role | ascii_upcase] | first) as $owner
-    | if $owner == null then {owner: "CTO", step: "give it an owner"} else {owner: $owner, step: "carry on with it"} end;
+  | def waits: declared or any(closes[]; $waits[tostring] // false);
   # An outside item waits for its triage while it carries needs-triage or no owner label.
   def untriaged: any(.labels[].name; endswith("needs-triage")) or (any(.labels[].name; test("owner:(cto|dev|qa)$")) | not);
-  ([$prs | sort_by(.number)[] | select(inside) | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step]
+  # Who owns each next step, and what it is: pr_step and issue_step, from squad-steps.jq, which
+  # squad-plan.sh shares (agent-squad #370).
+  ([$prs | sort_by(.number)[] | select(inside) | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step($verdicts)]
    + [$issues | sort_by(.number)[] | select(inside) | select(declared | not) | select(any(.labels[].name; endswith("status:in-progress")))
       | {item: "#\(.number)", url, updatedAt} + issue_step]
    + [$outside | to_entries | sort_by(.key | tonumber)[] | .value | select(declared | not) | select(untriaged)

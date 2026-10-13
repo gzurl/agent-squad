@@ -51,6 +51,8 @@ jobs:
         run: scripts/check-set-status.sh
       - name: The squad's labels are created and checked from BOOTSTRAP.md's table, and never deleted
         run: scripts/check-setup-labels.sh
+      - name: The plan's table shows each release in progress, and its plan issue follows it
+        run: scripts/check-plan.sh
 
   install:
     runs-on: ubuntu-latest

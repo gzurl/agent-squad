@@ -8,13 +8,17 @@
 # its status labels are exactly the one asked for, or none for `none`. Labels that are not status
 # labels are left as they are. It works from any worktree of a project, on the repository its
 # checkout names, as gh reads it there. The four status labels must exist in that repository
-# (BOOTSTRAP.md row 7), since gh refuses to remove a label the repository lacks.
+# (BOOTSTRAP.md row 7), since gh refuses to remove a label the repository lacks. Once the state is
+# read back, squad-plan.sh --update rewrites the table of each release in progress, so that the
+# pinned plan follows every state change (agent-squad #370).
 #
 # Usage: squad-set-status.sh <issue|pr> <number> <state>
 #   <state>: in-progress, in-review, blocked (an issue only), approved (a PR only), or none
 # Output: one line, such as
 #   status: issue #12 is 🚧 status:in-progress
 #   status: PR #34 has no status label
+# then, on stderr, a warning when the plan's table could not be updated, which leaves the exit
+# status as it is.
 # Exit: 0 set and read back; 1 the item is of the other kind, nothing written; the edit or a read
 #       failed; or the item carries other status labels than the one asked for, saying what it
 #       carries; 2 bad usage, before anything reaches GitHub.
@@ -88,3 +92,9 @@ if [ "$found" != "$label" ]; then
   exit 1
 fi
 if [ -n "$label" ]; then echo "status: $name is $label"; else echo "status: $name has no status label"; fi
+
+# The plan's table follows the state (agent-squad #370): squad-plan.sh, beside this script, rewrites
+# each open plan issue's table when it changed. A failure costs the state nothing, whose exit status
+# stands: one warning, and the next update corrects the table.
+"$(dirname "$0")/squad-plan.sh" --update </dev/null >/dev/null 2>&1 \
+  || echo "status: warning: the plan's table could not be updated; the next update corrects it" >&2

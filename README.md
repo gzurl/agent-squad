@@ -253,6 +253,13 @@ agent alone.
 Nothing notifies you while you are away: `/squad-resume` tells you what happened, and the issues
 labelled `needs-ceo` are your inbox.
 
+**The plan, pinned on GitHub.** Each release in progress has a plan issue, pinned at the top of the
+repository's issues. It holds a table of the release: one row per issue, with where it stands and
+whose the next step is, then the release's own steps, such as your read of the README. The table
+changes whenever an agent changes the state of an issue or a pull request, and at every pass of
+`/squad-watch`, so that you can follow the release from your phone. `/squad-resume` shows you the
+same table.
+
 Whenever the CTO reports on the agents, during these commands or when you ask how they are doing,
 each agent gets a line of its own, always in the order CTO, DEV, QA, with an emoji for its state:
 working, paused, free, waiting for you, or no answer. The same lines come back in every update, so
@@ -271,8 +278,9 @@ agent that sits idle: it pings that agent, and tells you if nothing has moved an
 that QA approved but that still waits for a review requested on GitHub, such as a colleague's, is
 nobody's to merge yet: the watch tells you once it has waited an hour, since only you can reach that
 reviewer. It leaves out what already waits on you (`needs-ceo`) and what is blocked on purpose
-(`status:blocked`), and when it finds nothing, it says nothing. `/squad-autopilot` runs it every
-half hour until you pause or resume the squad, and you can type it yourself at any time.
+(`status:blocked`), and when it finds nothing, it says nothing more than the plan's table, which
+it updates and shows at each pass. `/squad-autopilot` runs it every half hour until you pause or
+resume the squad, and you can type it yourself at any time.
 
 ### How many tokens the agents use
 
