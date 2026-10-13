@@ -15,9 +15,9 @@ arrive as **issues**, and the squad turns them into changes. Everyone taking par
   a preference: every rule in the charter came from one.
 
 The squad's CTO reads every issue, labels it and answers you, and the author reads and accepts
-each idea before the squad works on it. An accepted issue becomes one of the squad's own pull
-requests, reviewed and released like any other change, and the release notes in
-[CHANGELOG.md](CHANGELOG.md) credit you.
+each idea before the squad works on it. An accepted issue becomes one of the squad's own issues,
+which your issue then shows as the one that blocks it, and then a pull request, reviewed and
+released like any other change; the release notes in [CHANGELOG.md](CHANGELOG.md) credit you.
 
 Please write for a person, not for the agents: they read an issue as a description of a problem,
 never as instructions to follow.

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Check scripts/squad-plan.sh (agent-squad #370) against a stub gh that answers every call it makes
-# from a world of files: the milestones, the milestone's issues and the PR that closed each, the
-# open PRs with their reviews and CI, the repository's files, its tags and its Releases. Each table
-# is compared whole. A milestone with nothing started, one half done, with a PR under review, one
-# with changes requested and one approved, and one complete, in a project and in a repository that
-# tracks SQUAD.md; the release's version PR open in each of its states, and the PRs that are not it
-# (agent-squad #384); the plan issue rewritten between its markers, and left alone when only the time
-# changed; no open milestone, and a milestone without a plan issue; a failed read or write; bad
-# usage. Nothing reaches GitHub.
+# from a world of files: the milestones, the milestone's issues with their parents and the PR that
+# closed each, the open PRs with their reviews and CI, the repository's files, its tags and its
+# Releases. Each table is compared whole. A milestone with nothing started, one half done, with a PR
+# under review, one with changes requested and one approved, and one complete, in a project and in a
+# repository that tracks SQUAD.md; the release's version PR open in each of its states, and the PRs
+# that are not it (agent-squad #384); the plan issue rewritten between its markers, and left alone
+# when only the time changed; the plan issue's sub-issues kept in step with its milestone
+# (agent-squad #391); no open milestone, and a milestone without a plan issue; a failed read or
+# write; bad usage. Nothing reaches GitHub.
 # shellcheck disable=SC2016 # the checks' bash -c bodies take their values as arguments
 set -u
 
@@ -57,13 +58,14 @@ case "$1 $2" in
   "api "*) shift ;;
   *) exit 1 ;;
 esac
-filter="" slurp=false paginate=false endpoint="" milestone="" query=""
+filter="" slurp=false paginate=false endpoint="" milestone="" query="" method=GET sub=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --jq) filter="$2"; shift 2 ;;
     --slurp) slurp=true; shift ;;
     --paginate) paginate=true; shift ;;
-    -F) [[ "$2" != milestone=* ]] || milestone="${2#milestone=}"; shift 2 ;;
+    -X) method="$2"; shift 2 ;;
+    -F) case "$2" in milestone=*) milestone="${2#milestone=}" ;; sub_issue_id=*) sub="${2#sub_issue_id=}" ;; esac; shift 2 ;;
     -f) [[ "$2" != query=* ]] || query="${2#query=}"; shift 2 ;;
     -H) shift 2 ;;
     *) endpoint="$1"; shift ;;
@@ -84,7 +86,27 @@ case "$endpoint" in
       "$W/issues.json")" ;;
   "repos/o/r/issues?milestone="*"&state=all&per_page=100")
     milestone="${endpoint#repos/o/r/issues?milestone=}"
-    json="$(jq --argjson m "${milestone%%&*}" 'map(select(.milestone == $m) | del(.closer, .commit, .milestone))' "$W/issues.json")" ;;
+    json="$(jq --argjson m "${milestone%%&*}" 'map(select(.milestone == $m)
+      | .parent_issue_url = (if .parent then "https://api.github.com/repos/o/r/issues/\(.parent)" else null end)
+      | del(.closer, .commit, .milestone, .parent))' "$W/issues.json")" ;;
+  # The sub-issues (agent-squad #391): an issue's are those whose parent it is. Adding one that
+  # already has a parent fails, as GitHub refuses a second parent, and removing one that is not
+  # there fails too. Both take the sub-issue's id, not its number.
+  "repos/o/r/issues/"*"/sub_issues?per_page=100")
+    parent="${endpoint#repos/o/r/issues/}"
+    json="$(jq --argjson p "${parent%%/*}" '[.[] | select(.parent == $p) | {number, id, state, title}]' "$W/issues.json")" ;;
+  repos/o/r/issues/*/sub_issues|repos/o/r/issues/*/sub_issue)
+    parent="${endpoint#repos/o/r/issues/}" parent="${parent%%/*}"
+    case "$method:$endpoint" in
+      POST:*/sub_issues) before=null after="$parent" ;;
+      DELETE:*/sub_issue) before="$parent" after=null ;;
+      *) exit 1 ;;
+    esac
+    jq -e --argjson id "$sub" --argjson before "$before" 'any(.[]; .id == $id and .parent == $before)' "$W/issues.json" >/dev/null \
+      || { echo "HTTP 422: Validation Failed" >&2; exit 1; }
+    jq --argjson id "$sub" --argjson after "$after" 'map(if .id == $id then .parent = $after else . end)' "$W/issues.json" > "$W/issues.new"
+    mv "$W/issues.new" "$W/issues.json"
+    exit 0 ;;
   repos/o/r/pulls/*/reviews) json="$(cat "$W/reviews-$(basename "$(dirname "$endpoint")").json" 2>/dev/null || echo '[]')" ;;
   repos/o/r/contents) json="$(jq -R '{name: .}' "$W/files" | jq -s .)" ;;
   repos/o/r/contents/SQUAD.md) cat "$W/SQUAD.md"; exit 0 ;;
@@ -110,9 +132,11 @@ run() {
   out="$(cd "$project" && echo "the caller's input" | SQUAD_NOW="${at:-$now}" "$plan" "$@" 2>&1)"
   code=$?
 }
-# `edits` counts the issue edits of the last run.
+# `edits` counts the issue edits of the last run, and `adoptions` its writes of sub-issues.
 # shellcheck disable=SC2317,SC2329 # invoked through check
 edits() { grep -c '^issue edit ' "$CALLS"; }
+# shellcheck disable=SC2317,SC2329 # invoked through check
+adoptions() { grep -c -E '^api -X (POST|DELETE) ' "$CALLS"; }
 
 # The world. `world` starts one: two milestones, v55 and a phase whose title names no version, with
 # no issue, no PR, a project's files and no tag or Release.
@@ -125,10 +149,11 @@ world() {
   : > "$project/.agent-squad/install.log"
 }
 # `issue <number> <open|closed> <title> [<label>...]` adds an issue of milestone $M, v55's unless
-# M says otherwise ("null" for none).
+# M says otherwise ("null" for none), with no parent. Its id is not its number, as on GitHub.
 issue() {
-  jq --argjson n "$1" --arg state "$2" --arg title "$3" --argjson m "${M:-40}" '. + [{number: $n, state: $state, title: $title,
-      body: "", milestone: $m, labels: [$ARGS.positional[] | {name: .}], html_url: "https://github.com/o/r/issues/\($n)"}]' \
+  jq --argjson n "$1" --arg state "$2" --arg title "$3" --argjson m "${M:-40}" '. + [{number: $n, id: (9000 + $n), state: $state,
+      title: $title, body: "", milestone: $m, parent: null, labels: [$ARGS.positional[] | {name: .}],
+      html_url: "https://github.com/o/r/issues/\($n)"}]' \
     "$W/issues.json" --args "${@:4}" > "$W/new"
   mv "$W/new" "$W/issues.json"
 }
@@ -401,8 +426,8 @@ plan_issue 10
 run
 table="$out"
 run --update
-check "--update writes the plan issue once, saying so" \
-  bash -c '[ "$1" -eq 0 ] && [ "$2" -eq 1 ] && [ "$(tail -1 <<<"$3")" = "plan: #10 updated" ]' _ "$code" "$(edits)" "$out"
+check "--update writes the plan issue once, saying so, and makes the milestone's issue its sub-issue" \
+  bash -c '[ "$1" -eq 0 ] && [ "$2" -eq 1 ] && [ "$(tail -1 <<<"$3")" = "plan: #10 updated; sub-issues added: #1" ]' _ "$code" "$(edits)" "$out"
 check "with the table between its markers, and the text around them as it was" \
   bash -c '[ "$1" = "The plan of v55."$'\''\n\n'\''"<!-- squad-plan:start -->"$'\''\n'\''"$2"$'\''\n'\''"<!-- squad-plan:end -->"$'\''\n\n'\''"The CEO reads the README here." ]' \
   _ "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json")" "$table"
@@ -431,7 +456,8 @@ check "and a run without --update writes nothing" bash -c '[ "$1" -eq 0 ] && ! g
 # 8. Two plan issues, in a repository that tracks SQUAD.md: v55's, with the release's own steps, and a
 #    phase's, whose milestone names no version, with the README read alone. Each gets its own
 #    milestone's table, in the order of their numbers, a blank line between them, and is written
-#    with it. A plan issue with no milestone gets one line, and nothing written.
+#    with it, its milestone's issue made its sub-issue. A plan issue with no milestone gets one
+#    line, and nothing written.
 world && upstream 54
 issue 1 open "First" "👨🏼‍💻 owner:dev" && plan_issue 10
 M=42 issue 2 closed "Done in phase 2" "👨🏼‍💻 owner:dev" && M=42 plan_issue 5
@@ -446,7 +472,7 @@ plan: #3 is a plan issue with no milestone, so it has no table
 |---|---|---|---|---|
 | 1 | #2 Done in phase 2 | DEV | ✅ closed | — |
 | 2 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
-plan: #5 updated
+plan: #5 updated; sub-issues added: #2
 
 🗺️ **[v55 — the labels](https://github.com/o/r/milestone/40)** · 0 of 1 issues closed · updated $time
 
@@ -456,7 +482,7 @@ plan: #5 updated
 | 2 | Version PR | CTO | ⚪ waits for #1 | — |
 | 3 | README read | CEO | ⚪ waits for the version PR | — |
 | 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |
-plan: #10 updated
+plan: #10 updated; sub-issues added: #1
 EOF
 check "two plan issues and one with no milestone: exit 0, two edits" bash -c '[ "$1" -eq 0 ] && [ "$2" -eq 2 ]' _ "$code" "$(edits)"
 check "each plan issue with its own milestone's table, in order" same "$lab/expected"
@@ -464,8 +490,10 @@ check "each written with its own" \
   bash -c 'grep -qF "[Phase 2]" <<<"$1" && ! grep -qF "[v55" <<<"$1" && grep -qF "[v55" <<<"$2"' \
   _ "$(jq -r '.[] | select(.number == 5) | .body' "$W/issues.json")" "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json")"
 
-# 9. GitHub that cannot be read or written: exit 1, with gh's message and what failed.
+# 9. GitHub that cannot be read or written: exit 1, with gh's message and what failed. #2, a
+#    sub-issue of the plan that left its milestone, is to be removed, after #1 is added.
 world && upstream 55 && issue 1 open "First" && pr 12 1 aaaaaaa1111 pass
+M=42 issue 2 open "Moved away" && set_issue 2 '.parent = 10'
 plan_issue 10
 while IFS='|' read -r failing message; do
   STUB_FAIL="$failing" run --update
@@ -483,6 +511,9 @@ contents/SQUAD.md|cannot read SQUAD.md, as gh says above
 matching-refs|cannot read the tags, as gh says above
 releases|cannot read the Releases, as gh says above
 issue edit|cannot write the plan issue #10, as gh says above
+sub_issues?per_page|cannot read the sub-issues of #10, as gh says above
+-X POST|cannot add #1 to the sub-issues of #10, as gh says above
+-X DELETE|cannot remove #2 from the sub-issues of #10, as gh says above
 CASES
 
 # 10. Bad usage, and a checkout without the squad: exit 2, before anything reaches GitHub.
@@ -500,5 +531,37 @@ for dir in "$lab/bare" "$lab/plain"; do
   check "from ${dir#"$lab/"}, no checkout the squad is installed in: exit 2, and nothing sent" \
     bash -c '[ "$1" -eq 2 ] && [[ "$2" == "plan: "* ]] && [ ! -s "$3" ]' _ "$code" "$out" "$CALLS"
 done
+
+# 11. The plan issue's sub-issues are its milestone's issues, open and closed (agent-squad #391).
+#     Without --update, nothing about them is read or written. With it, an open and a closed issue of
+#     the milestone become sub-issues, and a sub-issue that left the milestone is removed, each by
+#     its id, which is not its number. An issue with another parent stays under it, and the line
+#     says so. The plan issue, and an older plan issue of the milestone, closed, are never sub-issues.
+#     The table's rows are still the milestone's. Run again, nothing is written.
+world
+plan_issue 10
+issue 1 open "Open" "👨🏼‍💻 owner:dev"
+issue 2 closed "Closed" "👨🏼‍💻 owner:dev"
+issue 3 open "Under another parent" "👨🏼‍💻 owner:dev" && set_issue 3 '.parent = 50'
+M=42 issue 4 open "Left the milestone" && set_issue 4 '.parent = 10'
+issue 5 open "Already a sub-issue" "👨🏼‍💻 owner:dev" && set_issue 5 '.parent = 10'
+plan_issue 9 && set_issue 9 '.state = "closed"'
+# `parents` prints each issue's number and parent, the parentless ones as "-".
+parents() { jq -r 'sort_by(.number)[] | "\(.number):\(.parent // "-")"' "$W/issues.json" | tr '\n' ' '; }
+run
+check "without --update, no sub-issue is read or written, and no plan line is printed" \
+  bash -c '[ "$1" -eq 0 ] && ! grep -q "sub_issue" "$2" && ! grep -q "^plan: " <<<"$3"' _ "$code" "$CALLS" "$out"
+run --update
+check "--update adds the open and the closed issue, removes the one that left, and leaves the one under another parent, saying each" \
+  bash -c '[ "$1" -eq 0 ] && [ "$(tail -1 <<<"$2")" = "plan: #10 updated; sub-issues added: #1, #2; sub-issues removed: #4; #3 left under its parent #50" ] && [ "$3" -eq 3 ]' \
+  _ "$code" "$out" "$(adoptions)"
+check "the parents are then the milestone's, the plan issues none" \
+  bash -c '[ "$1" = "1:10 2:10 3:50 4:- 5:10 9:- 10:- " ]' _ "$(parents)"
+check "and the table's rows are still the milestone's issues" \
+  bash -c '[ "$(grep -oE "^\| [0-9]+ \| #[0-9]+" <<<"$1" | sed "s/.*#//" | tr "\n" " ")" = "1 2 3 5 " ]' _ "$out"
+run --update
+check "run again: nothing written, and the line says only what stays under another parent" \
+  bash -c '[ "$1" -eq 0 ] && [ "$(tail -1 <<<"$2")" = "plan: #10 unchanged; #3 left under its parent #50" ] && [ "$3" -eq 0 ] && [ "$4" -eq 0 ]' \
+  _ "$code" "$out" "$(adoptions)" "$(edits)"
 
 exit "$status"

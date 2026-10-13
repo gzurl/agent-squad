@@ -19,14 +19,21 @@
 #
 # --update rewrites what lies between each plan issue's markers, and only when the table changed,
 # its time left out. Editing a description notifies nobody, and updates by several agents converge,
-# since each rebuilds the table from GitHub as it is.
+# since each rebuilds the table from GitHub as it is. It also keeps the plan issue's sub-issues in
+# step with its milestone (agent-squad #391): each issue of the milestone, open or closed, the plan
+# issues left out, is one, and a sub-issue that left the milestone is removed. An issue with
+# another parent stays under it: GitHub refuses a second parent, and moving it could undo someone's
+# structure. The sub-issues go through gh api, which any gh can call.
 #
 # Usage: squad-plan.sh [--update]
 # Output: each table, in Markdown, a blank line between two; with --update, after each table, one
-#   line: "plan: #371 updated" or "plan: #371 unchanged". A plan issue with no milestone gets one
-#   line that says so, and with no open plan issue, one line says so, and nothing else.
-# Exit: 0 done; 1 GitHub could not be read, or a plan issue could not be written, with gh's
-#   message; 2 bad usage, or not run from a checkout of a project the squad is installed in.
+#   line: "plan: #371 updated" or "plan: #371 unchanged", then what changed in its sub-issues, as
+#   "; sub-issues added: #12, #13", "; sub-issues removed: #9", and "; #14 left under its parent
+#   #20" for an issue with another parent. A plan issue with no milestone gets one line that says
+#   so, and with no open plan issue, one line says so, and nothing else.
+# Exit: 0 done; 1 GitHub could not be read, or a plan issue or its sub-issues could not be
+#   written, with gh's message; 2 bad usage, or not run from a checkout of a project the squad is
+#   installed in.
 set -u
 usage() { sed -n 's/^# Usage: /usage: /p' "$0" >&2; exit 2; }
 die() { echo "plan: $*" >&2; exit 1; }
@@ -86,13 +93,15 @@ fi
 table() {
   local plan="$1" number version release=null tagged installed
   number="$(jq -r .milestone.number <<<"$plan")"
-  # Its issues, open and closed, and the PR that closed each closed one, from its closing event:
-  # the PR itself, or the PR of the commit that closed it, as a squash merge's commit (QA's finding
-  # on PR #377). The closed issues come by pages of 100, as the issues do.
+  # Its issues, open and closed, each with its id and the number of its parent, if it has one, for
+  # the sub-issues; and the PR that closed each closed one, from its closing event: the PR itself,
+  # or the PR of the commit that closed it, as a squash merge's commit (QA's finding on PR #377).
+  # The closed issues come by pages of 100, as the issues do.
   gh api --paginate --slurp "repos/$repo/issues?milestone=$number&state=all&per_page=100" </dev/null > "$work/issues.pages" \
     || die "cannot read the issues of the milestone, as gh says above"
   jq -c 'add // [] | map(select(.pull_request == null)
-    | {number, title, state, body: (.body // "" | gsub("\r"; "")), labels: [.labels[] | {name}]})' \
+    | {number, id, title, state, body: (.body // "" | gsub("\r"; "")), labels: [.labels[] | {name}],
+       parent: ((.parent_issue_url // "" | capture("/issues/(?<n>[0-9]+)$").n | tonumber) // null)})' \
     "$work/issues.pages" > "$work/issues.json" || die "cannot read the issues of the milestone"
   # shellcheck disable=SC2016 # the $ are GraphQL's variables
   gh api graphql --paginate --slurp -F owner="${repo%%/*}" -F name="${repo#*/}" -F milestone="$number" -f query='
@@ -227,7 +236,7 @@ table() {
 }
 
 # `rewrite <plan issue> <table>` writes the table between the plan issue's markers, when it changed
-# with its time left out, and says which.
+# with its time left out, and says which: "updated" or "unchanged".
 rewrite() {
   local number
   number="$(jq -r .number <<<"$1")"
@@ -237,14 +246,45 @@ rewrite() {
     else $parts.before + "<!-- squad-plan:start -->\n" + $table + "\n<!-- squad-plan:end -->\n" + $parts.after | .[1:-1] end' \
     <<<"$1" > "$work/body.md"
   if [ ! -s "$work/body.md" ]; then
-    echo "plan: #$number unchanged"
+    echo unchanged
   else
     gh issue edit "$number" --body-file "$work/body.md" </dev/null >/dev/null || die "cannot write the plan issue #$number, as gh says above"
-    echo "plan: #$number updated"
+    echo updated
   fi
 }
 
-# 3. Each plan issue's table, and with --update, the table written into it.
+# `adopt <plan issue>` makes the plan issue's sub-issues its milestone's issues, as table() last
+# read them (agent-squad #391), and says what changed, as the end of the plan issue's line: the
+# issues it added, the sub-issues it removed, and each issue left under another parent.
+adopt() {
+  local number pair
+  number="$(jq -r .number <<<"$1")"
+  gh api --paginate --slurp "repos/$repo/issues/$number/sub_issues?per_page=100" </dev/null > "$work/subs.pages" \
+    || die "cannot read the sub-issues of #$number, as gh says above"
+  jq -c --argjson plan "$number" --slurpfile subs "$work/subs.pages" "$plan_defs"'
+    ($subs[0] | add // [] | map({number, id})) as $subs
+    | map(select(.body | marked | not)) as $items
+    | {add: [$items[] | select(.parent == null and (.number | IN($subs[].number) | not)) | {number, id}],
+       remove: [$subs[] | select(.number | IN($items[].number) | not)],
+       others: [$items[] | select(.parent != null and .parent != $plan) | {number, parent}]}
+    | map_values(sort_by(.number))' "$work/issues.json" > "$work/adopt.json" \
+    || die "cannot read the sub-issues of #$number"
+  for pair in $(jq -r '.add[] | "\(.number):\(.id)"' "$work/adopt.json"); do
+    gh api -X POST "repos/$repo/issues/$number/sub_issues" -F sub_issue_id="${pair#*:}" </dev/null >/dev/null \
+      || die "cannot add #${pair%%:*} to the sub-issues of #$number, as gh says above"
+  done
+  for pair in $(jq -r '.remove[] | "\(.number):\(.id)"' "$work/adopt.json"); do
+    gh api -X DELETE "repos/$repo/issues/$number/sub_issue" -F sub_issue_id="${pair#*:}" </dev/null >/dev/null \
+      || die "cannot remove #${pair%%:*} from the sub-issues of #$number, as gh says above"
+  done
+  jq -r 'def numbers: map("#\(.number)") | join(", ");
+    [(if .add != [] then "sub-issues added: \(.add | numbers)" else empty end),
+     (if .remove != [] then "sub-issues removed: \(.remove | numbers)" else empty end),
+     (.others[] | "#\(.number) left under its parent #\(.parent)")] | map("; " + .) | join("")' "$work/adopt.json"
+}
+
+# 3. Each plan issue's table, and with --update, the table written into it and its sub-issues kept
+#    in step, on one line.
 first=true
 while IFS= read -r plan; do
   $first || echo
@@ -255,5 +295,9 @@ while IFS= read -r plan; do
   fi
   text="$(table "$plan")" || exit 1
   echo "$text"
-  ! $update || rewrite "$plan" "$text"
+  if $update; then
+    written="$(rewrite "$plan" "$text")" || exit 1
+    related="$(adopt "$plan")" || exit 1
+    echo "plan: #$(jq -r .number <<<"$plan") $written$related"
+  fi
 done < "$work/plans.jsonl"
