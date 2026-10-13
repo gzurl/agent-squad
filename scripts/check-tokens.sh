@@ -4,7 +4,9 @@
 # transcripts hold it; a subagent counts for its session; the role is read on either side of the
 # colon, so that two projects with the same role stay apart; the default report covers the project
 # it runs from, --all the whole machine; the history keeps what the transcripts lose, and a change
-# in their format stops the script. Everything happens in a temporary directory, with
+# in their format stops the script. A project that neither a transcript directory nor the history
+# has stops it too, and on Windows, under Git Bash, a stub cygpath gives the directory's name, which
+# matches ignoring case (agent-squad #389). Everything happens in a temporary directory, with
 # CLAUDE_CONFIG_DIR pointing at it, so this script reads none of the machine's transcripts.
 set -u
 
@@ -164,6 +166,13 @@ if [ "$code" -eq 0 ] && [ "$out" = "No token usage recorded since $(date -u -r $
 else
   fail "--since 2d: exit $code, output '$out'"
 fi
+#    By default too: the project is known, so a period with nothing in it reads so, with 0 (#389).
+run "$repo" --since 2d --tsv
+if [ "$code" -eq 0 ] && [ "$out" = "No token usage recorded for My Project.v2 (Claude Code directory $here) since $(date -u -r $(($(date -u +%s) - 86400)) +%F 2>/dev/null || date -u -d yesterday +%F)." ]; then
+  pass "by default, a period with nothing in it reads 'No token usage recorded … since …', exit 0"
+else
+  fail "by default, --since 2d: exit $code, output '$out', said: $err"
+fi
 for n in 0d 1x d; do
   run "$repo" --since "$n"
   if [ "$code" -eq 2 ]; then
@@ -254,21 +263,36 @@ else
   fail "after the original is gone: output:"$'\n'"$out"
 fi
 
-# 7. An empty projects directory says so, and the report reads the history.
+# 7. An empty projects directory says so, and the report reads the history, which knows the project.
 run "$repo" --tsv
 before="$out"
 CLAUDE_CONFIG_DIR="$lab/empty" run "$repo" --tsv
 if [ "$code" -eq 0 ] && grep -qF "no Claude Code transcripts in $lab/empty/projects" <<<"$err" && [ "$out" = "$before" ]; then
-  pass "with no transcripts, the script says so and reports the history"
+  pass "with no transcripts but rows in the history, the script says so and reports the history"
 else
   fail "no transcripts: exit $code, said '$err', output:"$'\n'"$out"
 fi
+#    Neither a transcript directory nor the history has the project: that is no count of zero, so
+#    the script names the directory it looked for and where, and exits 1, whatever the period
+#    (agent-squad #389). Once the directory exists, empty, nothing is recorded, with 0.
 mkdir -p "$lab/bare/.agent-squad" && git -C "$lab/bare" init -q
+bare_root="$(cd "$lab/bare" && pwd -P)"
+bare="$(printf '%s' "$bare_root" | tr -c 'A-Za-z0-9' '-')"
+for args in "" "--since $d1"; do
+  # shellcheck disable=SC2086 # the options are split on purpose
+  CLAUDE_CONFIG_DIR="$lab/empty" run "$lab/bare" $args
+  if [ "$code" -eq 1 ] && [ -z "$out" ] && grep -qxF "squad-tokens: found nothing of bare to count: no Claude Code directory named $bare in $lab/empty/projects, and no row of it in $bare_root/.agent-squad/tokens.tsv" <<<"$err"; then
+    pass "no transcript directory and no history${args:+, $args}: exit 1, naming the directory looked for and where"
+  else
+    fail "nothing to count${args:+, $args}: exit $code, output '$out', said: $err"
+  fi
+done
+mkdir -p "$lab/empty/projects/$bare"
 CLAUDE_CONFIG_DIR="$lab/empty" run "$lab/bare"
-if [ "$code" -eq 0 ] && [[ "$out" == "No token usage recorded for bare "* ]]; then
-  pass "with no transcripts and no history, the script says that nothing is recorded"
+if [ "$code" -eq 0 ] && [ "$out" = "No token usage recorded for bare (Claude Code directory $bare)." ]; then
+  pass "a transcript directory with nothing in it: nothing is recorded, exit 0"
 else
-  fail "nothing recorded: exit $code, output '$out'"
+  fail "an empty directory: exit $code, output '$out', said: $err"
 fi
 
 # 8. A change in the transcripts' format stops the script, naming the file and what is missing,
@@ -340,6 +364,65 @@ if [ "$code" -eq 2 ]; then
   pass "outside a git checkout, exit 2"
 else
   fail "outside git: exit $code, said: $err"
+fi
+
+# 11. Windows, under Git Bash (agent-squad #389). A stub cygpath on the PATH gives the main
+#     checkout's Windows path, and Claude Code names the directory from it, the drive letter's case
+#     varying with how the session started. Each case is counted, each from a projects directory of
+#     its own, since the lab's file system may ignore case, and a name that only starts like the
+#     project's is not. Every other check runs without cygpath, as on Linux and macOS, where a name
+#     that differs from the POSIX encoding only by its case is another directory's, not the project's.
+lower="$(printf '%s' "$here" | tr '[:upper:]' '[:lower:]')"
+mkdir -p "$lab/case/projects/$lower"
+{ named "CTO:cased"; response c1 claude-test-1 "${d1}T08:00:00.000Z" 1 1 1 1; } >"$lab/case/projects/$lower/c1.jsonl"
+CLAUDE_CONFIG_DIR="$lab/case" run "$repo" --tsv
+if [ "$lower" != "$here" ] && [ "$code" -eq 0 ] && [ -n "$(row CTO:alpha)" ] && [ -z "$(row CTO:cased)" ]; then
+  pass "without cygpath, the POSIX encoding is matched exactly: a name in another case is not the project's"
+else
+  fail "without cygpath, a name in another case: exit $code, output:"$'\n'"$out"$'\n'"$err"
+fi
+mkdir -p "$lab/win/bin" "$lab/Gescom/.agent-squad" "$lab/Fresh/.agent-squad" \
+  && git -C "$lab/Gescom" init -q && git -C "$lab/Fresh" init -q || exit 2
+cat >"$lab/win/bin/cygpath" <<'EOF'
+#!/usr/bin/env bash
+# Git Bash's cygpath, as far as squad-tokens.sh uses it: -w and the expected path give its Windows form.
+[ "$1" = -w ] && [ "$2" = "$CYGPATH_FOR" ] || exit 1
+printf '%s\n' 'E:\Repos\Gescom.aux-ferias'
+EOF
+chmod +x "$lab/win/bin/cygpath"
+export CYGPATH_FOR
+CYGPATH_FOR="$(cd "$lab/Gescom" && pwd -P)"
+win=E--Repos-Gescom-aux-ferias
+mkdir -p "$lab/upper/projects/$win" "$lab/upper/projects/$win-old" "$lab/lower/projects/e--Repos-Gescom-aux-ferias"
+{ named "CTO:gescom"; response w1 claude-test-1 "${d1}T08:00:00.000Z" 1 1 1 1; } >"$lab/upper/projects/$win/w1.jsonl"
+{ named "QA:old"; response w2 claude-test-1 "${d1}T08:30:00.000Z" 1 1 1 1; } >"$lab/upper/projects/$win-old/w2.jsonl"
+{ named "DEV:gescom"; response w3 claude-test-1 "${d1}T09:00:00.000Z" 2 2 2 2; } >"$lab/lower/projects/e--Repos-Gescom-aux-ferias/w3.jsonl"
+PATH="$lab/win/bin:$PATH" CLAUDE_CONFIG_DIR="$lab/upper" run "$lab/Gescom" --tsv
+if [ "$code" -eq 0 ] && [ "$(printf '%s\n' "$out" | tail -n +2 | cut -f3 | tr '\n' ' ')" = "CTO:gescom " ]; then
+  pass "with cygpath, the directory named from the Windows path (E--) is the project's, and one that only starts like it is not"
+else
+  fail "Windows, E--: exit $code, output:"$'\n'"$out"$'\n'"$err"
+fi
+PATH="$lab/win/bin:$PATH" CLAUDE_CONFIG_DIR="$lab/lower" run "$lab/Gescom" --tsv
+if [ "$code" -eq 0 ] && [ "$(printf '%s\n' "$out" | tail -n +2 | cut -f3 | tr '\n' ' ')" = "CTO:gescom DEV:gescom " ] \
+   && [ "$(tail -n +2 "$lab/Gescom/.agent-squad/tokens.tsv" | cut -f2 | LC_ALL=C sort -u | tr '\n' ' ')" = "$win $win-old e--Repos-Gescom-aux-ferias " ]; then
+  pass "with cygpath, the drive letter in lower case (e--) is the project's too, ignoring case, and the history keeps each directory's name"
+else
+  fail "Windows, e--: exit $code, output:"$'\n'"$out"$'\n'"$err"
+fi
+#     Neither a directory nor the history: the message says the name is matched ignoring case.
+CYGPATH_FOR="$(cd "$lab/Fresh" && pwd -P)" PATH="$lab/win/bin:$PATH" CLAUDE_CONFIG_DIR="$lab/none" run "$lab/Fresh"
+if [ "$code" -eq 1 ] && grep -qxF "squad-tokens: found nothing of Fresh to count: no Claude Code directory named $win, ignoring case, in $lab/none/projects, and no row of it in $(cd "$lab/Fresh" && pwd -P)/.agent-squad/tokens.tsv" <<<"$err"; then
+  pass "with cygpath, nothing to count: exit 1, the name looked for matched ignoring case"
+else
+  fail "Windows, nothing to count: exit $code, said: $err"
+fi
+#     A cygpath that cannot give the Windows path stops the script, rather than guess the name.
+PATH="$lab/win/bin:$PATH" CLAUDE_CONFIG_DIR="$lab/upper" run "$lab/Fresh"
+if [ "$code" -eq 1 ] && grep -qxF "squad-tokens: cygpath cannot give the Windows path of $(cd "$lab/Fresh" && pwd -P)" <<<"$err"; then
+  pass "a cygpath that fails stops the script, exit 1"
+else
+  fail "a failing cygpath: exit $code, said: $err"
 fi
 
 exit "$status"

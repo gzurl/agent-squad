@@ -293,7 +293,10 @@ squad: it reads every session's figures itself.
 The figures come from the transcripts Claude Code keeps on your machine, which it deletes about 30
 days after a session was last used. Each report also adds them to a history in
 `.agent-squad/tokens.tsv`, so they outlive the transcripts. Nothing leaves the machine. Tokens are
-not cost: most of the input is read from the cache, which is billed far below fresh input.
+not cost: most of the input is read from the cache, which is billed far below fresh input. When it
+finds neither transcripts nor history for the project, `/squad-usage` says where it looked,
+rather than report zero. On Windows, under Git Bash, it finds the transcripts by the project's
+Windows path.
 
 ### The squad board
 

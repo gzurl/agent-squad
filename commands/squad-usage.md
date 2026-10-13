@@ -18,7 +18,9 @@ name.
    It reads the transcripts of the sessions launched from the project's main checkout, adds them to
    the history in `.agent-squad/tokens.tsv`, and prints the report. Read its exit status.
    - **1:** a transcript or the history could not be read, which is how a change in Claude Code's
-     format shows. Give the CEO the script's message as it is, and say that nothing was counted.
+     format shows; or, without `--all`, neither a transcript directory nor the history has the
+     project, and the message names the directory it looked for and where. Give the CEO the
+     script's message as it is, and say that nothing was counted: it is not a count of zero.
    - **2:** it was not run from a checkout of a project the squad is installed in. Say so.
 3. **Give the CEO the report**, in the CEO's language: the period it covers, then a table with one
    row per agent (CTO, DEV, QA, then any session without a role), its responses, input, the share
