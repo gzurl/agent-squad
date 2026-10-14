@@ -1,5 +1,32 @@
 # Changelog
 
+## v58 — 2026-10-14
+- **GitHub text is short, and says each thing once** (#397, the CEO's decision, from a reading of
+  three squads' issues and PRs). §6 adds seven principles:
+  - the point first;
+  - each thing said once, and linked elsewhere;
+  - an issue as *Why*, *What* and outcome criteria;
+  - a PR's claims about the change, with its evidence given once, folded;
+  - a review that opens with its verdict, and later rounds on the delta only;
+  - the state as below;
+  - no thanks and no loose notes.
+
+  It sets word budgets as SHOULD: an issue, 200 visible words besides its criteria, and 7 criteria
+  at most; a PR description or a review, 300; a comment, five lines. Folded `<details>` do not
+  count, and going over a budget is a P3 at most. §1's DEV reference, §3, §4.2, §4.6, §5, §7 and
+  §8, the PR and issue templates and the README follow it.
+  - **State:** an agent's state comment opens with its signature, a status emoji and `State:`.
+    `/squad-save-state` edits it in place while it is still the item's last comment, and posts a
+    new one once anyone has written after it, so that the state in force is always at the bottom.
+    The compaction hook's re-orientation points at the latest one.
+- **An outside reporter is credited as `@<login>`** (#396, the CEO's decision). A Release's notes
+  then link the account and count it among the Release's contributors (§3). v57's entry now credits
+  `@fctcode`.
+- **Upgrading from v57:** restart the three sessions, as `/squad-upgrade` asks, since §1, §3, §4,
+  §5, §6, §7 and §8 change. Nothing else is needed. The PR and issue templates in `.github/` belong
+  to each project once installed, so the installer leaves a project's own as they are. A project
+  that wants the new ones copies them from `.agent-squad/playbook/.github/`.
+
 ## v57 — 2026-10-14
 - **`/squad-usage` finds a project's transcripts on Windows, and reports no silent zero** (#389,
   reported by @fctcode in #388).
