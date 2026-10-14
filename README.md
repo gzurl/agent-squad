@@ -227,9 +227,9 @@ it had promised another agent. **agent-squad** guards against that in three ways
    pull requests with their labels and verdicts, the issues in progress, in review or blocked, and
    the latest commits on the main branch. When the session resumes, another hook hands the
    snapshot back, with instructions to re-read the rules and the issue before doing anything else.
-3. **It keeps the real memory on GitHub.** Each agent leaves a short comment on its issue at every
-   step, and long runs write a `progress.log`. What is written there survives any compaction; what
-   was only in the agent's head may not.
+3. **It keeps the real memory on GitHub.** Each agent writes its state on its issue at every step,
+   and long runs write a `progress.log`. What is written there survives any compaction; what was
+   only in the agent's head may not.
 
 **What you can do:** `/context` shows how full a session's context is. When a session passes about
 90%, type `/squad-save-state` in it: its agent writes its state on its issue and tells you when it

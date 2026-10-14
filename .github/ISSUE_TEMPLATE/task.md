@@ -5,14 +5,15 @@ title: ""
 labels: ""
 ---
 
-<signature in bold, SQUAD.md §6> Context: link to the spec, decision or review finding this comes from.
+<signature in bold, SQUAD.md §6>
 
-## Scope
-What must be done, concretely.
+## Why
+Three lines at most, linking the spec, decision or review finding this comes from.
 
-## Out of scope
-What is deliberately left out.
+## What
+What must be done, and what is deliberately left out. An idea for how, as a suggestion.
 
 ## Acceptance criteria
+Outcomes a reviewer can check, seven at most (SQUAD.md §6):
 - [ ] Verifiable statement 1
 - [ ] Verifiable statement 2
