@@ -2,7 +2,7 @@
 
 ## v57 — 2026-10-14
 - **`/squad-usage` finds a project's transcripts on Windows, and reports no silent zero** (#389,
-  reported by fctcode in #388).
+  reported by @fctcode in #388).
   - **On Windows, under Git Bash,** `squad-tokens.sh` names Claude Code's directory for the project
     from the main checkout's Windows path, which `cygpath -w` gives, and matches it ignoring case,
     since the drive letter's case varies with how the session was started. It used to name it from
