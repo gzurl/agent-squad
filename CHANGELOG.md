@@ -1,5 +1,16 @@
 # Changelog
 
+## v59 — 2026-10-14
+- **On Windows, the squad's scripts drop the carriage return that `jq` writes at the end of each
+  line** (#405, reported by @fctcode in #403). It had kept `squad-plan.sh` from adding sub-issues,
+  since GitHub refused `"<id>\r"` as an id. Every script that runs `jq` now strips it, and a new
+  check of this repository keeps it so.
+- **Outside the release, already live:** `install.sh`, which runs from `main`, makes its temporary
+  directory in a way NTFS allows, and leaves nothing in `TMPDIR` when it fails (#404, reported by
+  @fctcode in #402).
+- **Upgrading from v58:** nothing to do. No rule changes, and the scripts take effect at once. A
+  restart only brings the squad board's version up to date.
+
 ## v58 — 2026-10-14
 - **GitHub text is short, and says each thing once** (#397, the CEO's decision, from a reading of
   three squads' issues and PRs). §6 adds seven principles:
