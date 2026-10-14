@@ -39,13 +39,16 @@ Work from the main checkout. The upstream repository is the one named on the `up
    for ends whatever a session is doing. Send DEV and QA one message each: "The CEO is upgrading the
    squad and needs it at a safe point (`/squad-pause`): follow the part for every agent in
    `squad-pause.md`, in the main checkout's `.claude/commands/`, now, and tell me when you are at a
-   safe point." Naming `/squad-pause` that way, in parentheses with a colon, is what lets the squad
-   board show DEV and QA as paused. That part ends with each agent waiting for `/squad-resume`,
-   which the CEO types once the sessions have restarted (step 8). Get to a safe point yourself too,
-   as that part says, apart from this upgrade. Install only once each agent has said so, its state
-   is on GitHub or it has said it works on neither, and `ListAgents` shows its session idle. A
-   session that `ListAgents` shows as **waiting** is held by a question or a permission prompt in
-   its own terminal, and reads no message until the CEO answers it there: name it to the CEO.
+   safe point." It ends with "Sent at <time>; if you read this more than 10 minutes later, ask me
+   whether it still holds before acting.", where `<time>` is `date '+%Y-%m-%d %H:%M'` when you
+   send it, as every relayed step-away message does (§6). Naming `/squad-pause` that way, in
+   parentheses with a colon, is what lets the squad board show DEV and QA as paused. That part ends
+   with each agent waiting for `/squad-resume`, which the CEO types once the sessions have restarted
+   (step 8). Get to a safe point yourself too, as that part says, apart from this upgrade. Install
+   only once each agent has said so, its state is on GitHub or it has said it works on neither, and
+   `ListAgents` shows its session idle. A session that `ListAgents` shows as **waiting** is held by
+   a question or a permission prompt in its own terminal, and reads no message until the CEO answers
+   it there: name it to the CEO.
 5. **Install** from the main checkout:
    `gh api -H 'Accept: application/vnd.github.raw' repos/<upstream>/contents/install.sh | bash -s -- --tag <tag> . > <file> 2>&1`,
    with `<file>` in a temporary directory, and read the exit status of that line. Read the whole

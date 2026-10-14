@@ -4,7 +4,9 @@
 # .claude/commands/ as in a skill: the model's Skill tool refuses such a command, and the CEO can
 # still type it. The commands an agent runs itself, /squad-watch through /loop and the token
 # reports, carry no such line. It walks the repository's real commands/, fails when it finds none,
-# and fails on a command in neither list below, which has to be put in one of them.
+# and fails on a command in neither list below, which has to be put in one of them. It also checks
+# that every command that relays a step-away message has it end with the time it was sent, as
+# SQUAD.md §6 asks (agent-squad #413).
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2
@@ -64,5 +66,30 @@ fi
 for name in "${ceo_only[@]}" "${invocable[@]}"; do
   [ -f "$root/commands/$name.md" ] || fail "/$name is listed, but there is no commands/$name.md"
 done
+
+# Every command that relays a step-away message names it in parentheses with a colon, which is how
+# the board reads a relay, and asks for the line that ends the message with the time it was sent,
+# from the clock. Its text is read with its lines joined, since the line wraps in the file.
+sent_at="Sent at <time>; if you read this more than 10 minutes later, ask me whether it still holds before acting."
+clock="\`date '+%Y-%m-%d %H:%M'\`"
+relays=0
+for file in "$root"/commands/squad-*.md; do
+  [ -f "$file" ] || continue
+  # shellcheck disable=SC2016 # the backquotes are the relay's own, not a command
+  grep -qE '\(`/squad-(pause|resume|autopilot)(-all)?`\):' "$file" || continue
+  relays=$((relays + 1))
+  name="$(basename "$file" .md)"
+  text="$(tr -s '[:space:]' ' ' <"$file")"
+  if [[ "$text" == *"$sent_at"* && "$text" == *"$clock"* ]]; then
+    pass "/$name relays a step-away message that ends with the time it was sent"
+  else
+    fail "/$name relays a step-away message, but does not end it with \"$sent_at\", <time> being $clock"
+  fi
+done
+if [ "$relays" -gt 0 ]; then
+  pass "it found the $relays commands that relay a step-away message"
+else
+  fail "it found no command that relays a step-away message"
+fi
 
 exit "$status"
