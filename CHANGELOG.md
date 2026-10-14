@@ -1,5 +1,13 @@
 # Changelog
 
+## v60 — 2026-10-14
+- **A release that only fixes things takes no README read** (#410, the CEO's decision). §3: when
+  the README is unchanged since the last tag, and the CHANGELOG entry adds no rule and nothing a
+  user notices, the CTO says so on the plan issue in one line and tags the release. The install
+  still waits for the CEO's yes.
+- **Upgrading from v59:** restart the three sessions, as `/squad-upgrade` asks, since §3 changes.
+  Nothing else.
+
 ## v59 — 2026-10-14
 - **On Windows, the squad's scripts drop the carriage return that `jq` writes at the end of each
   line** (#405, reported by @fctcode in #403). It had kept `squad-plan.sh` from adding sub-issues,
