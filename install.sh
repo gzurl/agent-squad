@@ -86,14 +86,19 @@ vN (default: the latest), v$oldest or later, by running that tag's own scripts/s
 
   # The chosen tag's installer goes into a directory of this run's own, removed on every way out.
   # Its name is fixed before it exists, so that an interrupt finds in the trap exactly that
-  # directory or nothing, never TMPDIR itself.
+  # directory or nothing, never TMPDIR itself. A name already taken is left alone; one that was
+  # free is this run's, so the trap removes whatever mkdir leaves there, even when mkdir fails.
+  # The directory is closed to others by the umask, not by mkdir -m: GNU mkdir sets that mode once
+  # the directory exists, which fails on NTFS under Git Bash (agent-squad #404, as #277 was for
+  # the installer's own self-test).
   tmp="${TMPDIR:-/tmp}"
   tmp="${tmp%/}/agent-squad-install.$$.$RANDOM$RANDOM"
+  { [ ! -e "$tmp" ] && [ ! -L "$tmp" ]; } || fail "cannot create a temporary directory: $tmp exists"
   trap 'rm -rf "$tmp"' EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  mkdir -m 700 "$tmp" 2>/dev/null || { tmp=""; fail "cannot create a temporary directory"; }
+  (umask 077 && mkdir "$tmp") 2>/dev/null || fail "cannot create a temporary directory"
   installer="$tmp/squad-install.sh"
   if ! gh api -H 'Accept: application/vnd.github.raw' \
     "repos/$upstream/contents/scripts/squad-install.sh?ref=$tag" > "$installer" 2>/dev/null \

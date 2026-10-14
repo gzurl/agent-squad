@@ -3,9 +3,10 @@
 # as numbers, or a --tag checked before any use; the chosen tag's own installer run on the project,
 # its exit status passed on, and the tags it cannot install refused; the prerequisites checked
 # before any download; a run piped into bash, whose installer reads nothing of the script, and a
-# script cut short at any point, which does nothing; and TMPDIR left as it was, on success, on
-# failure and on interruption. GitHub is replaced by a `gh` that serves tags and a fake installer:
-# no network, and this script never touches the repository it is run from.
+# script cut short at any point, which does nothing; TMPDIR left as it was, on success, on failure
+# and on interruption; and its directory made closed to others by a mkdir that cannot set a mode,
+# as on NTFS under Git Bash (agent-squad #404). GitHub is replaced by a `gh` that serves tags and a
+# fake installer: no network, and this script never touches the repository it is run from.
 set -u
 
 root="$(git rev-parse --show-toplevel)" || exit 2
@@ -28,8 +29,8 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # lists the refs under refs/tags/ (default v9, v15, v16, v100 and names that are not release tags),
 # STUB_AUTH=fail and STUB_REPO=fail make the login and the repository unreadable, STUB_CONTENTS=fail
 # makes the installer's download fail, STUB_CONTENTS=empty makes it succeed with nothing, and
-# STUB_CONTENTS=slow makes it wait. The installer it serves
-# records its arguments and what it reads on stdin, prints a line, records that it got past it,
+# STUB_CONTENTS=slow makes it wait. The installer it serves records its arguments, the mode of the
+# directory it runs from and what it reads on stdin, prints a line, records that it got past it,
 # may wait (STUB_INSTALLER_SLEEP) and exits with STUB_INSTALLER_EXIT. Like every tag's installer
 # before v23, it does not ignore SIGPIPE itself.
 mkdir -p "$lab/bin"
@@ -49,6 +50,7 @@ case "$1 ${2:-}" in
     cat <<'INSTALLER'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$STUB_LAB/installer-args"
+ls -ld "$(dirname "$0")" | cut -c1-10 > "$STUB_LAB/installer-dir-mode"
 if IFS= read -r line; then echo "read: $line"; else echo "nothing"; fi > "$STUB_LAB/installer-stdin"
 echo "fake installer of $2"
 echo finished > "$STUB_LAB/installer-finished"
@@ -68,7 +70,7 @@ project="$(cd "$project" && pwd)"
 # `run <args...>` runs install.sh from the project's directory with the stub first on PATH and
 # TMPDIR in the lab, after clearing the stub's records; its stdout and stderr land in $out and $err.
 run() {
-  rm -f "$lab/calls" "$lab/installer-args" "$lab/installer-stdin"
+  rm -f "$lab/calls" "$lab/installer-args" "$lab/installer-stdin" "$lab/installer-dir-mode"
   (cd "$project" && PATH="$lab/bin:$PATH" TMPDIR="$lab/tmp" "$script" "$@" \
     >"$lab/out" 2>"$lab/err" </dev/null)
   code=$?
@@ -312,6 +314,40 @@ unset STUB_CONTENTS
 export STUB_INSTALLER_SLEEP=5
 interrupted_while "the installer runs" "$lab/installer-args" "$project"
 unset STUB_INSTALLER_SLEEP
+#    A mkdir that makes the directory but cannot set a mode, as on NTFS under Git Bash, where
+#    mkdir -m then exits 1 (#404): install.sh installs all the same, from a directory closed to
+#    others even under a umask that leaves directories open, and leaves nothing in TMPDIR. A mkdir
+#    that fails once it has made the directory, whatever it is asked, stops install.sh before any
+#    download, and the directory goes too. Each stub stands first on PATH for its run alone.
+mkdir -p "$lab/no-mode" "$lab/fails-after"
+# shellcheck disable=SC2016 # the stub's lines are code, written as they are
+printf '%s\n' '#!/usr/bin/env bash' \
+  '# mkdir as on NTFS under Git Bash: given a mode, it makes the directory and cannot set the mode.' \
+  'args=() mode=""' \
+  'while [ $# -gt 0 ]; do' \
+  '  case "$1" in -m) mode=yes; shift 2 ;; -m*) mode=yes; shift ;; *) args+=("$1"); shift ;; esac' \
+  'done' \
+  "$(printf '%q' "$(command -v mkdir)")"' "${args[@]}" || exit' \
+  '[ -z "$mode" ]' > "$lab/no-mode/mkdir"
+printf '#!/usr/bin/env bash\n%q "$@"\nexit 1\n' "$(command -v mkdir)" > "$lab/fails-after/mkdir"
+chmod +x "$lab/no-mode/mkdir" "$lab/fails-after/mkdir"
+umask_before="$(umask)"
+umask 022
+PATH="$lab/no-mode:$PATH" run --tag v16 "$project"
+umask "$umask_before"
+mode="$(cat "$lab/installer-dir-mode" 2>/dev/null)"
+if [ "$code" -eq 0 ] && installed v16 && [ "$mode" = drwx------ ] && tmp_clean; then
+  pass "with a mkdir that cannot set a mode, as on NTFS, install.sh installs from a directory closed to others, and leaves nothing in TMPDIR"
+else
+  fail "with a mkdir that cannot set a mode: exit $code, the installer's directory: $mode, TMPDIR holds: $(left_in_tmp), stderr: $err"
+fi
+PATH="$lab/fails-after:$PATH" run --tag v16 "$project"
+if [ "$code" -eq 2 ] && [ "$err" = "install.sh: cannot create a temporary directory" ] \
+  && ! grep -qF contents "$lab/calls" && [ ! -e "$lab/installer-args" ] && tmp_clean; then
+  pass "a mkdir that fails once it has made the directory stops install.sh, exit 2, before any download, and leaves nothing in TMPDIR"
+else
+  fail "a mkdir that fails once it has made the directory: exit $code, TMPDIR holds: $(left_in_tmp), stderr: $err"
+fi
 
 # 7. The upstream repository is named once in install.sh, so that moving it changes one line.
 named="$(grep -c 'gzurl/agent-squad' "$script")"
