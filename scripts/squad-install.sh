@@ -17,6 +17,10 @@
 #       .agent-squad/ was touched and the installed playbook is unchanged.
 #       With --check: 0 every item passes; 1 at least one failed; 2 bad usage.
 set -u
+# jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
+# sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
+# Whether jq is installed is therefore asked of `type -P`, which ignores this function.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 
 upstream="gzurl/agent-squad"
 shim_marker="agent-squad pre-push shim"
@@ -62,7 +66,7 @@ else
   esac
 fi
 for tool in git jq tar awk; do
-  command -v "$tool" >/dev/null 2>&1 || die "$tool is required"
+  type -P "$tool" >/dev/null 2>&1 || die "$tool is required"
 done
 if [ "$mode" = install ] && [ -z "$source_dir" ]; then
   command -v gh >/dev/null 2>&1 || die "gh is required to download the tag"

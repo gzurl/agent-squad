@@ -26,6 +26,9 @@
 # Exit: 0 done; 1 GitHub could not be read, so nothing was listed, or the mark could not be kept;
 #   2 bad usage, or not run from a checkout of a project the squad is installed in.
 set -u
+# jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
+# sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 
 usage() { sed -n 's/^# Usage: /usage: /p' "$0" >&2; exit 2; }
 die() { echo "squad-outside: $*" >&2; exit 1; }

@@ -20,6 +20,9 @@
 # A session counts as open while its record is younger than three minutes, as the band's do.
 # Exit: 0, whatever it finds; 2 bad usage.
 set -u
+# jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
+# sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 usage="usage: squad-sessions.sh <main checkout>"
 if [ $# -ne 1 ] || [ ! -d "$1/.agent-squad" ]; then echo "$usage" >&2; exit 2; fi
 squad="$1/.agent-squad"

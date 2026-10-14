@@ -15,6 +15,9 @@
 # Exit: 0 may be merged; 1 a condition failed; 2 bad usage; 3 behind a base that changed a file the
 #       PR changes too, and not acknowledged for that base.
 set -u
+# jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
+# sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 pr="${1:-}"
 case "$pr" in ""|*[!0-9]*) echo "gate: usage: $0 <pr-number> [owner/repo]" >&2; exit 2 ;; esac
 repo="${2:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"

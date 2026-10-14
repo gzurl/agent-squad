@@ -11,8 +11,8 @@
 # issue or a PR opened from outside the squad, by the account's association and whatever its
 # signature, is the CTO's to triage once it has waited 30 minutes, and nobody else's (#281). An
 # approved PR with a review still requested on GitHub waits for that reviewer: nobody is pinged, and
-# the CEO is told once it has been quiet for an hour, whatever the sessions (#306).
-# Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
+# the CEO is told once it has been quiet for an hour, whatever the sessions (#306). A jq that ends
+# its lines with CRLF, as on Windows, finds the same (#405). Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
 # happens in a temporary directory; this script touches neither its repository nor GitHub.
 # shellcheck disable=SC2016 # jq programs use jq variables
 set -u
@@ -76,6 +76,13 @@ esac
 GH
 chmod +x "$lab/bin/gh"
 export PATH="$lab/bin:$PATH"
+# jq as on Windows (agent-squad #405), in the runs that `crlf <command...>` makes: every line it
+# writes ends with CRLF.
+mkdir -p "$lab/crlf"
+printf '#!/usr/bin/env bash\n[ -n "${STUB_CRLF:-}" ] || exec %q "$@"\n%q "$@" | awk %q\nexit "${PIPESTATUS[0]}"\n' \
+  "$(command -v jq)" "$(command -v jq)" '{ printf "%s\r\n", $0 }' > "$lab/crlf/jq"
+chmod +x "$lab/crlf/jq"
+crlf() { STUB_CRLF=1 PATH="$lab/crlf:$PATH" "$@"; }
 
 # The clock: noon. `at <minutes ago>` prints the time that many minutes before it, as GitHub
 # writes times.
@@ -150,6 +157,14 @@ finds "each PR's next step goes to whoever owns it, and each owner is pinged" "$
   tsv ping DEV "PR #7" https://github.com/o/r/pull/7 "review its head 1111111" "$since" "")"
 #    A verdict on an earlier commit (#4) asks for a new review, a stranger's approval (#5) counts
 #    for nothing, and a PR QA authors (#7) is DEV's to review.
+#    With a jq that ends its lines with CRLF, as on Windows, the same pings, and the state they
+#    leave is read back: a minute later, nobody is pinged again (agent-squad #405).
+pings="$out"
+rm -f "$state"
+crlf run 0 "${everyone_idle[@]}"
+finds "with a jq that ends its lines with CRLF, the same pings" "$pings"
+crlf run 1 "${everyone_idle[@]}"
+finds "and a minute later, from the state they left, nobody is pinged again" ""
 
 # 2. Who owns the next step of an issue in progress; other issues are not watched.
 rm -f "$state"

@@ -4,8 +4,9 @@
 # opened that wait for their triage, whatever their signature, and the comments and reviews outside
 # accounts wrote since the last triage, each with its account. A listing changes nothing and names
 # its own time for --mark, so that a comment written during a triage is listed next time. Lists
-# over a megabyte, as a real repository's comments are, go through. GitHub unreadable is an error,
-# never an empty list. Everything happens in a temporary directory; this script touches neither its
+# over a megabyte, as a real repository's comments are, go through, and so does a jq that ends its
+# lines with CRLF, as on Windows (agent-squad #405). GitHub unreadable is an error, never an empty
+# list. Everything happens in a temporary directory; this script touches neither its
 # repository nor GitHub.
 set -u
 
@@ -66,6 +67,14 @@ exit 1
 GH
 chmod +x "$lab/bin/gh"
 export PATH="$lab/bin:$PATH"
+# jq as on Windows (agent-squad #405), in the runs that `crlf <command...>` makes: every line it
+# writes ends with CRLF.
+mkdir -p "$lab/crlf"
+# shellcheck disable=SC2016 # the stub's lines are code, written as they are
+printf '#!/usr/bin/env bash\n[ -n "${STUB_CRLF:-}" ] || exec %q "$@"\n%q "$@" | awk %q\nexit "${PIPESTATUS[0]}"\n' \
+  "$(command -v jq)" "$(command -v jq)" '{ printf "%s\r\n", $0 }' > "$lab/crlf/jq"
+chmod +x "$lab/crlf/jq"
+crlf() { STUB_CRLF=1 PATH="$lab/crlf:$PATH" "$@"; }
 
 # The clock: noon. `at <minutes after noon>` prints that time as GitHub writes times.
 noon="$(jq -n '"2026-10-03T12:00:00Z" | fromdateiso8601')"
@@ -151,6 +160,10 @@ finds "the first listing shows the items that wait for triage, then every outsid
 if ! grep -q since "$lab/queries.txt"; then pass "with no triage marked yet, every comment is asked for"; else fail "a first listing asked for: $(cat "$lab/queries.txt")"; fi
 marks "and it ends with the --mark that records its own time" 2026-10-03T12:00:00Z
 if [ ! -e "$squad/triage.since" ]; then pass "a listing marks nothing by itself"; else fail "a listing wrote $(cat "$squad/triage.since")"; fi
+#    With a jq that ends its lines with CRLF, as on Windows, the same listing (agent-squad #405).
+listing="$out"
+crlf run 0
+finds "with a jq that ends its lines with CRLF, the same listing, every item, comment and review in it" "$listing"
 
 # 2. The mark takes the time the CTO's listing named, noon, whatever ran since: a comment written
 #    during the triage (12:03), one edited after it (written at 9:00, edited at 12:20) and a review

@@ -24,6 +24,9 @@
 #   label could not be written, with gh's message; 2 bad usage, or not run from a checkout of a
 #   project the squad is installed in; 3 with --check, a label missing or different.
 set -u
+# jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
+# sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 usage="usage: squad-setup-labels.sh [--check]"
 check=false
 case "$*" in

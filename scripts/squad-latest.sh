@@ -24,6 +24,9 @@
 # it prints one line on what it knows, and exits 0 whatever GitHub answers; 2 is bad usage.
 # SQUAD_LATEST_TIMEOUT is how long gh may take, in seconds (10 when unset).
 set -u
+# jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
+# sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 usage="usage: squad-latest.sh [--due | --now] <main checkout>"
 due_only=false always=false
 case "${1:-}" in
