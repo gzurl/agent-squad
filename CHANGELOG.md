@@ -1,5 +1,13 @@
 # Changelog
 
+## v61 — 2026-10-14
+- **`/squad-upgrade`'s pause relay gives the time it was sent** (#413, noticed by DEV and QA at the
+  v58 and v60 upgrades). Its step 4 ends the message with the same "Sent at" line as
+  `/squad-pause`, as §6 asks of every relayed step-away message, and a check of this repository
+  fails when a command that relays one leaves the line out.
+- **Upgrading from v60:** nothing to do. No rule changes, and the command takes effect at once. A
+  restart only brings the squad board's version up to date.
+
 ## v60 — 2026-10-14
 - **A release that only fixes things takes no README read** (#410, the CEO's decision). §3: when
   the README is unchanged since the last tag, and the CHANGELOG entry adds no rule and nothing a
