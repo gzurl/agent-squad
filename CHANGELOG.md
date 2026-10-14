@@ -18,6 +18,7 @@
   - **State:** an agent's state comment opens with its signature, a status emoji and `State:`.
     `/squad-save-state` edits it in place while it is still the item's last comment, and posts a
     new one once anyone has written after it, so that the state in force is always at the bottom.
+    The compaction hook's re-orientation points at the latest one.
 - **An outside reporter is credited as `@<login>`** (#396, the CEO's decision). A Release's notes
   then link the account and count it among the Release's contributors (§3). v57's entry now credits
   `@fctcode`.
