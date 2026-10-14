@@ -23,9 +23,9 @@
   then link the account and count it among the Release's contributors (§3). v57's entry now credits
   `@fctcode`.
 - **Upgrading from v57:** restart the three sessions, as `/squad-upgrade` asks, since §1, §3, §4,
-  §5, §6, §7 and §8 change. Nothing else is needed. The PR and issue templates in `.github/` belong to each
-  project once installed, so the installer leaves a project's own as they are. A project that
-  wants the new ones copies them from `.agent-squad/playbook/.github/`.
+  §5, §6, §7 and §8 change. Nothing else is needed. The PR and issue templates in `.github/` belong
+  to each project once installed, so the installer leaves a project's own as they are. A project
+  that wants the new ones copies them from `.agent-squad/playbook/.github/`.
 
 ## v57 — 2026-10-14
 - **`/squad-usage` finds a project's transcripts on Windows, and reports no silent zero** (#389,
