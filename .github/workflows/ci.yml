@@ -27,6 +27,8 @@ jobs:
         run: scripts/check-version.sh
       - name: No squad script filters gh by label
         run: scripts/check-gh-filters.sh
+      - name: Every squad script that runs jq drops the CR it ends its lines with on Windows
+        run: scripts/check-jq-lines.sh
       - name: The token report counts each response once and keeps its history
         run: scripts/check-tokens.sh
       - name: CI runs every test the pre-push gate runs

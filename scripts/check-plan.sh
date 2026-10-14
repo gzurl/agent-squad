@@ -7,8 +7,9 @@
 # repository that tracks SQUAD.md; the release's version PR open in each of its states, and the PRs
 # that are not it (agent-squad #384); the plan issue rewritten between its markers, and left alone
 # when only the time changed; the plan issue's sub-issues kept in step with its milestone
-# (agent-squad #391); no open milestone, and a milestone without a plan issue; a failed read or
-# write; bad usage. Nothing reaches GitHub.
+# (agent-squad #391); the same table and sub-issues with a jq that ends its lines with CRLF, as on
+# Windows (agent-squad #405); no open milestone, and a milestone without a plan issue; a failed read
+# or write; bad usage. Nothing reaches GitHub.
 # shellcheck disable=SC2016 # the checks' bash -c bodies take their values as arguments
 set -u
 
@@ -44,6 +45,8 @@ same() { diff "$1" <(printf '%s\n' "$out") >&2; }
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
+# gh's own --jq ends its lines with LF on Windows too (go-gh's pkg/jq/jq.go), whatever jq does.
+unset STUB_CRLF
 printf '%s | input: %s\n' "$*" "$(cat)" >> "$CALLS"
 if [ -n "${STUB_FAIL:-}" ] && [[ "$*" == *"$STUB_FAIL"* ]]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
 case "$1 $2" in
@@ -98,6 +101,8 @@ case "$endpoint" in
     parent="${endpoint#repos/o/r/issues/}"
     json="$(jq --argjson p "${parent%%/*}" '[.[] | select(.parent == $p) | {number, id, state, title, repository_url}]' "$W/issues.json")" ;;
   repos/o/r/issues/*/sub_issues|repos/o/r/issues/*/sub_issue)
+    # gh -F sends a value that is not a number as a string, which GitHub refuses (agent-squad #405).
+    [[ "$sub" =~ ^[0-9]+$ ]] || { echo "Invalid property /sub_issue_id: \`\"$sub\"\` is not of type \`integer\`. (HTTP 422)" >&2; exit 1; }
     parent="${endpoint#repos/o/r/issues/}" parent="${parent%%/*}"
     case "$method:$endpoint" in
       POST:*/sub_issues) before=null after="$parent" ;;
@@ -121,6 +126,13 @@ esac
 if [ -n "$filter" ]; then jq -r "$filter" <<<"$json"; else printf '%s\n' "$json"; fi
 GH
 chmod +x "$lab/bin/gh"
+# jq as on Windows (agent-squad #405), in the runs that `crlf <command...>` makes: every line it
+# writes ends with CRLF. The stub gh, which uses jq for its own --jq, sets it aside.
+mkdir -p "$lab/crlf"
+printf '#!/usr/bin/env bash\n[ -n "${STUB_CRLF:-}" ] || exec %q "$@"\n%q "$@" | awk %q\nexit "${PIPESTATUS[0]}"\n' \
+  "$(command -v jq)" "$(command -v jq)" '{ printf "%s\r\n", $0 }' > "$lab/crlf/jq"
+chmod +x "$lab/crlf/jq"
+crlf() { STUB_CRLF=1 PATH="$lab/crlf:$PATH" "$@"; }
 export PATH="$lab/bin:$PATH" CALLS="$lab/calls" W="$lab/world" TZ=UTC
 
 # The scratch checkout, where the squad is installed.
@@ -302,6 +314,10 @@ EOF
 check "half done, upstream: exit 0" bash -c '[ "$1" -eq 0 ]' _ "$code"
 check "the table is the one expected" same "$lab/expected"
 check "a draft's reviews are not read" bash -c '! grep -q "pulls/15/reviews" "$1" && grep -q "pulls/12/reviews" "$1"' _ "$CALLS"
+#    With a jq that ends its lines with CRLF, as on Windows, the table is the same (agent-squad #405).
+crlf run
+check "with a jq that ends its lines with CRLF: exit 0, and the same table" \
+  bash -c '[ "$1" -eq 0 ] && diff "$2" <(printf "%s\n" "$3") >&2' _ "$code" "$lab/expected" "$out"
 
 # 4. The release's own steps, step by step, upstream: every issue closed, the version PR not yet
 #    merged, then merged, then the README asked, then the tag, the Release and the install.
@@ -552,14 +568,18 @@ done
 #     its id, which is not its number. An issue with another parent stays under it, and the line
 #     says so. The plan issue, and an older plan issue of the milestone, closed, are never sub-issues.
 #     The table's rows are still the milestone's. Run again, nothing is written.
-world
-plan_issue 10
-issue 1 open "Open" "👨🏼‍💻 owner:dev"
-issue 2 closed "Closed" "👨🏼‍💻 owner:dev"
-issue 3 open "Under another parent" "👨🏼‍💻 owner:dev" && set_issue 3 '.parent = 50'
-M=42 issue 4 open "Left the milestone" && set_issue 4 '.parent = 10'
-issue 5 open "Already a sub-issue" "👨🏼‍💻 owner:dev" && set_issue 5 '.parent = 10'
-plan_issue 9 && set_issue 9 '.state = "closed"'
+# `sub_world` starts that world.
+sub_world() {
+  world
+  plan_issue 10
+  issue 1 open "Open" "👨🏼‍💻 owner:dev"
+  issue 2 closed "Closed" "👨🏼‍💻 owner:dev"
+  issue 3 open "Under another parent" "👨🏼‍💻 owner:dev" && set_issue 3 '.parent = 50'
+  M=42 issue 4 open "Left the milestone" && set_issue 4 '.parent = 10'
+  issue 5 open "Already a sub-issue" "👨🏼‍💻 owner:dev" && set_issue 5 '.parent = 10'
+  plan_issue 9 && set_issue 9 '.state = "closed"'
+}
+sub_world
 # `parents` prints each issue's number and parent, the parentless ones as "-".
 parents() { jq -r 'sort_by(.number)[] | "\(.number):\(.parent // "-")"' "$W/issues.json" | tr '\n' ' '; }
 run
@@ -577,6 +597,15 @@ run --update
 check "run again: nothing written, and the line says only what stays under another parent" \
   bash -c '[ "$1" -eq 0 ] && [ "$(tail -1 <<<"$2")" = "plan: #10 unchanged; #3 left under its parent #50" ] && [ "$3" -eq 0 ] && [ "$4" -eq 0 ]' \
   _ "$code" "$out" "$(adoptions)" "$(edits)"
+#     With a jq that ends its lines with CRLF, as on Windows, the same sub-issues are added and
+#     removed, and the description written holds no CR: GitHub refused each id that came with its CR
+#     (agent-squad #405).
+sub_world
+crlf run --update
+check "with a jq that ends its lines with CRLF: the same sub-issues added and removed, and no CR written" \
+  bash -c '[ "$1" -eq 0 ] && [ "$(tail -1 <<<"$2")" = "plan: #10 updated; sub-issues added: #1, #2; sub-issues removed: #4; #3 left under its parent #50" ] \
+    && [ "$3" = "1:10 2:10 3:50 4:- 5:10 9:- 10:- " ] && [ "$4" -eq 0 ]' \
+  _ "$code" "$out" "$(parents)" "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json" | tr -cd '\r' | wc -c)"
 
 #     GitHub allows 100 sub-issues per issue (QA's finding on PR #393): a milestone of 102 closed
 #     issues gets its first 100, the line names the two left out, and the exit status stays 0. The

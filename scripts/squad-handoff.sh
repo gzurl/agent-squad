@@ -22,6 +22,10 @@
 # the hook: on any error it prints what it has and exits 0. The one exception is the gate, which
 # stops a manual /compact on purpose with exit 2.
 set -u
+# jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
+# sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
+# Whether jq is installed is therefore asked of `type -P`, which ignores this function.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 
 action="${1:-}"
 # The hook's JSON payload. Run by hand on a terminal there is none, and reading would wait for ever.
@@ -30,7 +34,7 @@ payload=""
 # jq is required to read the payload (BOOTSTRAP.md, row 10b). Without it, or without a usable id,
 # nothing is written: a missing snapshot is harmless, a shared or mis-placed one is not.
 session_id=""
-if command -v jq >/dev/null 2>&1; then
+if type -P jq >/dev/null 2>&1; then
   session_id="$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null || true)"
 fi
 # Validate the identifier before it becomes a path (SQUAD.md: validate the identifier, derive the rest).
@@ -149,7 +153,7 @@ unchecked() {
 }
 compact_gate() {
   local trigger transcript turns last blocked_file blocked_at now
-  command -v jq >/dev/null 2>&1 || unchecked "jq is missing"
+  type -P jq >/dev/null 2>&1 || unchecked "jq is missing"
   trigger="$(printf '%s' "$payload" | jq -r '.trigger // empty' 2>/dev/null)"
   case "$trigger" in
     auto) return 0 ;;
