@@ -153,6 +153,21 @@ tree_state() {
 same_tree() { [ "$(tree_state "$1")" = "$(tree_state "$2")" ]; }
 # `project_state <project>` adds the git hooks, which live in the common git directory.
 project_state() { tree_state "$1"; tree_state "$1/.git/hooks"; }
+# `path_without <command>` prints a directory of links to every other command on PATH, which stands
+# for the PATH of a machine without that one.
+path_without() {
+  local dir="$lab/without-$1" entries entry command
+  if [ ! -d "$dir" ]; then
+    mkdir -p "$dir"
+    IFS=: read -r -a entries <<<"$PATH"
+    for entry in "${entries[@]}"; do
+      for command in "$entry"/*; do
+        [ "${command##*/}" != "$1" ] && [ -x "$command" ] && [ ! -e "$dir/${command##*/}" ] && ln -s "$command" "$dir/${command##*/}"
+      done
+    done
+  fi
+  echo "$dir"
+}
 # `log_lines <project>` counts the lines of the install log; `log_ends_with <project> <text>`
 # looks at its last one.
 log_lines() { wc -l < "$1/.agent-squad/install.log" | tr -d ' '; }
@@ -1192,6 +1207,14 @@ cases_failure_paths() {
     check "the tag name '$bad' is refused with exit 2, saying so" \
       bash -c '[ "$1" -eq 2 ] && grep -qF "'"'"'$2'"'"' is not a tag name" <<<"$3"' _ "$code" "$bad" "$out"
   done
+  # Without jq, the installer stops before it changes anything. It asks `type -P`, since `command -v`
+  # would find the jq function that drops jq's CRs on Windows (#405).
+  before="$(project_state "$target")"
+  out="$(PATH="$(path_without jq)" "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "without jq the installer exits 2, saying jq is required, and changes nothing" \
+    bash -c '[ "$1" -eq 2 ] && [ "$2" = "squad-install: jq is required" ] && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$before" "$(project_state "$target")"
   project="$target" squad="$target/.agent-squad" hooks="$target/.git/hooks"
   mv "$squad/playbook.manifest" "$lab/manifest-aside"
   check "a playbook installed without checksums fails the playbook item, saying to install again" \
@@ -1847,6 +1870,13 @@ cases_uninstall_refusals() {
     code=$?
     check "'$args' is bad usage, exit 2" [ "$code" -eq 2 ]
   done
+  # Without jq, the uninstaller stops before it removes anything, as the installer does (#405).
+  before="$(state)"
+  out="$(PATH="$(path_without jq)" "$uninstall" "$target" 2>&1)"
+  code=$?
+  check "without jq the uninstaller exits 2, saying jq is required, and removes nothing" \
+    bash -c '[ "$1" -eq 2 ] && [ "$2" = "squad-uninstall: jq is required" ] && [ "$3" = "$4" ]' \
+    _ "$code" "$out" "$before" "$(state)"
   # What the dev worktree holds that git ignores, a .env with a key and a run's output: the dry run
   # names it, the run moves it into .agent-squad/kept/dev/ and keeps it (QA's review of PR #288),
   # and a second run leaves it there.
