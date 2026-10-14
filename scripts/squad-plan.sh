@@ -10,12 +10,13 @@
 # A table has one row per issue of the milestone, the plan issues left out, by priority, then
 # number: the issue, its owner, where it stands, and the next step and whose it is, from
 # squad-steps.jq, which the stall detector shares. Then the release's own steps: the CEO's read of
-# the README, which SQUAD.md §3 asks of a milestone that does not only fix things, and, where the repository tracks SQUAD.md
-# with a Version: line, as the method's own repository does, and the milestone's title starts with
-# vN, the version PR before it, and the tag, the Release and the install here after it. While the
-# version PR is open, its row shows it as an issue's row shows its PR: the version PR names the plan
-# issue ("Part of #N") and closes no issue (SQUAD.md §3, agent-squad #384). Everything comes from
-# GitHub, except the install, which comes from .agent-squad/install.log of the main checkout.
+# the README, which SQUAD.md §3 asks of a milestone that does not only fix things, and, where the
+# repository tracks SQUAD.md with a Version: line, as the method's own repository does, and the
+# milestone's title starts with vN, the version PR before it, and the tag, the Release and the
+# install here after it. While the version PR is open, its row shows it as an issue's row shows its
+# PR: the version PR names the plan issue ("Part of #N") and closes no issue (SQUAD.md §3,
+# agent-squad #384). Everything comes from GitHub, except the install, which comes from
+# .agent-squad/install.log of the main checkout.
 #
 # --update rewrites what lies between each plan issue's markers, and only when the table changed,
 # its time left out. Editing a description notifies nobody, and updates by several agents converge,
