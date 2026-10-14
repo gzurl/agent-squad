@@ -95,7 +95,7 @@ The agents share a machine and a repository; each works in its own worktree, und
 
   An open PR always shows one of its three states, and only one. **Whoever sets a state label removes the others in the same command, and reads the result back,** on a PR as on an issue, with the playbook's `squad-set-status.sh`, from any worktree: `p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" && "$p/scripts/squad-set-status.sh" pr <n> approved`. Its states are `in-progress`, `in-review`, `blocked` for an issue, `approved` for a PR, and `none`. Its one edit adds the state's label and removes the other status labels, never the one it adds: when one command adds and removes the same label, the removal wins, and the item is left with none. It then reads the item's labels, and exits non-zero, saying what the item carries, unless that state alone is there. The merge gate refuses a PR with more than one (§4.9). **Whoever closes an issue removes its status label:** `squad-set-status.sh issue <n> none`. *Twice in one day a PR carried two states, because each side removed only the label it had added itself, and only QA's second look caught it. Another project's issue kept two until it was closed, because nobody read the result of the edit that set them (agent-squad #367).*
 - **Progress is visible on the issue.** The owner keeps one state comment on it, updated at every completed milestone: what is done, what comes next (§6). *An issue whose state comment has not moved for a long stretch is the signal to check on it.*
-- **Long runs write a progress file.** Any process expected to take longer than about five minutes (a benchmark, a bulk download, a long test run) MUST append to a file next to its output (`<out>/progress.log`): one header line per run (start time, commit, planned steps), then one line when each step **starts** and one when it **ends** (step name, timestamp, elapsed at the end). The milestone comment names the file and the estimated total duration. Write per step, never per iteration. *Anyone can then read how far a run is without touching the process; a `start` without its `end` is the sign of a step in progress or a dead run, a new header marks a relaunch, and the writing cannot distort a measurement.*
+- **Long runs write a progress file.** Any process expected to take longer than about five minutes (a benchmark, a bulk download, a long test run) MUST append to a file next to its output (`<out>/progress.log`): one header line per run (start time, commit, planned steps), then one line when each step **starts** and one when it **ends** (step name, timestamp, elapsed at the end). The state comment names the file and the estimated total duration. Write per step, never per iteration. *Anyone can then read how far a run is without touching the process; a `start` without its `end` is the sign of a step in progress or a dead run, a new header marks a relaunch, and the writing cannot distort a measurement.*
 - **Three attempts, then stop.** After three attempts at the same problem without progress, the agent stops and reports to the CTO (or to the CEO, when the agent is the CTO) before the fourth, stating what was tried.
 - **Status on request.** The CTO may ask any agent for a five-line status (done / doing / left / blockers / ETA); the agent answers at its next natural pause.
 - **Decisions are recorded where they last.** Anything another agent will act on (a decision, an approval, an answer to a plan, a tie-break, an authorisation) is written first on the issue or PR by whoever gives it, as the option chosen and why (§6); the message that follows is a notification with the link and a one-line summary, never the only copy. *Messages between agents leave no durable trace, and may not arrive.*
@@ -192,16 +192,16 @@ Everywhere — messages to the CEO, messages between agents, each agent's end-of
   - **An issue** is its *Why*, in three lines at most, its *What*, and acceptance criteria that state outcomes a reviewer can check, not how to reach them. The way there is the author's, and an idea for it is offered as a suggestion.
   - **A PR's claims** say what the change does. Counts, timings and commands of the work done, such as the mutations caught or a run's seconds, are evidence, not claims. The evidence (figures, searches, inventories, tables) is given once, inside `<details>`.
   - **A review** opens with its verdict and the number of its findings, and its last line stays the verdict (§4.6). It explains only the checklist items that fail. A later round covers the delta: what changed, each finding fixed or not, and the unchanged items in a line, with no table or checklist repeated.
-  - **State:** each agent keeps one state comment per item, edited in place (`gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@<file>`), which GitHub counts as activity. A new comment is for what must reach someone: a question, an answer, a hand-over.
+  - **State:** each agent keeps one state comment per item, whose first line opens with its signature, a status emoji and `State:`, so that it finds it again among the comments of a shared account. It edits it in place (`gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@<file>`), which GitHub counts as activity. A new comment is for what must reach someone: a question, an answer, a hand-over.
   - **Nothing else:** no thanks, compliments or notes beside the findings. A remark is a finding with its priority, an issue of its own, or nothing.
   - **Budgets (SHOULD):**
     - an issue: 200 visible words besides its criteria, and 7 criteria at most;
     - a PR description or a review: 300 visible words;
     - a comment: five lines.
 
-    Folded `<details>` do not count, but the visible part reads on its own. A text over its budget says why in its first lines. QA flags an unexplained one as a P3, never more.
+    Folded `<details>` do not count, but the visible part reads on its own. A text over its budget says why in one line, among its first. QA flags an unexplained one as a P3, never more.
 
-  *The squad's GitHub text doubled: a PR's median went from 330 words (PRs #100 to #199) to 647 (#350 to #396), and one PR took 4,664 words for six lines of charter, while a human reviewer on another project asked two questions in 41 words (agent-squad #397).*
+  *The squad's GitHub text nearly doubled: the median PR description, counted in words split on whitespace, went from 342 words (PRs #100 to #199) to 635 (#350 to #396). PR #386's description, reviews and comments came to 4,572 words, for six lines of charter and a 54-line script change with its test (agent-squad #397).*
 - **Never cite a bare commit SHA.** Name the PR or issue it belongs to: "QA's verdict on PR #8 (`abc1234`)". A commit that belongs to no PR (an approved exception pushed to `main`) is named by its exception's issue: "the bootstrap commit of issue #1 (`def5678`)".
 
 With the CEO:
@@ -223,8 +223,7 @@ With the CEO:
 Issue and pull request templates live in `.github/` so that GitHub pre-fills them; the installer creates them when the project has none, and from then on they belong to the project. The QA review follows this shape:
 
 ```
-**👩🏼‍🔬[QA]:** <status> QA review — PR #N. Reviewed commit: PR #N (`<sha>`).
-<the verdict, and the findings by priority, in one line>
+**👩🏼‍🔬[QA]:** <status> <verdict>, <the findings by priority>. Reviewed commit: PR #N (`<sha>`).
 ### Black-box
 | Claim | How it was tested | Result (passed / failed / not checkable) |
 ### Checklist

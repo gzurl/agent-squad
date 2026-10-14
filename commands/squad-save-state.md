@@ -8,8 +8,9 @@ this order, and nothing else:
 
 1. Record on the issue or PR it belongs to any decision taken in this session that is not on
    GitHub yet.
-2. Write your state comment on the issue you are working on, signed as your role (SQUAD.md §6).
-   If you left one there already, edit it in place:
+2. Write your state comment on the issue you are working on (SQUAD.md §6). Its first line opens
+   with your signature, a status emoji and `State:`. If the issue already has one of yours, the
+   comment whose first line opens that way, edit it in place:
    `gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@<file>`. Otherwise, post it.
    It holds, leaving out what is empty:
    - your role;
