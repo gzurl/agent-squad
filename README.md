@@ -207,8 +207,8 @@ sequenceDiagram
 ```
 
 The CTO also writes pull requests of its own, reviewed by QA the same way, and settles any
-disagreement between an author and QA. Every rule, with the incident that led to it, is in
-[SQUAD.md](SQUAD.md); the merge gate's exact conditions are in its §4.9.
+disagreement between an author and QA. Every rule, with its reason, is in [SQUAD.md](SQUAD.md);
+the merge gate's exact conditions are in its §4.9.
 [BOOTSTRAP.md](BOOTSTRAP.md) is the CTO's one-time setup of a project.
 
 ### When a session's context fills up
