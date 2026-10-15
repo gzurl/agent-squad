@@ -1,5 +1,21 @@
 # Changelog
 
+## v62 — 2026-10-15
+- **A session in its worktree loads the project's instructions once** (#416, reported by
+  rogue-trader's squad). Until now, the first Read, Edit or Write in a worktree also loaded that
+  worktree's copy of `CLAUDE.md`, beside the main checkout's: about 48k tokens more per session in
+  rogue-trader, and again after each compaction. The installer now writes Claude Code's
+  `claudeMdExcludes` into `.claude/settings.local.json` for each worktree's `CLAUDE.md`,
+  `.claude/CLAUDE.md` and `.claude/rules/`, and keeps the project's own entries; a `CLAUDE.md` in
+  a worktree's subdirectory still loads. `--check` verifies the entries, and the uninstaller
+  removes them.
+- **The charter's italic notes give a rule's reason, not the story of its incident** (#417, the
+  CEO's decision). The 13 notes that only told an incident go, and 20 others keep only their
+  reason, in a sentence. No rule changes. The charter is about 700 words shorter, and the README
+  says that each rule comes with its reason.
+- **Upgrading from v61:** nothing to do by hand, since the installer writes the setting. Restart
+  the three sessions, so that each loads the shorter charter and starts with the setting.
+
 ## v61 — 2026-10-14
 - **`/squad-upgrade`'s pause relay gives the time it was sent** (#413, noticed by DEV and QA at the
   v58 and v60 upgrades). Its step 4 ends the message with the same "Sent at" line as
