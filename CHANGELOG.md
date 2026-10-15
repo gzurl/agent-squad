@@ -1,5 +1,18 @@
 # Changelog
 
+## v63 — 2026-10-15
+- **`/squad-update` tells, `/squad-upgrade` installs** (#422, the CEO's decision). `/squad-update`
+  tells what a newer release changes, as `/squad-upgrade` did, and installs nothing.
+  `/squad-upgrade` installs the latest release, and `/squad-upgrade vN` a given one, with no
+  question, since typing it is the CEO's yes; it need not follow `/squad-update`. It still brings
+  the agents to a safe point first, stops and tells the CEO when a step is left undone or the check
+  fails, and asks for the restart and `/squad-resume`. It ends with the version installed and its
+  release's headlines. The squad board's notice of a newer release names `/squad-update`. §7 says
+  so.
+- **Upgrading from v62:** nothing to do by hand. Restart the three sessions, so that each loads the
+  new §7 and the board's new notice. This upgrade still runs v62's `/squad-upgrade`, which asks
+  first; from v63 on, it installs without asking.
+
 ## v62 — 2026-10-15
 - **A session in its worktree loads the project's instructions once** (#416, reported by
   rogue-trader's squad). Until now, the first Read, Edit or Write in a worktree also loaded that

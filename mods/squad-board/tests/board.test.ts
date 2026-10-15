@@ -349,14 +349,14 @@ describe('the line', () => {
     await w.clock.settle()
     // Each emoji takes two cells: the CTO's part takes 8; DEV's 14 and QA's 16, each after a bar of
     // 3; the ellipsis 2; the agents 44 in all. The squad's part takes 17 (agent-squad (v42)), 23 with
-    // the notice's version, 49 with the whole notice, and at least 3 cells of space before it.
+    // the notice's version, 48 with the whole notice, and at least 3 cells of space before it.
     const [cto, dev, qa] = [`${MARK.idle} ${SIGN.CTO}CTO`, `${MARK.working} ${SIGN.DEV}DEV: #205`, `${MARK.reviewing} ${SIGN.QA}QA: PR #210`]
     const all = `${cto} │ ${dev} │ ${qa}`
-    const [whole, short] = [`${P} → v43 available: /squad-upgrade`, `${P} → v43`]
+    const [whole, short] = [`${P} → v43 available: /squad-update`, `${P} → v43`]
     const cases: [number, string[], string][] = [
       [120, ['CTO', 'DEV', 'QA'], line(all, whole, 120)],
-      [96, ['CTO', 'DEV', 'QA'], line(all, whole, 96)],
-      [95, ['CTO', 'DEV', 'QA'], line(all, short, 95)],
+      [95, ['CTO', 'DEV', 'QA'], line(all, whole, 95)],
+      [94, ['CTO', 'DEV', 'QA'], line(all, short, 94)],
       [70, ['CTO', 'DEV', 'QA'], line(all, short, 70)],
       [69, ['CTO', 'DEV', 'QA'], line(all, P, 69)],
       [64, ['CTO', 'DEV', 'QA'], line(all, P, 64)],
@@ -391,8 +391,8 @@ describe('the line', () => {
     // Fast-forward and its space take 3 more cells.
     const all = `${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.working} ${SIGN.DEV}DEV: #205 │ ${MARK.reviewing} ${SIGN.QA}QA: PR #210`
     const cases: [number, string][] = [
-      [99, line(all, `${AUTOPILOT} ${P} → v43 available: /squad-upgrade`, 99)],
-      [98, line(all, `${AUTOPILOT} ${P} → v43`, 98)],
+      [98, line(all, `${AUTOPILOT} ${P} → v43 available: /squad-update`, 98)],
+      [97, line(all, `${AUTOPILOT} ${P} → v43`, 97)],
       [73, line(all, `${AUTOPILOT} ${P} → v43`, 73)],
       [72, line(all, `${AUTOPILOT} ${P}`, 72)],
       [67, line(all, `${AUTOPILOT} ${P}`, 67)],
@@ -673,7 +673,7 @@ describe('a session to restart: older than the installed release (agent-squad #3
 })
 
 describe('the squad part: fast-forward on autopilot, and the notice of a newer release (agent-squad #244)', () => {
-  const NOTICE = ' → v43 available: /squad-upgrade'
+  const NOTICE = ' → v43 available: /squad-update'
   const IDLE = `${MARK.idle} ${SIGN.CTO}CTO │ ${MARK.unknown} ${SIGN.DEV}DEV │ ${MARK.unknown} ${SIGN.QA}QA`
   // .agent-squad/latest-release as squad-latest.sh writes it (agent-squad #302).
   const latest = (tag: unknown) => JSON.stringify({ tag, checkedAt: 1760263200, attemptedAt: 1760263200 })

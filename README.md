@@ -322,7 +322,7 @@ nothing of it.
 
 ```
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
-💤 👷🏼‍♂️CTO (ctx: 96%) │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124       agent-squad (v49) → v50 available: /squad-upgrade
+💤 👷🏼‍♂️CTO (ctx: 96%) │ ⏳ 👨🏼‍💻DEV: #123 │ 👀 👩🏼‍🔬QA: PR #124       agent-squad (v49) → v50 available: /squad-update
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ```
 
@@ -330,10 +330,10 @@ On the right of the line, the squad's part:
 - `agent-squad` and the release of the board the CTO's session loaded;
 - ⏩ before it while the squad is on autopilot, from `/squad-autopilot` until `/squad-resume` or
   `/squad-pause`;
-- after it, in the CTO's yellow, `→ v50 available: /squad-upgrade` while a newer release than the
-  installed one is out. `/squad-upgrade` shows you what it changes and asks you; the board installs
-  nothing. It reads the latest release from `.agent-squad/latest-release`, a file the squad keeps,
-  and connects to nothing itself.
+- after it, in the CTO's yellow, `→ v50 available: /squad-update` while a newer release than the
+  installed one is out. `/squad-update` shows you what it changes, and `/squad-upgrade` installs
+  it; the board installs nothing. It reads the latest release from `.agent-squad/latest-release`,
+  a file the squad keeps, and connects to nothing itself.
 
 On a narrow terminal the agents keep the room: the notice shortens to `→ v50`, then goes, then ⏩
 goes. Only then is the line cut at its end, after whole agents, with an ellipsis. Narrower still,
@@ -391,20 +391,24 @@ what; it does not install anything for you.
 
 ## 🔄 Upgrade
 
-When a new release is out, type `/squad-upgrade` in the CTO's session. The CTO tells you which
-release the project runs, what the new one changes and whether you need to do anything, and
-installs it only when you say yes. Before installing, it brings DEV and QA to a safe point, as
-`/squad-pause` does, since the install replaces the scripts their hooks and pushes run. The
-agents then re-read the rules that changed, so the rules need nothing more from you; the CTO asks
-you to compact the sessions only after a release that rewrites much of the charter. The upgrade
-also moves the squad board to the new release, and keeps it off if you turned it off, and the CTO
-creates any label the release adds. Then the
-CTO asks you to restart the three sessions, with `/restart` in each, the CTO's last, which keeps
-each session's conversation and name: until a session restarts, it keeps the board it started
-with, and a hook the release adds waits for it too, so the CTO's line shows the previous release,
-with the new one's notice. A session that restarts waits for someone to write to it, so you then
-type `/squad-resume` in the CTO's session, and the agents carry on from where they stopped. The
-release notes are in [CHANGELOG.md](CHANGELOG.md).
+When a new release is out, the squad board says so. To know what it changes first, type
+`/squad-update` in the CTO's session: the CTO tells you which release the project runs, what the new
+one changes and whether you need to do anything, and installs nothing. To install it, type
+`/squad-upgrade` in the CTO's session, or `/squad-upgrade vN` for a given release: typing it is your
+yes, so the CTO asks nothing more, and you need not run `/squad-update` first. Before installing,
+the CTO brings DEV and QA to a safe point, as `/squad-pause` does, since the install replaces the
+scripts their hooks and pushes run. If the installer leaves a step undone, or the installation's
+check fails, the CTO stops there and tells you. The agents then re-read the rules that changed, so
+the rules need nothing more from you; the CTO asks you to compact the sessions only after a release
+that rewrites much of the charter. The upgrade also moves the squad board to the new release, and
+keeps it off if you turned it off, and the CTO creates any label the release adds. Then the CTO asks
+you to restart the three sessions, with `/restart` in each, the CTO's last, which keeps each
+session's conversation and name: until a session restarts, it keeps the board it started with, and a
+hook the release adds waits for it too, so the CTO's line shows the previous release, with the new
+one's notice. A session that restarts waits for someone to write to it, so you then type
+`/squad-resume` in the CTO's session, and the agents carry on from where they stopped. The CTO ends
+with the version installed and its release's headlines; the release notes are in
+[CHANGELOG.md](CHANGELOG.md).
 
 If `/restart` refuses with *this session belongs to `<directory>` but is running in `<checkout>`*,
 the session was started or resumed from another directory, a subdirectory included. Its memory is
@@ -488,10 +492,10 @@ the worktrees too.
 You type them in a Claude Code session of the squad. Each `-all` variant does the same for every
 squad on the machine.
 
-The commands that pause, steer, resume, upgrade or remove the squad, and `/squad-save-state`, are
-yours alone: no agent can run one on its own. When the CTO passes one on to DEV and QA, they read
-its file and follow their part, which still works. `/squad-watch` and `/squad-usage` the agents may
-run themselves, as autopilot does with the watch.
+The commands that pause, steer, resume, update, upgrade or remove the squad, and
+`/squad-save-state`, are yours alone: no agent can run one on its own. When the CTO passes one on to
+DEV and QA, they read its file and follow their part, which still works. `/squad-watch` and
+`/squad-usage` the agents may run themselves, as autopilot does with the watch.
 
 | Command | Type it in | What it does |
 |---|---|---|
@@ -501,7 +505,8 @@ run themselves, as autopilot does with the watch.
 | 🔎&nbsp;`/squad-watch` | the CTO's session | Looks for stalled work and pings whoever owns its next step; autopilot runs it every half hour. |
 | 💾&nbsp;`/squad-save-state` | any session | Its agent writes its state on GitHub, before you type `/compact` ([When a session's context fills up](#when-a-sessions-context-fills-up)). |
 | 📊&nbsp;`/squad-usage`<br>`/squad-usage-all` | any session | The tokens each agent has used ([How many tokens the agents use](#how-many-tokens-the-agents-use)). |
-| 🔄&nbsp;`/squad-upgrade` | the CTO's session | What a new release changes; installs it when you say yes ([Upgrade](#-upgrade)). |
+| 🔔&nbsp;`/squad-update` | the CTO's session | What a newer release changes; installs nothing ([Upgrade](#-upgrade)). |
+| 🔄&nbsp;`/squad-upgrade`<br>`/squad-upgrade vN` | the CTO's session | Installs the latest release, or vN, with no question: typing it is your yes ([Upgrade](#-upgrade)). |
 | 🧹&nbsp;`/squad-uninstall` | the CTO's session | What removing the squad would do; on your yes, a PR for the tracked files, then the rest goes ([Upgrade](#-upgrade)). |
 
 

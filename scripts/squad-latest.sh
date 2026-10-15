@@ -14,7 +14,7 @@
 # run at the very same instant may each ask once, which is harmless. A session start does not wait
 # for a check to be due: it asks with --now, every time (agent-squad #336). Nothing is sent: it is a
 # read of a public repository's latest Release. The upstream is the one on the upstream= line of
-# the squad-install.sh beside this script, as /squad-upgrade reads it.
+# the squad-install.sh beside this script, as /squad-update and /squad-upgrade read it.
 #
 # Usage: squad-latest.sh [--due | --now] <main checkout>
 #   --due  only tell whether a check is due: exit 0 if it is, 1 if not; nothing is asked or written.
