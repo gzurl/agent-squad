@@ -116,6 +116,9 @@ item_import="CLAUDE.md links to AGENTS.md, which imports the charter"
 item_branch="git knows the remote's default branch, the one the gate protects"
 item_lfs="Git LFS's pre-push runs from hooks/pre-push.local"
 item_mods="the squad's mods are enabled from the playbook"
+item_excludes="the worktrees' copies of the project's instructions are left out of every session"
+# The squad's entries of claudeMdExcludes, as the installer writes them (agent-squad #416).
+squad_excludes='["**/.agent-squad/worktrees/*/CLAUDE.md", "**/.agent-squad/worktrees/*/.claude/CLAUDE.md", "**/.agent-squad/worktrees/*/.claude/rules/**"]'
 # `check_reports [<item>...]` runs --check on the project and passes when the items that fail are
 # exactly those given, with exit 1; with none given, when every item passes, with exit 0.
 check_reports() {
@@ -124,7 +127,7 @@ check_reports() {
   code=$?
   failed="$(sed -n 's/^check: FAILED  \([^:]*\):.*/\1/p' <<<"$out" | LC_ALL=C sort)"
   if [ $# -eq 0 ]; then
-    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 12 ]
+    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 13 ]
   else
     [ "$code" -eq 1 ] && [ "$failed" = "$(printf '%s\n' "$@" | LC_ALL=C sort)" ]
   fi
@@ -381,6 +384,7 @@ cases_main_project() {
   cat > "$project/.claude/settings.local.json" <<'JSON'
 {
   "permissions": { "allow": ["Bash(ls:*)"] },
+  "claudeMdExcludes": ["**/vendor/CLAUDE.md", "**/.agent-squad/worktrees/*/OLD.md"],
   "hooks": {
     "PreToolUse": [
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "echo own hook" }] }
@@ -451,6 +455,12 @@ JSON
   check "each squad hook runs .agent-squad/squad-hook, by its absolute path, with its event, and no other command is the squad's" \
     jq_holds "$hook_commands == $(wrapper_commands "$project")" "$settings"
   check "and the wrapper is in .agent-squad/, executable" [ -x "$squad/squad-hook" ]
+  # The worktrees' copies of the project's instructions are left out (agent-squad #416): the
+  # project's own exclude first, then the squad's, the older squad entry gone.
+  check "claudeMdExcludes keeps the project's own entry, then has the squad's, the older one replaced" \
+    jq_holds ".claudeMdExcludes == [\"**/vendor/CLAUDE.md\"] + $squad_excludes" "$settings"
+  check "which the install says in one line" \
+    has_line "$out" "install: excludes   wrote claudeMdExcludes into .claude/settings.local.json, other settings kept: every session leaves out the worktrees' copies of the project's instructions"
 
   # 3. A second run changes nothing but the log, which gains one line.
   before="$(project_state "$project")"
@@ -832,8 +842,17 @@ cases_decisions() {
     code=$?
     check "a settings.local.json that is $kind exits 1" [ "$code" -eq 1 ]
     check "and says why" contains "$out" "hooks      NOT INSTALLED: .claude/settings.local.json is not one JSON object"
+    check "and so does the excludes step" contains "$out" "excludes   NOT INSTALLED: .claude/settings.local.json is not one JSON object"
     check "and is left byte for byte" cmp -s "$lab/settings-before" "$target/.claude/settings.local.json"
   done
+  target="$(new_project settings-excludes-string)" || exit 2
+  mkdir -p "$target/.claude" && echo '{"claudeMdExcludes": "CLAUDE.md"}' > "$target/.claude/settings.local.json"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "a claudeMdExcludes that is not a list exits 1" [ "$code" -eq 1 ]
+  check "and says why" contains "$out" "excludes   NOT INSTALLED: .claude/settings.local.json is not one JSON object whose claudeMdExcludes is a list; it is left as it is: fix it and run again"
+  check "and keeps it as it was, the hooks written beside it" \
+    jq_holds ".claudeMdExcludes == \"CLAUDE.md\" and ($squad_hooks)" "$target/.claude/settings.local.json"
 
   # 12. A negation in the project's .gitignore is not taken for an ignore rule.
   target="$(new_project negations)" || exit 2
@@ -910,9 +929,32 @@ cases_check_settings() {
   mended "$settings"
   broken "$settings"
   echo 'not json' > "$settings"
-  check "a settings file that is not JSON fails the hooks and the mods items" check_reports "$item_hooks" "$item_mods"
+  check "a settings file that is not JSON fails the hooks, the mods and the excludes items" \
+    check_reports "$item_hooks" "$item_mods" "$item_excludes"
   check "the hooks item saying it cannot read the file" check_reason "$item_hooks" "cannot read .claude/settings.local.json"
   check "and so does the mods item" check_reason "$item_mods" "cannot read .claude/settings.local.json"
+  check "and the excludes item" check_reason "$item_excludes" "cannot read claudeMdExcludes in .claude/settings.local.json"
+  mended "$settings"
+  # The worktrees' copies of the project's instructions (agent-squad #416): each of the squad's
+  # entries is required, an earlier release's is not, and the project's own are its business.
+  broken "$settings"
+  jq '.claudeMdExcludes |= map(select(endswith("/rules/**") | not))' "$lab/mend.me" > "$settings"
+  check "a missing exclude fails the excludes item, naming it" \
+    check_reason "$item_excludes" "missing: **/.agent-squad/worktrees/*/.claude/rules/**; unexpected: none; install again"
+  mended "$settings"
+  broken "$settings"
+  jq '.claudeMdExcludes += ["**/.agent-squad/worktrees/*/OLD.md"]' "$lab/mend.me" > "$settings"
+  check "an earlier release's exclude fails it too, naming it" \
+    check_reason "$item_excludes" "missing: none; unexpected: **/.agent-squad/worktrees/*/OLD.md; install again"
+  mended "$settings"
+  broken "$settings"
+  jq '.claudeMdExcludes = "CLAUDE.md"' "$lab/mend.me" > "$settings"
+  check "and so does a claudeMdExcludes that is not a list" \
+    check_reason "$item_excludes" "cannot read claudeMdExcludes in .claude/settings.local.json"
+  mended "$settings"
+  broken "$settings"
+  jq '.claudeMdExcludes = ["**/vendor/CLAUDE.md"] + .claudeMdExcludes' "$lab/mend.me" > "$settings"
+  check "while the project's own exclude beside the squad's fails nothing" check_reports
   mended "$settings"
   # The hooks' wrapper (#269), which --check requires as the installer writes it.
   broken "$squad/squad-hook"
@@ -1741,7 +1783,7 @@ cases_uninstall() {
   #     removes, so that removing the playbook it lives in does not cut it short.
   target="$(new_project removable)" || exit 2
   mkdir -p "$target/.claude/commands"
-  jq -n '{permissions: {allow: ["Bash(ls:*)"]},
+  jq -n '{permissions: {allow: ["Bash(ls:*)"]}, claudeMdExcludes: ["**/vendor/CLAUDE.md"],
     hooks: {PreToolUse: [{matcher: "Bash", hooks: [{type: "command", command: "echo own hook"}]}]},
     extraKnownMarketplaces: {"agent-squad-tools": {source: {source: "directory", path: "/more-tools"}}}}' \
     > "$target/.claude/settings.local.json"
@@ -1776,7 +1818,7 @@ cases_uninstall() {
   check "an uninstall run from the playbook it removes exits 0" [ "$code" -eq 0 ]
   check "and leaves the project's files as they were before the install, but for the tracked ones it lists" \
     [ "$(outside_squad "$target")" = "$files_before" ]
-  check "and the project's own settings, its hook and its marketplace, without the squad's hooks and mods" \
+  check "and the project's own settings, its hook, its marketplace and its exclude, without the squad's hooks, mods and excludes" \
     [ "$(jq -S . "$target/.claude/settings.local.json")" = "$settings_before" ]
   check "and the project's own pre-push back in its place, the shim gone" [ "$(tree_state "$target/.git/hooks")" = "$hooks_before" ]
   check "and no worktree left" [ "$(git -C "$target" worktree list | wc -l | tr -d ' ')" -eq 1 ]
@@ -1903,7 +1945,7 @@ cases_uninstall_refusals() {
   out="$("$uninstall" "$target" 2>&1)"
   code=$?
   check "hooks as releases before v49 wrote them are the squad's too: with the mods, the settings go entirely" \
-    bash -c '[ "$1" -eq 0 ] && [ ! -e "$2/.claude" ] && grep -qF "removed .claude/settings.local.json, which held only the squad'"'"'s hooks and mods" <<<"$3"' \
+    bash -c '[ "$1" -eq 0 ] && [ ! -e "$2/.claude" ] && grep -qF "removed .claude/settings.local.json, which held only the squad'"'"'s hooks, mods and excludes" <<<"$3"' \
     _ "$code" "$target" "$out"
   check "and what the worktree held that git ignores is in .agent-squad/kept/dev/, the .env with its key" \
     bash -c '[ "$(cat "$1/.agent-squad/kept/dev/.env")" = SECRET=1 ] && [ "$(cat "$1/.agent-squad/kept/dev/out/results.txt")" = "a result" ] && [ ! -e "$1/.agent-squad/worktrees" ]' _ "$target"

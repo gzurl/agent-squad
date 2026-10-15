@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install, upgrade or check the squad in a project (agent-squad #23): the tag's playbook in
-# <project>/.agent-squad/playbook/, the session hooks in .claude/settings.local.json, the
+# <project>/.agent-squad/playbook/, the session hooks in .claude/settings.local.json, with the
+# exclusion of the worktrees' copies of the project's instructions, the
 # squad's commands in .claude/commands/, a pre-push shim that runs the playbook's pre-push
 # gate, the GitHub templates the project lacks, and the DEV and QA worktrees. It never overwrites or
 # deletes a file the project owns, prints one line per action taken or skipped, and ends with what
@@ -245,6 +246,20 @@ WRAPPER
 )"
 # shellcheck disable=SC2016 # a jq definition
 hook_ours='def ours: (.command // "") | (contains("squad-handoff.sh") or contains("/.agent-squad/squad-hook"));'
+
+# Each worktree under .agent-squad/worktrees/ holds the project's tracked files, its instructions
+# among them: a session launched from the main checkout loads the main checkout's at its start, and
+# would load the worktree's copy again once it reads, edits or writes a file there (agent-squad
+# #416). claudeMdExcludes, in .claude/settings.local.json, leaves those copies out: the CLAUDE.md
+# files and the rules at a worktree's root. A subdirectory's own CLAUDE.md still loads, and the main
+# checkout's rules still apply to a worktree's files. Claude Code matches each pattern against a
+# file's absolute path, so the patterns hold wherever the checkout is. An entry is the squad's when
+# it starts with the worktrees' directory, so that an install replaces an earlier release's.
+excludes_prefix="**/.agent-squad/worktrees/"
+instructions_excludes="$(jq -cn --arg prefix "$excludes_prefix" \
+  '["CLAUDE.md", ".claude/CLAUDE.md", ".claude/rules/**"] | map($prefix + "*/" + .)')"
+# shellcheck disable=SC2016 # a jq definition
+excludes_ours='def ours: type == "string" and startswith($prefix);'
 
 # The pre-push shim (D8 of agent-squad #23), written into the common git directory so that every
 # worktree runs it. --check requires it byte for byte, comments included, as this installer writes
@@ -634,6 +649,19 @@ check_installation() {
   fi
   verdict "$item" "$why"
 
+  # 14. The worktrees' copies of the project's instructions are left out of every session
+  #     (agent-squad #416): the squad's entries of claudeMdExcludes are this release's.
+  why=""
+  if ! actual="$(jq -c --arg prefix "$excludes_prefix" "$excludes_ours"'
+      .claudeMdExcludes // [] | if type == "array" then map(select(ours)) | sort else error("not a list") end' \
+      "$settings" 2>/dev/null)"; then
+    why="cannot read claudeMdExcludes in .claude/settings.local.json"
+  elif [ "$actual" != "$(jq -c sort <<<"$instructions_excludes")" ]; then
+    why="$(jq -rn --argjson want "$instructions_excludes" --argjson have "$actual" \
+      '"missing: \(($want - $have) | join(", ") | if . == "" then "none" else . end); unexpected: \(($have - $want) | join(", ") | if . == "" then "none" else . end); install again"')"
+  fi
+  verdict "the worktrees' copies of the project's instructions are left out of every session" "$why"
+
   [ "$failed_items" -eq 0 ]
 }
 
@@ -946,6 +974,29 @@ else
   elif [ -n "$on" ] || [ -n "$off" ]; then
     say mods "enabled for this project: ${on:-none}${off:+; turned off, as you left them: $off} (marketplace $(mods_name), in .agent-squad/; claude plugin disable <plugin>@$(mods_name) --scope local turns one off${off:+, and claude plugin enable <plugin>@$(mods_name) --scope local turns one back on})"
   fi
+fi
+
+# 3d. The worktrees' copies of the project's instructions (agent-squad #416), left out of every
+#     session by claudeMdExcludes in .claude/settings.local.json: the squad's entries are replaced
+#     by this release's, after the project's own, which are kept.
+current="{}"
+[ -f "$settings" ] && current="$(cat "$settings")"
+[ -n "${current//[[:space:]]/}" ] || current="{}"
+# shellcheck disable=SC2016 # $prefix and $excludes are jq variables
+if printf '%s' "$current" | one_object \
+  && merged="$(printf '%s' "$current" | jq --arg prefix "$excludes_prefix" --argjson excludes "$instructions_excludes" \
+    "$excludes_ours"'.claudeMdExcludes = ((.claudeMdExcludes // [])
+      | if type == "array" then map(select(ours | not)) + $excludes else error("not a list") end)')" \
+  && printf '%s' "$merged" | one_object; then
+  if [ -f "$settings" ] && [ "$merged" = "$current" ]; then
+    say excludes "the worktrees' copies of the project's instructions are already left out, in .claude/settings.local.json"
+  else
+    mkdir -p "$project/.claude" && printf '%s\n' "$merged" > "$settings"
+    say excludes "wrote claudeMdExcludes into .claude/settings.local.json, other settings kept: every session leaves out the worktrees' copies of the project's instructions"
+  fi
+else
+  say excludes "NOT INSTALLED: .claude/settings.local.json is not one JSON object whose claudeMdExcludes is a list; it is left as it is: fix it and run again"
+  needs_decision=1
 fi
 
 # 4. Pre-push shim (D8 of agent-squad #23) in the common git directory, so that every worktree runs
