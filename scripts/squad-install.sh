@@ -732,7 +732,7 @@ fi
 # (v14 and older) has no scripts/squad-install.sh, and would install without working.
 for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh scripts/squad-latest.sh \
   scripts/squad-install.sh templates/AGENTS.md commands/squad-save-state.md commands/squad-pause.md \
-  commands/squad-autopilot.md commands/squad-resume.md commands/squad-upgrade.md \
+  commands/squad-autopilot.md commands/squad-resume.md commands/squad-update.md commands/squad-upgrade.md \
   commands/squad-pause-all.md commands/squad-autopilot-all.md commands/squad-resume-all.md \
   commands/squad-usage.md commands/squad-usage-all.md commands/squad-watch.md commands/squad-uninstall.md; do
   [ -f "$staging/$required" ] \

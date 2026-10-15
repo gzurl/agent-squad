@@ -417,7 +417,7 @@ JSON
   check ".gitignore has .agent-squad/, .claude/settings.local.json and the command" \
     has_lines "$project/.gitignore" ".agent-squad/" ".claude/settings.local.json" \
     ".claude/commands/squad-*.md"
-  check "the squad's twelve commands are in .claude/commands/, as the playbook has them" same_commands "$project"
+  check "the squad's commands are in .claude/commands/, as the playbook has them" same_commands "$project"
   check "the missing issue template was created from the playbook" \
     cmp -s "$squad/playbook/.github/ISSUE_TEMPLATE/task.md" "$project/.github/ISSUE_TEMPLATE/task.md"
   check "the project's own PR template was kept" \
@@ -640,7 +640,7 @@ JSON
   printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$project/AGENTS.md"
   ln -s AGENTS.md "$project/CLAUDE.md"
   before="$(project_state "$project")$(cat "$squad/install.log")"
-  check "--check passes on a complete installation, twelve items ok" check_reports
+  check "--check passes on a complete installation, every item ok" check_reports
   check "and changes nothing, the install log included" \
     [ "$before" = "$(project_state "$project")$(cat "$squad/install.log")" ]
 
@@ -1184,7 +1184,7 @@ cases_default_branch() {
     shift
     check_reports "$@"
   }
-  check "and --check passes its twelve items" reports_on "$lab/on-trunk"
+  check "and --check passes every item" reports_on "$lab/on-trunk"
   echo "a change" >> "$lab/on-trunk/.agent-squad/worktrees/dev/.agent-squad-checks"
   git -C "$lab/on-trunk/.agent-squad/worktrees/dev" commit -qam "a change"
   errors="$(git -C "$lab/on-trunk/.agent-squad/worktrees/dev" push -q origin HEAD:refs/heads/trunk 2>&1)"

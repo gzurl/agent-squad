@@ -16,7 +16,7 @@ pass() { echo "  ok      $1" >&2; }
 fail() { echo "  FAILED  $1" >&2; status=1; }
 
 # The commands only the CEO types, as the CEO decided on #325, and those the model may run.
-ceo_only=(squad-uninstall squad-upgrade squad-pause squad-pause-all squad-autopilot squad-autopilot-all
+ceo_only=(squad-uninstall squad-update squad-upgrade squad-pause squad-pause-all squad-autopilot squad-autopilot-all
   squad-resume squad-resume-all squad-save-state)
 invocable=(squad-watch squad-usage squad-usage-all)
 

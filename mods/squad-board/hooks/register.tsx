@@ -585,7 +585,7 @@ function wordmarkOf(known: string | null): string {
 type SquadPart = { autopilot: boolean; notice: string }
 function squadPartsOf(known: string | null, latest: string | null, onAutopilot: boolean): SquadPart[] {
   const isNewer = known !== null && latest !== null && Number(latest.slice(1)) > Number(known.slice(1))
-  const notices = isNewer ? [` \u2192 ${latest} available: /squad-upgrade`, ` \u2192 ${latest}`, ''] : ['']
+  const notices = isNewer ? [` \u2192 ${latest} available: /squad-update`, ` \u2192 ${latest}`, ''] : ['']
   const parts = notices.map(notice => ({ autopilot: onAutopilot, notice }))
   return onAutopilot ? [...parts, { autopilot: false, notice: '' }] : parts
 }
