@@ -2,8 +2,9 @@
 # Remove agent-squad from a project (agent-squad #263): what the installer of this release, or of
 # an earlier one, wrote outside git, and nothing else.
 # - the squad's session hooks in .claude/settings.local.json, as the wrapper or, before v49,
-#   squad-handoff.sh run them, and the board's marketplaces and plugins, by the installer's own
-#   rule; every other setting is kept;
+#   squad-handoff.sh run them, the board's marketplaces and plugins, by the installer's own rule,
+#   and the squad's entries of claudeMdExcludes, under .agent-squad/worktrees/; every other setting
+#   is kept;
 # - the squad's commands in .claude/commands/, apart from one the project tracks;
 # - the pre-push shim, putting back the project's own pre-push, which the shim ran as
 #   pre-push.local;
@@ -146,10 +147,12 @@ if [ -f "$project/AGENTS.md" ] && grep -q '^@\.agent-squad/playbook/SQUAD\.md' "
 fi
 [ ! -f "$project/.agent-squad-checks" ] || left_for_cto+=(".agent-squad-checks, which only the squad's gate reads")
 
-# 3. The session hooks and the board's mods in .claude/settings.local.json. A hook is the squad's
-#    when it runs the wrapper or squad-handoff.sh; a marketplace, when the installer's own rule
-#    says so (a name that starts with agent-squad-, declared at a .agent-squad/ folder), and a
-#    plugin, when it is one of theirs. What is left empty goes, and a file left with nothing goes.
+# 3. The session hooks, the board's mods and the exclusion of the worktrees' instructions in
+#    .claude/settings.local.json. A hook is the squad's when it runs the wrapper or
+#    squad-handoff.sh; a marketplace, when the installer's own rule says so (a name that starts with
+#    agent-squad-, declared at a .agent-squad/ folder), and a plugin, when it is one of theirs; an
+#    entry of claudeMdExcludes, when it starts with **/.agent-squad/worktrees/ (agent-squad #416).
+#    What is left empty goes, and a file left with nothing goes.
 # shellcheck disable=SC2016 # the $ names are jq's
 cleaned='def hook_ours: (.command // "") | (contains("squad-handoff.sh") or contains("/.agent-squad/squad-hook"));
   [(.extraKnownMarketplaces // {}) | to_entries[]
@@ -168,25 +171,29 @@ cleaned='def hook_ours: (.command // "") | (contains("squad-handoff.sh") or cont
   | if .enabledPlugins then
       .enabledPlugins |= with_entries(select((.key | split("@")) as $p | $p | length == 2 and ($p[1] | IN($markets[])) | not))
       | if .enabledPlugins == {} then del(.enabledPlugins) else . end
+    else . end
+  | if (.claudeMdExcludes | type) == "array" then
+      .claudeMdExcludes |= map(select(type == "string" and startswith("**/.agent-squad/worktrees/") | not))
+      | if .claudeMdExcludes == [] then del(.claudeMdExcludes) else . end
     else . end'
 settings_stays=false
 if [ -f "$settings" ]; then
   settings_stays=true
   if ! after="$(jq -e -s 'length == 1 and (.[0] | type == "object")' "$settings" >/dev/null 2>&1 \
       && jq "$cleaned" "$settings" 2>/dev/null)"; then
-    say hooks "NOT REMOVED: .claude/settings.local.json is not one JSON object; it is left as it is: remove the squad's hooks and mods by hand"
+    say hooks "NOT REMOVED: .claude/settings.local.json is not one JSON object; it is left as it is: remove the squad's hooks, mods and excludes by hand"
     needs_decision=1
   elif [ "$after" = "$(jq . "$settings")" ]; then
-    say hooks "none of the squad's hooks or mods are in .claude/settings.local.json"
+    say hooks "none of the squad's hooks, mods or excludes are in .claude/settings.local.json"
   elif [ "$after" = "{}" ]; then
     found=true
     settings_stays=false
     act rm -f "$settings"
-    say hooks "$(did removed "would remove") .claude/settings.local.json, which held only the squad's hooks and mods"
+    say hooks "$(did removed "would remove") .claude/settings.local.json, which held only the squad's hooks, mods and excludes"
   else
     found=true
     $dry_run || printf '%s\n' "$after" > "$settings"
-    say hooks "$(did removed "would remove") the squad's hooks and mods from .claude/settings.local.json, other settings kept"
+    say hooks "$(did removed "would remove") the squad's hooks, mods and excludes from .claude/settings.local.json, other settings kept"
   fi
 fi
 

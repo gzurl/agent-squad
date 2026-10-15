@@ -171,9 +171,11 @@ think.
 project: `CTO:<project-name>`, `DEV:<project-name>` and `QA:<project-name>`. All three start in the
 project's main folder, which lets them share Claude Code's memory, and each works in a worktree of
 its own under `.agent-squad/worktrees/`. They send each other messages. Every session loads the
-charter through `AGENTS.md`, and hooks save the project's state before Claude Code compacts a
-session and hand it back afterwards. A session you resume, after updating Claude Code for instance,
-starts again in the main folder, and a hook reminds its agent which folder each agent works in.
+charter through `AGENTS.md`, once: each worktree holds a copy of the project's instructions, which
+Claude Code would load again as an agent works there, so the installer has sessions leave it out.
+Hooks save the project's state before Claude Code compacts a session and hand it back afterwards. A
+session you resume, after updating Claude Code for instance, starts again in the main folder, and a
+hook reminds its agent which folder each agent works in.
 
 **GitHub holds the work.** Issues are the backlog, grouped into milestones; pull requests carry the
 changes, and reviews carry QA's verdicts. While setting up, the CTO creates a set of labels the
@@ -413,7 +415,7 @@ the main checkout, without `--resume`.
 you what would go and what would stay. When you say yes, it first merges a PR for what git tracks,
 then removes the rest. With no squad session open, run `.agent-squad/playbook/scripts/squad-uninstall.sh .` from
 the project's main checkout, with `--dry-run` first to see what it would do.
-- **What it removes:** what the installer wrote outside git. That is the hooks, the commands, the pre-push shim (your own pre-push goes back in place), the board's mods, the worktrees and `.agent-squad/`.
+- **What it removes:** what the installer wrote outside git. That is the hooks, the exclusion of the worktrees' instructions, the commands, the pre-push shim (your own pre-push goes back in place), the board's mods, the worktrees and `.agent-squad/`.
 - **What it keeps:** the squad's records (compaction snapshots, review evidence, token history), and what a worktree held that git ignores, such as a `.env`, which it moves into `.agent-squad/kept/`. `--records` removes them too.
 - **When it stops:** while a worktree holds work that is not committed or not pushed, it removes nothing.
 - **What it leaves:** a list of the tracked files the squad added, for the CTO to remove through a PR.
@@ -443,7 +445,8 @@ the installer touches only the files listed before it:
 ├── .agent-squad-checks                   in git    the checks the pre-push gate runs
 ├── .gitignore                            in git    ignores .agent-squad/, the local settings, the commands
 ├── .github/                              in git    issue and PR templates, only if you had none
-├── .claude/settings.local.json           ignored   the squad's hooks and its board, next to your settings
+├── .claude/settings.local.json           ignored   the squad's hooks, its board, and the worktrees' instructions
+│                                                   left out, next to your settings
 ├── .claude/commands/squad-*.md           ignored   the squad's commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
 └── .agent-squad/                         ignored
@@ -464,7 +467,8 @@ the installer touches only the files listed before it:
 ```
 
 An upgrade replaces `playbook/`, only once the new one is complete, and rewrites the hooks, the
-pre-push hook, `playbook.manifest` and the mods' marketplace, which keeps its name.
+exclusion of the worktrees' instructions, the pre-push hook, `playbook.manifest` and the mods'
+marketplace, which keeps its name.
 It removes from `.claude/commands/` any `squad-*.md` the new release no longer has, as after a
 command is renamed, unless your project tracks that file. It leaves the rest alone. `SQUAD.md` §2.4
 says who cleans up what, and when.
