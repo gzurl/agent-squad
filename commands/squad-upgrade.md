@@ -29,7 +29,12 @@ Work from the main checkout. The upstream repository is the one named on the `up
    (`gh api -H 'Accept: application/vnd.github.raw' 'repos/<upstream>/contents/CHANGELOG.md?ref=<tag>'`),
    every entry above the version the project runs: the rules that change, with their § numbers,
    for step 6; each *By hand* item, for step 5; whether the release rewrites much of the charter,
-   and the headlines, for step 7. Ask the CEO nothing: typing the command was the yes.
+   and the headlines, for step 7. **Going back,** that file has no entry above the version the
+   project runs, and the rules to name are those that revert: read instead the installed
+   playbook's `.agent-squad/playbook/CHANGELOG.md`, now, since step 4 replaces it, every entry
+   above the release to install: the rules that revert, with their § numbers, for step 6; whether
+   one of those releases rewrote much of the charter, and their headlines, for step 7. Ask the CEO
+   nothing: typing the command was the yes.
 3. **Bring the squad to a safe point** before installing anything: the install replaces the
    scripts that the hooks and the pre-push gate run, and the restart that step 7 asks for ends
    whatever a session is doing. Send DEV and QA one message each: "The CEO is upgrading the
@@ -74,16 +79,17 @@ Work from the main checkout. The upstream repository is the one named on the `up
    That PR needs no issue of its own, and its description names the release and each *By hand*
    item it records.
 6. **Have the agents re-read what changed** (§7). Tell DEV and QA, one message each: the version
-   installed, the rules that changed with their § numbers, and to re-read those sections now in
-   the main checkout's `.agent-squad/playbook/`, taking them as superseding the text their session
-   loaded, and that they stay at their safe point until `/squad-resume`. Re-read the sections
-   yourself.
+   installed, and whether the project went back to it; the rules that changed, or going back the
+   rules that revert, with their § numbers; and to re-read those sections now in the main
+   checkout's `.agent-squad/playbook/`, taking them as superseding the text their session loaded,
+   and that they stay at their safe point until `/squad-resume`. Re-read the sections yourself.
 7. **Report to the CEO**, in the CEO's language: the version installed, and whether the project went
-   back to it, `--check`'s result, the installer's PR, the labels created or corrected, and what DEV
-   and QA were told. Say that the rules need nothing more from the CEO: the agents have re-read the
-   rules that changed, and each session loads the full text at its next compaction. Only when the
-   release rewrites much of the charter, recommend that the CEO type `/squad-save-state` and then
-   `/compact` in each session, the CTO's included, and say why.
+   back to it, with the rules that revert and their § numbers, `--check`'s result, the installer's
+   PR, the labels created or corrected, and what DEV and QA were told. Say that the rules need
+   nothing more from the CEO: the agents have re-read the rules that changed, and each session loads
+   the full text at its next compaction. Only when the release rewrites much of the charter, or
+   going back one of the releases it takes back did, recommend that the CEO type
+   `/squad-save-state` and then `/compact` in each session, the CTO's included, and say why.
    Then guide the CEO through the restart, which is the CEO's to type: a session loads the new
    release of the squad board, and any hook the release adds, only when it starts, and a session
    that restarts takes no turn until something writes to it. First run
@@ -96,4 +102,6 @@ Work from the main checkout. The upstream repository is the one named on the `up
    until it restarts.
    End with the version installed and its release's headlines: the bold opening of each item of its
    `CHANGELOG.md` entry, but for its *Upgrading from* item, one line each; for an upgrade across
-   several releases, each release's, the newest first.
+   several releases, each release's, the newest first. Going back, the headlines are those of the
+   releases it takes back, read in step 2, the newest first, and say that the project no longer has
+   them.
