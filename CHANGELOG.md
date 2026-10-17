@@ -1,5 +1,15 @@
 # Changelog
 
+## v64 — 2026-10-17
+- **Going back to an older release names the rules it takes back** (#425, found by QA in its
+  review of PR #424). `/squad-upgrade vN` to a release older than the one the project runs read
+  that release's `CHANGELOG.md`, which has no entry above the running version, and so told DEV, QA
+  and the CEO that no rule changed. It now reads the installed playbook's `CHANGELOG.md` before the
+  install replaces it, names the rules that revert, with their § numbers, to DEV and QA and in its
+  report, and ends with the headlines of the releases it takes back.
+- **Upgrading from v63:** nothing to do. No rule changes, and the command takes effect at once. A
+  restart only brings the squad board's version up to date.
+
 ## v63 — 2026-10-15
 - **`/squad-update` tells, `/squad-upgrade` installs** (#422, the CEO's decision). `/squad-update`
   tells what a newer release changes, as `/squad-upgrade` did, and installs nothing.
