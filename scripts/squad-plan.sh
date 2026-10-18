@@ -10,10 +10,12 @@
 # A table has one row per issue of the milestone, the plan issues left out, by priority, then
 # number: the issue, its owner, where it stands, and the next step and whose it is, from
 # squad-steps.jq, which the stall detector shares. Then the release's own steps: the CEO's read of
-# the README, which SQUAD.md §3 asks of a milestone that does not only fix things, and, where the
-# repository tracks SQUAD.md with a Version: line, as the method's own repository does, and the
-# milestone's title starts with vN, the version PR before it, and the tag, the Release and the
-# install here after it. While the version PR is open, its row shows it as an issue's row shows its
+# the README, which SQUAD.md §3 asks of a milestone that does not only fix things, shown as not taken
+# when the plan issue's description has a line, outside its markers, that starts with
+# "No README read:" and gives the reason (agent-squad #429), and, where the repository tracks
+# SQUAD.md with a Version: line, as the method's own repository does, and the milestone's title
+# starts with vN, the version PR before it, and the tag, the Release and the install here after
+# it. While the version PR is open, its row shows it as an issue's row shows its
 # PR: the version PR names the plan issue ("Part of #N") and closes no issue (SQUAD.md §3,
 # agent-squad #384). Everything comes from GitHub, except the install, which comes from
 # .agent-squad/install.log of the main checkout.
@@ -210,10 +212,17 @@ table() {
     | (if $open == [] then null elif ($open | length) > 3 then "waits for \($open | length) issues"
        else "waits for \($open | join(", "))" end) as $waits
     | ($plan | labelled("needs-ceo")) as $asked
+    # A release that takes no README read (SQUAD.md §3, agent-squad #429): the CTO says so in a line
+    # of the plan issue'"'"'s description, outside its markers, that starts with "No README read:" and
+    # gives the reason.
+    | ($plan.body | plan_parts | .before + .after | [splits("\n") | capture("^No README read:\\s*(?<why>\\S.*?)\\s*$").why]
+       | first) as $no_read
+    | {step: "README read", who: "CEO", state: "➖ not taken: \($no_read // "" | short)", next: "—"} as $not_taken
     # The release'"'"'s own steps: the README read everywhere; the version PR, the tag, the Release
     # and the install where the repository tracks SQUAD.md with a Version: line. The version PR,
     # while it is open, shows as an issue'"'"'s PR does, whether the milestone'"'"'s issues are closed or not.
-    | (if $release == null then
+    | (if $release == null and $no_read then [$not_taken]
+       elif $release == null then
          [{step: "README read", who: "CEO",
            state: (if $asked then "⏳ waits for the CEO" elif $waits then "⚪ \($waits)" else "⚪ not asked yet" end),
            next: (if $asked then "CEO: read it" elif $waits then "—" else "CTO: ask the CEO" end)}]
@@ -224,15 +233,20 @@ table() {
                elif $version_pr != null then $version_pr | pr_cells
                elif $waits then {state: "⚪ \($waits)", next: "—"}
                else {state: "⚪ not started", next: "CTO: open it"} end),
-            {step: "README read", who: "CEO",
-             state: (if $release.tagged then "✅ done" elif $asked then "⏳ waits for the CEO"
-                     elif $versioned | not then "⚪ waits for the version PR" else "⚪ not asked yet" end),
-             next: (if $release.tagged then "—" elif $asked then "CEO: read it" elif $versioned then "CTO: ask the CEO" else "—" end)},
+            (if $no_read then $not_taken else
+             {step: "README read", who: "CEO",
+              state: (if $release.tagged then "✅ done" elif $asked then "⏳ waits for the CEO"
+                      elif $versioned | not then "⚪ waits for the version PR" else "⚪ not asked yet" end),
+              next: (if $release.tagged then "—" elif $asked then "CEO: read it" elif $versioned then "CTO: ask the CEO" else "—" end)}
+             end),
+            # With no read, the tag waits for the version PR alone, and the CTO tags it (§3).
             {step: "Tag, Release, install here", who: "CTO",
              state: (if $release.tagged and $release.published and $release.installed then "✅ done"
+                     elif ($release.tagged | not) and $no_read then (if $versioned then "⚪ not tagged yet" else "⚪ waits for the version PR" end)
                      elif $release.tagged | not then "⚪ waits for the CEO'"'"'s OK"
                      else "⏳ tag ✅, Release \(if $release.published then "✅" else "⚪" end), install \(if $release.installed then "✅" else "⚪" end)" end),
              next: (if $release.tagged and $release.published and $release.installed then "—"
+                    elif ($release.tagged | not) and $no_read then (if $versioned then "CTO: tag it" else "—" end)
                     elif $release.tagged | not then "CTO: tag it, on the CEO'"'"'s OK"
                     elif $release.published | not then "CTO: publish the Release" else "CTO: install it here" end)}]
        end) as $steps
