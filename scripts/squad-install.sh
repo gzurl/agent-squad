@@ -728,10 +728,11 @@ else
   tar -xzf "$tarball" -C "$staging" --strip-components=1 \
     || die "cannot extract the tarball of $tag; the installed playbook is unchanged"
 fi
-# What the hooks, the pre-push gate and the By hand list rely on. A tree from before the installer
-# (v14 and older) has no scripts/squad-install.sh, and would install without working.
+# What the hooks, the pre-push gate and the By hand list rely on, squad-latest.sh's bound on gh among
+# them. A tree from before the installer (v14 and older) has no scripts/squad-install.sh, and would
+# install without working.
 for required in SQUAD.md .githooks/pre-push scripts/squad-checks.sh scripts/squad-handoff.sh scripts/squad-latest.sh \
-  scripts/squad-install.sh templates/AGENTS.md commands/squad-save-state.md commands/squad-pause.md \
+  scripts/squad-timeout.sh scripts/squad-install.sh templates/AGENTS.md commands/squad-save-state.md commands/squad-pause.md \
   commands/squad-autopilot.md commands/squad-resume.md commands/squad-update.md commands/squad-upgrade.md \
   commands/squad-pause-all.md commands/squad-autopilot-all.md commands/squad-resume-all.md \
   commands/squad-usage.md commands/squad-usage-all.md commands/squad-watch.md commands/squad-uninstall.md; do

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Check scripts/squad-latest.sh (agent-squad #302) in a scratch main checkout, with a copy of it
-# beside a squad-install.sh whose upstream= line names o/r, and a gh that records what it is asked
-# and answers as each case sets; nothing reaches GitHub. A check is due with no file, 24 hours
-# after the last that worked, and an hour after a failed attempt; it writes the attempt before it
-# asks; it writes the file in the format the board reads; a failure, a wrong answer or a gh that
-# takes too long keeps the tag; a file that is not that format counts as no check; --due only
+# beside squad-timeout.sh and a squad-install.sh whose upstream= line names o/r, and a gh that
+# records what it is asked and answers as each case sets; nothing reaches GitHub. A check is due
+# with no file, 24 hours after the last that worked, and an hour after a failed attempt; it writes
+# the attempt before it asks; it writes the file in the format the board reads; a failure, a wrong
+# answer or a gh that takes too long keeps the tag, and the last says so (agent-squad #430); a file
+# that is not that format counts as no check; --due only
 # answers; --now, a session start's, asks whatever the last check's age (agent-squad #336); without
 # an upstream it asks nothing; bad usage exits 2.
 # shellcheck disable=SC2016 # the checks' bash -c bodies take their values as arguments
@@ -27,10 +28,11 @@ check() {
   if "$@"; then pass "$description"; else fail "$description"; fi
 }
 
-# The playbook's scripts, as a project has them: this one, and an installer that names o/r.
+# The playbook's scripts, as a project has them: this one, the bound it puts on gh, and an installer
+# that names o/r.
 scripts="$lab/playbook/scripts"
 mkdir -p "$scripts" "$lab/bin"
-cp "$root/scripts/squad-latest.sh" "$scripts/"
+cp "$root/scripts/squad-latest.sh" "$root/scripts/squad-timeout.sh" "$scripts/"
 printf '%s\n' '#!/usr/bin/env bash' 'upstream="o/r"' > "$scripts/squad-install.sh"
 latest="$scripts/squad-latest.sh"
 # gh, as far as squad-latest.sh is concerned: each call goes to gh.log, and its PID to gh.pid. It
@@ -165,13 +167,15 @@ run
 check "before any check has worked, a run says when GitHub was last asked" \
   bash -c '[ "$1" = "latest release: not known yet; GitHub was asked 0 h ago" ] && [ ! -e "$2" ]' _ "$out" "$lab/gh.log"
 
-# 4. A gh that takes longer than SQUAD_LATEST_TIMEOUT is stopped, and counts as a failure.
+# 4. A gh that takes longer than SQUAD_LATEST_TIMEOUT is stopped, and counts as a failure, which its
+#    line names (agent-squad #430).
 known '"v50"' $((day + 60)) $((day + 60))
 started=$SECONDS
 SQUAD_LATEST_TIMEOUT=1 GH_SLEEP=5 run
-check "a gh that takes too long is stopped after the timeout, and counts as a failure" \
-  bash -c '[ $(($3 - $4)) -lt 4 ] && [ "$1" = "latest release: GitHub did not tell it; the next attempt is in an hour" ] && [ "$2" -eq 0 ]' \
+check "a gh that takes too long is stopped after the timeout, and counts as a failure, saying so" \
+  bash -c '[ $(($3 - $4)) -lt 4 ] && [ "$1" = "latest release: GitHub did not answer within 1 s; the next attempt is in an hour" ] && [ "$2" -eq 0 ]' \
   _ "$out" "$code" "$SECONDS" "$started"
+check "and keeps the tag" holds '.tag == "v50" and (now - .attemptedAt) < 5 and (now - .checkedAt) > 86400'
 check "and is not left running" bash -c '! kill -0 "$(cat "$1")" 2>/dev/null' _ "$lab/gh.pid"
 
 # 5. The attempt is written before gh answers, so that a session starting meanwhile asks nothing.

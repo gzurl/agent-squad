@@ -43,14 +43,18 @@ state="$repo/.agent-squad/watch.tsv"
 
 # GitHub, as far as squad-stalls.sh is concerned: the open PRs, the open issues, who opened each
 # (the REST list of open issues and PRs) and each PR's reviews come from files in $lab/gh;
-# GH_FAIL=<what> makes that call fail.
+# GH_FAIL=<what> makes that call fail, and GH_FAIL=prs-hang makes the list of PRs never answer, its
+# PID in $lab/gh/hung.pid.
 mkdir -p "$lab/bin" "$lab/gh"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
 gh_dir="$(dirname "$0")/../gh"
 case "$1 ${2:-}" in
   "repo view") [ "${GH_FAIL:-}" != repo ] || exit 1; echo o/r ;;
-  "pr list") [ "${GH_FAIL:-}" != prs ] || exit 1; cat "$gh_dir/prs.json" ;;
+  "pr list")
+    [ "${GH_FAIL:-}" != prs ] || exit 1
+    if [ "${GH_FAIL:-}" = prs-hang ]; then echo "$$" > "$gh_dir/hung.pid"; exec sleep 60; fi
+    cat "$gh_dir/prs.json" ;;
   "issue list") [ "${GH_FAIL:-}" != issues ] || exit 1; cat "$gh_dir/issues.json" ;;
   api*)
     for arg; do
@@ -377,6 +381,31 @@ for what in repo prs issues opened opened-partial opened-garbage reviews; do
     fail "GitHub failing on $what: exit $code, printed '$out', said '$err'"
   fi
 done
+#    A call that GitHub never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock time,
+#    and fails the run as any other failure does, saying why (agent-squad #430).
+rm -f "$state"
+started=$SECONDS
+GH_FAIL=prs-hang SQUAD_GH_TIMEOUT=1 run 0 "${everyone_idle[@]}"
+took=$((SECONDS - started))
+if [ "$code" -eq 1 ] && [ -z "$out" ] && [ ! -e "$state" ] && [ "$took" -le 4 ] \
+  && [ "$err" = "squad-stalls: GitHub did not answer within 1 s"$'\n'"squad-stalls: cannot read the open pull requests; nothing was checked" ] \
+  && ! kill -0 "$(cat "$lab/gh/hung.pid")" 2>/dev/null; then
+  pass "a call that GitHub never answers is stopped after its bound: exit 1, saying so, and nothing left running"
+else
+  fail "a call that GitHub never answers: exit $code after $took s, printed '$out', said '$err'"
+fi
+#    A SQUAD_GH_TIMEOUT that is not a whole number above 0 is 120 s: the run reads GitHub as without
+#    one (QA's finding on PR #432).
+rm -f "$state"
+run 0 "${everyone_idle[@]}"
+expected="$code|$out"
+rm -f "$state"
+SQUAD_GH_TIMEOUT=abc run 0 "${everyone_idle[@]}"
+if [ "$expected" = "0|$out" ] && [ "$code" -eq 0 ]; then
+  pass "a SQUAD_GH_TIMEOUT that is no number reads GitHub as without one"
+else
+  fail "a SQUAD_GH_TIMEOUT that is no number: exit $code, printed '$out', said '$err'"
+fi
 
 # 8. Bad usage, and a place that is not a squad's checkout, exit 2.
 for args in "--session" "--session QA=asleep" "--session BOSS=idle" "--bogus"; do

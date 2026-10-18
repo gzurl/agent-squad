@@ -45,6 +45,8 @@ jobs:
         run: scripts/check-release.sh
       - name: The latest release is checked at most once a day, and once an hour while GitHub fails
         run: scripts/check-latest.sh
+      - name: A command run through squad-timeout.sh stops past its bound of wall-clock time
+        run: scripts/check-timeout.sh
       - name: The commands only the CEO types cannot be run by the model
         run: scripts/check-commands.sh
       - name: The sessions still on an older release than the installed one are named
