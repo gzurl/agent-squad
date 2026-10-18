@@ -231,9 +231,10 @@ fi
 
 # 7b. Each open PR shows its latest QA-VERDICT and whether it is bound to the head (#184): current,
 #     STALE when the head moved past it, none yet, and an API error when the reviews cannot be
-#     read. This gh answers four PRs on the same head: #1's latest verdict is on the head, after
+#     read. This gh answers five PRs on the same head: #1's latest verdict is on the head, after
 #     an older one; #2's is on an earlier commit; #3 has reviews but no verdict; #4's reviews
-#     cannot be read.
+#     cannot be read; #5 has none, and comes after #4, since only reviews that got no answer stop
+#     the snapshot's listing (agent-squad #440).
 mkdir -p "$lab/bin-verdicts"
 cat > "$lab/bin-verdicts/gh" <<'GH'
 #!/usr/bin/env bash
@@ -243,13 +244,14 @@ review() { jq -nc --arg c "$1" --arg b "$2" '{commit_id: $c, body: $b}'; }
 case "$1 ${2:-} ${3:-}" in
   "repo view "*) echo sandbox ;;
   "pr list "*)
-    jq -n --arg h "$head" '[range(1; 5) | {number: ., title: "PR \(.)", headRefName: "b\(.)", headRefOid: $h, labels: []}]' ;;
+    jq -n --arg h "$head" '[range(1; 6) | {number: ., title: "PR \(.)", headRefName: "b\(.)", headRefOid: $h, labels: []}]' ;;
   "api --paginate repos/sandbox/sandbox/pulls/1/reviews")
     printf '[%s,%s]\n' "$(review "$older" $'a review\n\nQA-VERDICT: CHANGES-REQUESTED')" "$(review "$head" $'again\n\nQA-VERDICT: APPROVED')" ;;
   "api --paginate repos/sandbox/sandbox/pulls/2/reviews")
     printf '[%s]\n' "$(review "$older" $'a review\n\nQA-VERDICT: APPROVED')" ;;
   "api --paginate repos/sandbox/sandbox/pulls/3/reviews") printf '[%s]\n' "$(review "$head" 'a comment')" ;;
   "api --paginate repos/sandbox/sandbox/pulls/4/reviews") echo "gh: HTTP 502" >&2; exit 1 ;;
+  "api --paginate repos/sandbox/sandbox/pulls/5/reviews") echo '[]' ;;
   "api graphql "*) echo 0 ;;
   "issue list "*) echo '[]' ;;
   *) exit 1 ;;
@@ -269,6 +271,7 @@ verdict_line "a verdict on the head is marked current, the latest one counting" 
 verdict_line "a verdict on an earlier commit is marked STALE" 2 "fedcba9 QA-VERDICT: APPROVED (STALE: not the head)"
 verdict_line "reviews without a verdict read none yet" 3 "none yet"
 verdict_line "reviews that cannot be read read API error" 4 "API error"
+verdict_line "and the PR after them is still listed" 5 "none yet"
 
 # 7c. A call to GitHub that never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock
 #     time, and the snapshot says so where it says gh is unavailable (agent-squad #435). This gh never
