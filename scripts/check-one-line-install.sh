@@ -29,8 +29,8 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # lists the refs under refs/tags/ (default v9, v15, v16, v100 and names that are not release tags),
 # STUB_AUTH=fail and STUB_REPO=fail make the login and the repository unreadable, STUB_CONTENTS=fail
 # makes the installer's download fail, STUB_CONTENTS=empty makes it succeed with nothing, and
-# STUB_CONTENTS=slow makes it wait; STUB_REPO=hang and STUB_CONTENTS=hang make those calls never
-# answer, their PID in $STUB_LAB/hung.pid. The installer it serves records its arguments, the mode
+# STUB_CONTENTS=slow makes it wait; STUB_AUTH=hang, STUB_REPO=hang, STUB_TAGLIST=hang and
+# STUB_CONTENTS=hang make those calls never answer, their PID in $STUB_LAB/hung.pid. The installer it serves records its arguments, the mode
 # of the directory it runs from, whether an executable squad-timeout.sh is beside it, and what it
 # reads on stdin, prints a line, records that it got past it,
 # may wait (STUB_INSTALLER_SLEEP) and exits with STUB_INSTALLER_EXIT. Like every tag's installer
@@ -40,11 +40,14 @@ cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$STUB_LAB/calls"
 case "$1 ${2:-}" in
-  "auth status") [ "${STUB_AUTH:-}" != fail ] ;;
+  "auth status")
+    if [ "${STUB_AUTH:-}" = hang ]; then echo "$$" > "$STUB_LAB/hung.pid"; exec sleep 60; fi
+    [ "${STUB_AUTH:-}" != fail ] ;;
   "api repos/gzurl/agent-squad")
     if [ "${STUB_REPO:-}" = hang ]; then echo "$$" > "$STUB_LAB/hung.pid"; exec sleep 60; fi
     [ "${STUB_REPO:-}" != fail ] && echo gzurl/agent-squad ;;
   "api --paginate")
+    if [ "${STUB_TAGLIST:-}" = hang ]; then echo "$$" > "$STUB_LAB/hung.pid"; exec sleep 60; fi
     for tag in ${STUB_TAGS:-v9 v15 v16 v100 v101a vx v16-rc}; do echo "refs/tags/$tag"; done ;;
   "api -H")
     [ "${STUB_CONTENTS:-}" != fail ] || exit 1
@@ -370,7 +373,7 @@ if [ "$code" -eq 0 ] && [ "$(cat "$lab/installer-helper" 2>/dev/null)" = beside 
 else
   fail "the installer found no executable squad-timeout.sh beside itself: exit $code"
 fi
-for call in STUB_REPO STUB_CONTENTS; do
+for call in STUB_AUTH STUB_REPO STUB_TAGLIST STUB_CONTENTS; do
   started=$SECONDS
   export "$call=hang" SQUAD_GH_TIMEOUT=1
   run --tag v16 "$project"
