@@ -29,8 +29,10 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # lists the refs under refs/tags/ (default v9, v15, v16, v100 and names that are not release tags),
 # STUB_AUTH=fail and STUB_REPO=fail make the login and the repository unreadable, STUB_CONTENTS=fail
 # makes the installer's download fail, STUB_CONTENTS=empty makes it succeed with nothing, and
-# STUB_CONTENTS=slow makes it wait. The installer it serves records its arguments, the mode of the
-# directory it runs from and what it reads on stdin, prints a line, records that it got past it,
+# STUB_CONTENTS=slow makes it wait; STUB_REPO=hang and STUB_CONTENTS=hang make those calls never
+# answer, their PID in $STUB_LAB/hung.pid. The installer it serves records its arguments, the mode
+# of the directory it runs from, whether an executable squad-timeout.sh is beside it, and what it
+# reads on stdin, prints a line, records that it got past it,
 # may wait (STUB_INSTALLER_SLEEP) and exits with STUB_INSTALLER_EXIT. Like every tag's installer
 # before v23, it does not ignore SIGPIPE itself.
 mkdir -p "$lab/bin"
@@ -40,6 +42,7 @@ printf '%s\n' "$*" >> "$STUB_LAB/calls"
 case "$1 ${2:-}" in
   "auth status") [ "${STUB_AUTH:-}" != fail ] ;;
   "api repos/gzurl/agent-squad")
+    if [ "${STUB_REPO:-}" = hang ]; then echo "$$" > "$STUB_LAB/hung.pid"; exec sleep 60; fi
     [ "${STUB_REPO:-}" != fail ] && echo gzurl/agent-squad ;;
   "api --paginate")
     for tag in ${STUB_TAGS:-v9 v15 v16 v100 v101a vx v16-rc}; do echo "refs/tags/$tag"; done ;;
@@ -47,10 +50,12 @@ case "$1 ${2:-}" in
     [ "${STUB_CONTENTS:-}" != fail ] || exit 1
     [ "${STUB_CONTENTS:-}" != empty ] || exit 0
     [ "${STUB_CONTENTS:-}" != slow ] || sleep 5
+    if [ "${STUB_CONTENTS:-}" = hang ]; then echo "$$" > "$STUB_LAB/hung.pid"; exec sleep 60; fi
     cat <<'INSTALLER'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$STUB_LAB/installer-args"
 ls -ld "$(dirname "$0")" | cut -c1-10 > "$STUB_LAB/installer-dir-mode"
+if [ -x "$(dirname "$0")/squad-timeout.sh" ]; then echo beside > "$STUB_LAB/installer-helper"; fi
 if IFS= read -r line; then echo "read: $line"; else echo "nothing"; fi > "$STUB_LAB/installer-stdin"
 echo "fake installer of $2"
 echo finished > "$STUB_LAB/installer-finished"
@@ -173,7 +178,7 @@ done
 # 4. The prerequisites stop it, one line each, before anything is downloaded. A PATH of links to
 #    the tools install.sh uses stands in for the machine, less the tool under test.
 mkdir -p "$lab/tools"
-for tool in bash env sed sort tail grep mkdir rm cat git jq tar; do
+for tool in bash env sed sort tail grep mkdir rm cat chmod sleep git jq tar; do
   ln -s "$(command -v "$tool")" "$lab/tools/$tool"
 done
 ln -s "$lab/bin/gh" "$lab/tools/gh"
@@ -348,6 +353,37 @@ if [ "$code" -eq 2 ] && [ "$err" = "install.sh: cannot create a temporary direct
 else
   fail "a mkdir that fails once it has made the directory: exit $code, TMPDIR holds: $(left_in_tmp), stderr: $err"
 fi
+
+# 6b. Each call to GitHub stops after SQUAD_GH_TIMEOUT seconds of wall-clock time, through the copy
+#     of scripts/squad-timeout.sh that install.sh writes, byte for byte, and that the installer finds
+#     beside itself (agent-squad #435). A call that never answers stops the run, saying so, with
+#     nothing installed and nothing left in TMPDIR or running.
+if cmp -s <(sed -n "/<<'SQUAD-TIMEOUT'/,/^SQUAD-TIMEOUT\$/p" "$script" | sed '1d;$d') "$root/scripts/squad-timeout.sh"; then
+  pass "the squad-timeout.sh that install.sh writes is scripts/squad-timeout.sh, byte for byte"
+else
+  fail "the squad-timeout.sh that install.sh writes differs from scripts/squad-timeout.sh"
+fi
+rm -f "$lab/installer-helper"
+run --tag v16 "$project"
+if [ "$code" -eq 0 ] && [ "$(cat "$lab/installer-helper" 2>/dev/null)" = beside ]; then
+  pass "the installer finds an executable squad-timeout.sh beside itself"
+else
+  fail "the installer found no executable squad-timeout.sh beside itself: exit $code"
+fi
+for call in STUB_REPO STUB_CONTENTS; do
+  started=$SECONDS
+  export "$call=hang" SQUAD_GH_TIMEOUT=1
+  run --tag v16 "$project"
+  unset "$call" SQUAD_GH_TIMEOUT
+  took=$((SECONDS - started))
+  if [ "$code" -eq 2 ] && [ "$took" -le 5 ] && [ ! -e "$lab/installer-args" ] && tmp_clean \
+    && [ "$err" = "install.sh: GitHub did not answer within 1 s, so nothing was installed; run this again" ] \
+    && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
+    pass "a call that never answers ($call=hang) stops after its bound, exit 2, saying so, leaving nothing"
+  else
+    fail "a call that never answers ($call=hang): exit $code after $took s, stderr: $err, left: $(left_in_tmp)"
+  fi
+done
 
 # 7. The upstream repository is named once in install.sh, so that moving it changes one line.
 named="$(grep -c 'gzurl/agent-squad' "$script")"

@@ -9,6 +9,10 @@
 # scripts/squad-install.sh and runs it on the project: an install and an upgrade alike run the
 # chosen tag's installer, which writes that tag's shim in one run. Projects run this file from
 # main, not from a tag, so a change to it takes effect when merged (AGENTS.md, Releases).
+# Each call to GitHub, its own and those of an installer from v65 on, stops after SQUAD_GH_TIMEOUT
+# seconds of wall-clock time (120 when unset, or not a whole number above 0), through a copy of
+# scripts/squad-timeout.sh that it writes beside the installer, since it runs alone
+# (agent-squad #435).
 #
 # Usage: install.sh [--tag vN] [<project main checkout>]
 # Exit: the installer's own status; 2 bad usage, a missing prerequisite, or a tag it cannot
@@ -25,14 +29,22 @@ set -u
 upstream="gzurl/agent-squad"
 # The oldest release whose scripts/squad-install.sh takes `<project> <tag>`: v14 and older have none.
 oldest=15
+# How long each call to GitHub may take, in seconds of wall-clock time (agent-squad #435).
+bound="${SQUAD_GH_TIMEOUT:-120}"
+[[ "$bound" =~ ^[1-9][0-9]*$ ]] || bound=120
 
 install_squad() {
   local usage tag="" project="" tags installer tool
   usage="usage: install.sh [--tag vN] [<project main checkout>]
 Installs or upgrades the squad in the project (default: the current directory) from the release tag
 vN (default: the latest), v$oldest or later, by running that tag's own scripts/squad-install.sh."
-  # `fail <reason>` stops before anything is installed.
-  fail() { echo "install.sh: $1" >&2; exit 2; }
+  # `fail <reason> [<status>]` stops before anything is installed. When the status is 124, that of a
+  # call to GitHub that got no answer within the bound, that silence is the reason.
+  fail() {
+    [ "${2:-0}" -ne 124 ] || set -- "GitHub did not answer within $bound s, so nothing was installed; run this again"
+    echo "install.sh: $1" >&2
+    exit 2
+  }
 
   exec </dev/null
   # Output whose reader has gone, as when this is piped into head, must not stop an install
@@ -65,16 +77,89 @@ vN (default: the latest), v$oldest or later, by running that tag's own scripts/s
   project="$(CDPATH='' cd -- "$project" 2>/dev/null && pwd)" || project="${project%/}"
 
   # Prerequisites, before anything is downloaded: the tools, gh's login, and access to upstream.
+  # The tools are found by type -P, which the gh function below does not stand in for.
   for tool in gh git jq tar; do
-    command -v "$tool" >/dev/null 2>&1 || fail "$tool is missing; install it and run this again"
+    type -P "$tool" >/dev/null 2>&1 || fail "$tool is missing; install it and run this again"
   done
-  gh auth status >/dev/null 2>&1 || fail "gh is not logged in; run gh auth login and run this again"
+
+  # This run's own directory, removed on every way out. Its name is fixed before it exists, so that
+  # an interrupt finds in the trap exactly that directory or nothing, never TMPDIR itself. A name
+  # already taken is left alone; one that was free is this run's, so the trap removes whatever mkdir
+  # leaves there, even when mkdir fails. The directory is closed to others by the umask, not by
+  # mkdir -m: GNU mkdir sets that mode once the directory exists, which fails on NTFS under Git Bash
+  # (agent-squad #404, as #277 was for the installer's own self-test).
+  tmp="${TMPDIR:-/tmp}"
+  tmp="${tmp%/}/agent-squad-install.$$.$RANDOM$RANDOM"
+  { [ ! -e "$tmp" ] && [ ! -L "$tmp" ]; } || fail "cannot create a temporary directory: $tmp exists"
+  trap 'rm -rf "$tmp"' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  (umask 077 && mkdir "$tmp") 2>/dev/null || fail "cannot create a temporary directory"
+
+  # The bound on each call to GitHub: scripts/squad-timeout.sh, written there, which the installer
+  # finds beside itself too. It is that file, byte for byte, as a check of this repository keeps it.
+  cat > "$tmp/squad-timeout.sh" <<'SQUAD-TIMEOUT' || fail "cannot write $tmp/squad-timeout.sh"
+#!/usr/bin/env bash
+# Run a command, and stop it once it has run past a bound of wall-clock time (agent-squad #430):
+# the squad's scripts run each GitHub call through it, since a call that GitHub never answers, as
+# when its connection died while the machine slept, would otherwise hold its script for hours. The
+# bound is read from the wall clock, which moves on while the machine sleeps, unlike sleep, alarm or
+# GNU timeout, which count time awake only: a command still running when the machine wakes past
+# its bound is stopped at once. A change of the clock itself moves the bound with it.
+#
+# Usage: squad-timeout.sh <seconds> <command> [<argument>...]
+# The command keeps this script's input, output and error output. Past the bound it gets SIGTERM,
+# and SIGKILL if it is still running two seconds later; it is the command that is stopped, not
+# processes it started. Interrupted, this script stops the command first.
+# Exit: the command's own; 124 when it was stopped, as GNU timeout's, after a line on stderr that
+#   says so; 2 bad usage.
+set -u
+usage="usage: squad-timeout.sh <seconds> <command> [<argument>...]"
+if [ $# -lt 2 ] || ! [[ "$1" =~ ^[1-9][0-9]*$ ]]; then echo "$usage" >&2; exit 2; fi
+bound="$1"
+shift
+
+# The command runs in the background, with this script's input, which a command started with &
+# would otherwise lose to /dev/null. Such a command ignores SIGINT, so an interrupted run stops it
+# before it ends.
+started=$SECONDS
+"$@" <&0 &
+pid=$!
+trap 'kill "$pid" 2>/dev/null; exit 130' INT
+trap 'kill "$pid" 2>/dev/null; exit 143' TERM
+
+# `ended_within <seconds>` waits until the command ends, and fails once <seconds> have passed since
+# the start: it reads the wall clock, as $SECONDS counts it, every tenth of a second.
+ended_within() {
+  while kill -0 "$pid" 2>/dev/null; do
+    [ $((SECONDS - started)) -le "$1" ] || return 1
+    sleep 0.1
+  done
+}
+if ended_within "$bound"; then
+  wait "$pid"
+  exit
+fi
+# The two seconds before SIGKILL count from the SIGTERM: after a sleep past the bound, the time
+# since the start has used them up already.
+kill -TERM "$pid" 2>/dev/null
+started=$SECONDS
+ended_within 2 || kill -KILL "$pid" 2>/dev/null
+wait "$pid" 2>/dev/null
+echo "squad-timeout: $1 did not end within $bound s, so it was stopped" >&2
+exit 124
+SQUAD-TIMEOUT
+  chmod +x "$tmp/squad-timeout.sh" || fail "cannot make $tmp/squad-timeout.sh executable"
+  gh() { "$tmp/squad-timeout.sh" "$bound" gh "$@"; }
+
+  gh auth status >/dev/null 2>&1 || fail "gh is not logged in; run gh auth login and run this again" "$?"
   gh api "repos/$upstream" --jq .full_name >/dev/null 2>&1 \
-    || fail "gh cannot read $upstream; the account gh uses needs access to it"
+    || fail "gh cannot read $upstream; the account gh uses needs access to it" "$?"
 
   # The release tags are vN, compared as numbers: v10 comes after v9.
   tags="$(gh api --paginate "repos/$upstream/git/matching-refs/tags/v" --jq '.[].ref' 2>/dev/null)" \
-    || fail "cannot list the release tags of $upstream"
+    || fail "cannot list the release tags of $upstream" "$?"
   tags="$(sed -n 's|^refs/tags/\(v[0-9][0-9]*\)$|\1|p' <<<"$tags" | sort -n -k1.2)"
   if [ -z "$tag" ]; then
     tag="$(tail -n 1 <<<"$tags")"
@@ -84,27 +169,12 @@ vN (default: the latest), v$oldest or later, by running that tag's own scripts/s
   [ "${tag#v}" -ge "$oldest" ] \
     || fail "$tag has no installer: install.sh installs v$oldest and later"
 
-  # The chosen tag's installer goes into a directory of this run's own, removed on every way out.
-  # Its name is fixed before it exists, so that an interrupt finds in the trap exactly that
-  # directory or nothing, never TMPDIR itself. A name already taken is left alone; one that was
-  # free is this run's, so the trap removes whatever mkdir leaves there, even when mkdir fails.
-  # The directory is closed to others by the umask, not by mkdir -m: GNU mkdir sets that mode once
-  # the directory exists, which fails on NTFS under Git Bash (agent-squad #404, as #277 was for
-  # the installer's own self-test).
-  tmp="${TMPDIR:-/tmp}"
-  tmp="${tmp%/}/agent-squad-install.$$.$RANDOM$RANDOM"
-  { [ ! -e "$tmp" ] && [ ! -L "$tmp" ]; } || fail "cannot create a temporary directory: $tmp exists"
-  trap 'rm -rf "$tmp"' EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-  (umask 077 && mkdir "$tmp") 2>/dev/null || fail "cannot create a temporary directory"
+  # The chosen tag's installer goes into this run's directory.
   installer="$tmp/squad-install.sh"
-  if ! gh api -H 'Accept: application/vnd.github.raw' \
+  gh api -H 'Accept: application/vnd.github.raw' \
     "repos/$upstream/contents/scripts/squad-install.sh?ref=$tag" > "$installer" 2>/dev/null \
-    || [ ! -s "$installer" ]; then
-    fail "cannot fetch scripts/squad-install.sh of $tag from $upstream"
-  fi
+    || fail "cannot fetch scripts/squad-install.sh of $tag from $upstream" "$?"
+  [ -s "$installer" ] || fail "cannot fetch scripts/squad-install.sh of $tag from $upstream"
 
   # The installer's own output follows, and its exit status is this script's.
   echo "install.sh: installing agent-squad $tag into $project, with $tag's own installer"

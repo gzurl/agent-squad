@@ -33,13 +33,20 @@ protected="${protected#"$remote"/}"
 # the remote lists them now: a ref pointing there carries no new code, such as a tag of a past
 # release (agent-squad #143). The list is asked for once; a branch head whose commit is not here, or
 # a remote that cannot be listed, counts for nothing, so the gate can only refuse more. Local
-# remote-tracking refs are not trusted: one can outlive the branch it names.
+# remote-tracking refs are not trusted: one can outlive the branch it names. The list goes through
+# squad-timeout.sh, beside squad-checks.sh, which stops it after SQUAD_GH_TIMEOUT seconds of
+# wall-clock time (120 when unset, or not a whole number above 0), and the gate says so
+# (agent-squad #435).
 remote_heads=""
 remote_listed=0
+list_seconds="${SQUAD_GH_TIMEOUT:-120}"
+[[ "$list_seconds" =~ ^[1-9][0-9]*$ ]] || list_seconds=120
 on_remote() {
-  local sha
+  local sha listing
   if [ "$remote_listed" -eq 0 ]; then
-    remote_heads="$(git ls-remote --heads "$remote" 2>/dev/null | cut -f1)"
+    listing="$("$(dirname "$checks")/squad-timeout.sh" "$list_seconds" git ls-remote --heads "$remote" 2>/dev/null)"
+    [ $? -ne 124 ] || echo "pre-push: $remote did not list its branches within $list_seconds s, so every ref pushed counts as new code" >&2
+    remote_heads="$(cut -f1 <<<"$listing")"
     remote_listed=1
   fi
   for sha in $remote_heads; do

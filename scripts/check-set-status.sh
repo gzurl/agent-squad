@@ -22,7 +22,7 @@ status=0
 # The script runs from a copy beside a stub squad-plan.sh, which it calls once a state is read back
 # (agent-squad #370). The stub logs each call to $PLAN_CALLS, with what it read on its input, prints
 # what the real one prints, and fails when STUB_PLAN=fail.
-mkdir -p "$lab/playbook/scripts" && cp "$root/scripts/squad-set-status.sh" "$lab/playbook/scripts/"
+mkdir -p "$lab/playbook/scripts" && cp "$root/scripts/squad-set-status.sh" "$root/scripts/squad-timeout.sh" "$lab/playbook/scripts/"
 set_status="$lab/playbook/scripts/squad-set-status.sh"
 cat > "$lab/playbook/scripts/squad-plan.sh" <<'PLAN'
 #!/usr/bin/env bash
@@ -55,7 +55,8 @@ IN_PROGRESS="🚧 status:in-progress" IN_REVIEW="👀 status:in-review" BLOCKED=
 # which changes nothing, as when someone else edits the labels at the same moment. `gh api
 # repos/{owner}/{repo}/issues/<n> --jq <filter>` answers with the labels, and with a pull_request
 # key when ITEM_KIND is pr, as the API answers for a PR, unless STUB_READ=fail, which fails every
-# read, or STUB_READ=back, which fails every read after the first.
+# read, or STUB_READ=back, which fails every read after the first, or STUB_READ=hang, which never
+# answers, its PID in $lab/hung.pid.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -78,6 +79,7 @@ case "$1 $2" in
     done
     echo "https://github.com/o/r/issues/1" ;;
   "api repos/{owner}/{repo}/issues/"*)
+    if [ "${STUB_READ:-}" = hang ]; then echo "$$" > "$(dirname "$LABELS")/hung.pid"; exec sleep 60; fi
     if [ "${STUB_READ:-}" = fail ] || { [ "${STUB_READ:-}" = back ] && [ "$(grep -c '^api$' "$CALLS")" -ge 2 ]; }; then
       echo "HTTP 502: Bad Gateway" >&2
       exit 1
@@ -199,6 +201,13 @@ check "a PR command on an issue's number: exit 1, saying so, and no edit" \
 STUB_READ=fail run issue 5 none
 check "an item whose kind cannot be read: exit 1, with gh's message, and no edit" \
   bash -c '[ "$1" -eq 1 ] && [ "$2" = "HTTP 502: Bad Gateway"$'\''\n'\''"status FAILED: cannot read issue #5, as gh says above; nothing was written" ] && [ "$3" = "api " ]' _ "$code" "$out" "$(calls)"
+#    A read that never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock time, saying
+#    so above the same line, and nothing is written (agent-squad #435).
+started=$SECONDS
+STUB_READ=hang SQUAD_GH_TIMEOUT=1 run issue 5 none
+check "a read that never answers: exit 1 after the bound, saying so, no edit, and nothing left running" \
+  bash -c '[ "$1" -eq 1 ] && [ "$2" -le 5 ] && [ "$3" = "squad-timeout: gh did not end within 1 s, so it was stopped"$'\''\n'\''"status FAILED: cannot read issue #5, as gh says above; nothing was written" ] \
+    && [ "$4" = "api " ] && ! kill -0 "$(cat "$5")" 2>/dev/null' _ "$code" "$((SECONDS - started))" "$out" "$(calls)" "$lab/hung.pid"
 
 # 7. The plan's table follows a state read back, and only then (agent-squad #370): squad-plan.sh
 #    --update runs once, with no input of the caller's, and prints nothing. Its failure is one
