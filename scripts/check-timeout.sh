@@ -144,12 +144,16 @@ check "stopped with it past the bound, a command still has two seconds after SIG
   bash -c '[ "$1" -eq 124 ] && [ "$(cat "$2")" = stopped ]' _ "$code" "$lab/stopped"
 check "and the command no longer runs" gone
 
-# 4. An interrupted run stops the command first. The run is started under job control, without
-#    which a command started in the background ignores SIGINT.
+# 4. An interrupted run stops the command first, with what it started (QA's finding on PR #444):
+#    the command here starts a process, which writes its PID to $lab/child.pid, then writes its
+#    own. The run is started under job control, without which a command started in the background
+#    ignores SIGINT.
+parent=(bash -c 'bash -c "echo \$\$ > \"\$1\"; exec sleep 60" _ "$1" >/dev/null 2>&1 &
+  until [ -s "$1" ]; do sleep 0.1; done; echo "$$" > "$2"; wait' _ "$lab/child.pid" "$lab/pid")
 for signal in INT:130 TERM:143; do
-  rm -f "$lab/pid"
+  rm -f "$lab/pid" "$lab/child.pid"
   set -m
-  "$timeout" 60 "${endless[@]}" &
+  "$timeout" 60 "${parent[@]}" &
   runner=$!
   set +m
   started
@@ -159,6 +163,7 @@ for signal in INT:130 TERM:143; do
   check "SIG${signal%:*} stops the command, and the run: exit ${signal#*:}" \
     bash -c '[ "$1" -eq "$2" ]' _ "$code" "${signal#*:}"
   check "and the command no longer runs" gone
+  check "nor what it started" bash -c '! kill -0 "$(cat "$1")" 2>/dev/null' _ "$lab/child.pid"
 done
 
 # 5. Bad usage exits 2, and runs nothing: no bound, no command, or a bound that is not a whole
