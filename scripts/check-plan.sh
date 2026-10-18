@@ -369,6 +369,51 @@ expect_steps "installed here: every step done" \
 check "with the header counting the issues closed, the plan issue left out" \
   bash -c '[[ "$(head -1 <<<"$1")" == *" · 1 of 1 issues closed · "* ]]' _ "$out"
 
+# 4b. A release that takes no README read (agent-squad #429): the line of the plan issue's
+#     description that says so, outside its markers, is its README row, before the tag and after it,
+#     and the CTO tags the release once its version PR is merged.
+world && upstream 54
+issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
+plan_issue 10
+# `plan_body <text before the markers>` writes the plan issue's description, the table after it.
+plan_body() { set_issue 10 '.body = $body' --arg body "$1"$'\n\n<!-- squad-plan:start -->\nnothing yet\n<!-- squad-plan:end -->'; }
+plan_body $'The plan of v55.\n\nNo README read: it only fixes things'
+expect_steps "no README read, the version PR not merged: the row says so, and the tag waits for the version PR" \
+"| 2 | Version PR | CTO | ⚪ not started | CTO: open it |
+| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the version PR | — |"
+upstream 55
+expect_steps "the version PR merged: the CTO tags it, asking the CEO nothing" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
+| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
+echo '[{"ref": "refs/tags/v55"}]' > "$W/refs.json"
+expect_steps "tagged: the row still says that no read was taken" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
+| 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ⚪ | CTO: publish the Release |"
+echo '[]' > "$W/refs.json"
+#     The line counts only at the start of a line, with a reason, and outside the markers: the table
+#     between them is rewritten at every update.
+for text in $'Note: No README read: it only fixes things' 'No README read:' $'No README read:   '; do
+  plan_body "$text"
+  expect_steps "'$text' is no such line: the CTO asks the CEO" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+done
+set_issue 10 '.body = $body' --arg body $'The plan.\n\n<!-- squad-plan:start -->\nNo README read: it only fixes things\n<!-- squad-plan:end -->'
+expect_steps "nor is the line between the markers" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+#     After the markers, and with the reason's pipe kept out of the table's cells, it counts too.
+set_issue 10 '.body = $body' --arg body $'The plan.\n\n<!-- squad-plan:start -->\nnothing yet\n<!-- squad-plan:end -->\nNo README read: a fix | no rule'
+expect_steps "after the markers too, its pipe escaped" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ➖ not taken: a fix \\| no rule | — |
+| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
+
 # 5. The release's version PR (agent-squad #384), upstream: the open PR whose description names the
 #    plan issue ("Part of #10") and that closes no issue. None of these is it, each numbered above
 #    it so that the highest-numbered would be one of them: a PR that names the plan issue and closes
@@ -437,6 +482,8 @@ plan_issue 10
 expect_steps "a project, every issue closed: the CTO asks the CEO" "| 2 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |"
 set_issue 10 '.labels += [{name: "👨🏻‍💼 needs-ceo"}]'
 expect_steps "a project, the plan issue labelled needs-ceo: the CEO reads it" "| 2 | README read | CEO | ⏳ waits for the CEO | CEO: read it |"
+set_issue 10 '.labels = []' && plan_body $'The plan.\nNo README read: it only fixes things'
+expect_steps "a project's release that takes no README read says so (agent-squad #429)" "| 2 | README read | CEO | ➖ not taken: it only fixes things | — |"
 
 # 7. --update: the table between the markers, the text around them kept; then nothing written
 #    while only the time changes, and written again when the table does.
