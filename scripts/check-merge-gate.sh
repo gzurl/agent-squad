@@ -111,7 +111,7 @@ case "$endpoint" in
     # GATE_LABELS=unreadable makes the call that reads the labels fail, and only that one.
     if [ "${GATE_LABELS:-}" = unreadable ]; then case "$filter" in *labels*) echo "gh: HTTP 502" >&2; exit 1 ;; esac; GATE_LABELS="[]"; fi
     json="$(jq -n --arg head "$head" --arg body "${PR_BODY:-}" --argjson labels "${GATE_LABELS:-[\"✅ status:approved\"]}" \
-      '{head: {sha: $head}, base: {ref: "main"}, labels: [$labels[] | {name: .}], body: $body}')" ;;
+      --arg base "${GATE_BASE_REF:-main}" '{head: {sha: $head}, base: {ref: $base}, labels: [$labels[] | {name: .}], body: $body}')" ;;
   *) exit 1 ;;
 esac
 [ "$slurp" -eq 0 ] || json="[$json]"
@@ -384,6 +384,24 @@ run_gate
 unset GATE_COMMENTS
 refused "a comment whose association cannot be read" "$(unreadable comments)"
 [ "$err" = "gate FAILED: $(unreadable comments)" ] || fail "an unreadable comment's association: the gate said: $err"
+
+# 1f. A PR whose base is a release branch is compared with that base, not with main (agent-squad
+#     #446): release/0.15, made from main, changes tool.sh, which the PR changes too. With it as the
+#     base, GATE_BASE_REF, the gate stops on the file in common; with main, nothing is behind.
+git -C "$scratch" switch -q -c release/0.15 main
+echo "the release's fix" >> "$scratch/tool.sh" && git -C "$scratch" commit -qam "a fix on the release branch"
+release="$(git -C "$scratch" rev-parse release/0.15)"
+git -C "$scratch" switch -q pr
+GATE_BASE_REF=release/0.15 run_gate
+stopped "a PR on release/0.15, which changed a file the PR changes"
+if grep -qF "PR #7 is behind release/0.15 by 1 commit(s)" <<<"$err" && grep -qxF '  tool.sh (the PR changes it too)' <<<"$err" \
+  && grep -qF "SQUAD_BEHIND_CHECKED=$release" <<<"$err"; then
+  pass "a PR on a release branch is compared with it, naming its SHA"
+else
+  fail "a PR on a release branch was not compared with it: $err"
+fi
+run_gate
+result_unchanged "the same PR on main, which the release branch's commit did not reach"
 
 # 2. Behind, with no file in common: main gains a commit that touches README.md and other.txt and
 #    adds two files: `a`, which the description only seems to name ("a note"), and `notes`, which

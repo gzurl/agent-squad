@@ -477,6 +477,15 @@ expect_version "a draft version PR while an issue is still open: the row shows t
   "| 2 | Version PR | CTO | 👀 PR #20 draft (\`aaaaaaa\`), no CI | CTO: finish the draft |"
 check "whose reviews are not read" bash -c '! grep -q "pulls/20/reviews" "$1"' _ "$CALLS"
 
+# 5b. A PR on a release branch, which GitHub does not link to the issue it closes, shows on that
+#     issue's row as any other, from the "Closes #N" of its description (agent-squad #446).
+world && plan_issue 10
+issue 1 open "Fixed on the release branch" "👨🏼‍💻 owner:dev" "👀 status:in-review"
+open_pr 40 "**👨🏼‍💻[DEV]:** Closes #1, on release/0.15." "" aaaaaaa1111 pass
+run
+check "a PR on a release branch, which GitHub does not link, shows on its issue's row" \
+  bash -c 'grep -qxF "$2" <<<"$1"' _ "$out" "| 1 | #1 Fixed on the release branch | DEV | 👀 PR #40 in review (\`aaaaaaa\`), CI ✅ | QA: review |"
+
 # 6. A project's README read, every issue closed: not asked yet, then waiting for the CEO.
 world
 issue 1 closed "Done" "👨🏼‍💻 owner:dev"
