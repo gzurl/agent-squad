@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Check scripts/squad-timeout.sh (agent-squad #430), which bounds a command by wall-clock time. A
-# command that ends in time keeps its input, output, error output and exit status; one that does not
-# is stopped past its bound, with SIGKILL if it ignores SIGTERM, and the script exits 124 saying so;
-# the bound counts the time the script itself was not running, as while the machine sleeps; an
-# interrupted run stops the command first; bad usage exits 2, running nothing. Everything happens in
-# a temporary directory.
+# command that ends in time keeps its input, output, error output and exit status, and one that ends
+# at once returns at once (agent-squad #437); one that does not is stopped past its bound, with
+# SIGKILL if it ignores SIGTERM, and the script exits 124 saying so; the bound counts the time the
+# script itself was not running, as while the machine sleeps; an interrupted run stops the command
+# first; bad usage exits 2, running nothing. Everything happens in a temporary directory.
 # shellcheck disable=SC2016 # the commands' bash -c bodies take their values as arguments
 set -u
 
@@ -52,6 +52,34 @@ run 5 bash -c 'cat; echo "to stderr" >&2; exit 3'
 check "a command that ends in time keeps its input, output and exit status" \
   bash -c '[ "$1" -eq 3 ] && [ "$2" = "the caller'\''s input" ] && [ "$3" = "to stderr" ]' _ "$code" "$out" "$err"
 
+#    A command that ends at once returns at once, with no wait of the script's own (agent-squad
+#    #437): fifty of them take three seconds at most, where a tenth of a second each would take six.
+start=$SECONDS
+for _ in $(seq 50); do "$timeout" 5 true || break; done
+check "a command that ends at once returns at once: 50 runs within 3 s" bash -c '[ "$1" -le 3 ]' _ "$((SECONDS - start))"
+#    On every bash at hand, this one and /bin/bash when it is another, as macOS's 3.2 is: a command
+#    that ends at once is never taken for one stopped, even four loops of 100 at once; and one that
+#    a signal ends keeps its status, with no report of the shell's, such as "Killed: 9", on the error
+#    output (QA's finding on PR #442).
+shells=(bash)
+[ ! -x /bin/bash ] || [ "$(/bin/bash -c 'echo "$BASH_VERSION"')" = "$(bash -c 'echo "$BASH_VERSION"')" ] || shells+=(/bin/bash)
+for shell in "${shells[@]}"; do
+  version="$("$shell" -c 'echo "$BASH_VERSION"')"
+  rm -f "$lab/not-0"
+  start=$SECONDS
+  for _ in 1 2 3 4; do
+    for _ in $(seq 100); do "$shell" "$timeout" 5 true 2>>"$lab/loops-err" || echo "$?" >> "$lab/not-0"; done &
+  done
+  wait
+  check "on bash $version, 400 runs of a command that ends at once, four loops at once, all exit 0 at once, saying nothing" \
+    bash -c '[ ! -e "$1" ] && [ ! -s "$2" ] && [ "$3" -le 5 ]' _ "$lab/not-0" "$lab/loops-err" "$((SECONDS - start))"
+  rm -f "$lab/loops-err"
+  out="$("$shell" "$timeout" 5 bash -c 'kill -KILL $$' 2>"$lab/err")"
+  code=$?
+  check "on bash $version, a command that a signal ends keeps its status, and the shell reports nothing" \
+    bash -c '[ "$1" -eq 137 ] && [ ! -s "$2" ]' _ "$code" "$lab/err"
+done
+
 # 2. A command that never ends is stopped past its bound, and the script says so.
 run 1 "${endless[@]}"
 check "a command that never ends is stopped after its bound: exit 124, saying so" \
@@ -63,16 +91,20 @@ check "one that ignores SIGTERM gets SIGKILL two seconds later: exit 124" \
   bash -c '[ "$1" -eq 124 ] && [ "$2" -ge 3 ] && [ "$2" -le 6 ]' _ "$code" "$took"
 check "and it no longer runs" gone
 
-# 3. The bound is wall-clock time: squad-timeout.sh stopped past its bound, as a sleeping machine
-#    stops every process, stops the command as soon as it runs again, not a bound later.
+# 3. The bound is wall-clock time: squad-timeout.sh stopped past its bound, with the command and
+#    the watcher it started, as a sleeping machine stops every process, stops the command as soon as
+#    they run again, not a bound later. `freeze <signal>` sends the signal to the runner and to the
+#    processes it started.
+# shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
+freeze() { kill "-$1" "$runner" $(pgrep -P "$runner"); }
 rm -f "$lab/pid"
 "$timeout" 4 "${endless[@]}" 2>/dev/null &
 runner=$!
 started
-kill -STOP "$runner"
+freeze STOP
 sleep 6
 start=$SECONDS
-kill -CONT "$runner"
+freeze CONT
 wait "$runner"
 code=$?
 check "stopped for longer than its bound, it stops the command once it runs again: exit 124" \
@@ -85,9 +117,9 @@ rm -f "$lab/pid" "$lab/stopped"
 "$timeout" 2 "${graceful[@]}" 2>/dev/null &
 runner=$!
 started
-kill -STOP "$runner" "$(cat "$lab/pid")"
+freeze STOP
 sleep 6
-kill -CONT "$(cat "$lab/pid")" "$runner"
+freeze CONT
 wait "$runner"
 code=$?
 check "stopped with it past the bound, a command still has two seconds after SIGTERM to end: exit 124" \
