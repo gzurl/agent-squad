@@ -9,6 +9,12 @@
   through it, 120 s by default (`SQUAD_GH_TIMEOUT`), and exit 1 with a message that says so when a
   call does not answer. `squad-latest.sh` keeps its exit 0, and its line says when GitHub did not
   answer within its 10 s.
+- **Every other call to GitHub or to the remote ends too** (#435). The session hooks' snapshot,
+  the merge gate, `squad-set-status.sh`, `squad-setup-labels.sh`, the installer and the pre-push
+  gate run each such call through `squad-timeout.sh`. The bound is 120 s, or 10 s in the session
+  hooks. A call that never answers fails, and the script says so. The snapshot reads
+  `(GitHub did not answer within 10 s)`. A pre-push gate whose remote did not list its branches
+  counts every ref pushed as new code.
 - **Going back to an older release names the sessions to restart** (#428, found by QA in its
   review of PR #427). After a downgrade, `squad-sessions.sh` said that every session ran the
   installed release, though each still ran the newer squad board until it restarted. It now names
@@ -20,6 +26,8 @@
   its markers, that starts with `No README read:` and gives the reason. The table's README row
   then shows the read as not taken, with that reason, before and after the tag, and the stall
   watch asks for no read. Until now the row asked for a read, and showed one as done once tagged.
+- **Outside the release, already live:** `install.sh` runs from `main`, and it now bounds its own
+  calls to GitHub the same way. When one never answers, it exits 2 with nothing installed (#435).
 - **Upgrading from v64:** nothing to do by hand. Re-read §3's paragraph on plan issues, and
   restart the three sessions to load the new squad board.
 
