@@ -12,7 +12,8 @@ import type { BoardAgent, BoardAgents, BoardItem, BoardRole, BoardState } from '
 // session's own state, not GitHub's: nothing is read from GitHub, and no command is run; a newer
 // release is known from a file another script writes. A session whose name is not a squad role's
 // does nothing. Every key records the release its session's board loaded, and the band marks a
-// session older than the installed release, which still needs a /restart (agent-squad #362); each
+// session on another release than the installed one, older, or newer after a downgrade, which
+// still needs a /restart (agent-squad #362, #428); each
 // session also writes that release in the main checkout's .agent-squad/sessions/<role>.json, for
 // /squad-upgrade and /squad-resume, which read no store (agent-squad #361). The signals are the ones
 // agent-squad #199 measured.
@@ -44,8 +45,8 @@ const SIGNATURE: Record<BoardRole, string> = {
 // cells between it and the agents, and no separator.
 const AUTOPILOT = '\u23E9'
 const GAP = 3
-// The mark of a session whose board is older than the installed release, before the two releases
-// (agent-squad #362): a clockwise arrow, a text character of one cell.
+// The mark of a session whose board is another release than the installed one, before the two
+// releases (agent-squad #362): a clockwise arrow, a text character of one cell.
 const RESTART = '\u27F3'
 // Every emoji the band draws takes two cells of a terminal, however many code points it has, as
 // Claude Code measures it; every other character one. The longest are matched first. A terminal
@@ -502,8 +503,8 @@ function stepAwayOf(text: string): 'pause' | 'resume' | 'autopilot' | null {
 }
 
 // One part of the band (agent-squad #235): an agent's role, its state mark, the CTO's context when
-// it shows, the mark of a session to restart when it is older than the installed release
-// (agent-squad #362), and its item when it has one.
+// it shows, the mark of a session to restart when it runs another release than the installed one
+// (agent-squad #362, #428), and its item when it has one.
 type Part = { key: BoardRole; mark: string; context: string; restart: string; item: BoardItem | null }
 
 // An item as the band names it: `#123` for an issue, `PR #124` for a pull request. A key written by
@@ -535,15 +536,16 @@ function releaseNumber(text: unknown): number | null {
 }
 
 // The mark of a session whose board is older than the installed release (agent-squad #362), as
-// ` ⟳ v50→v53`, compared as numbers; none when it is not, or when the installed release is not
-// known. A key with no release was written by a board from before boards recorded it, so older
-// than any that does: ` ⟳ →v54`. A key whose release its board could not read gets none.
+// ` ⟳ v50→v53`, or newer, after a downgrade (agent-squad #428), as ` ⟳ v53→v50`, compared as
+// numbers; none when it is the installed one, or when the installed release is not known. A key
+// with no release was written by a board from before boards recorded it, so older than any that
+// does: ` ⟳ →v54`. A key whose release its board could not read gets none.
 function restartOf(agent: BoardAgent, installed: string | null): string {
   const target = releaseNumber(installed)
   if (target === null) return ''
   if (agent.release === undefined) return ` ${RESTART} \u2192${installed}`
   const loaded = releaseNumber(agent.release)
-  return loaded !== null && loaded < target ? ` ${RESTART} ${agent.release}\u2192${installed}` : ''
+  return loaded !== null && loaded !== target ? ` ${RESTART} ${agent.release}\u2192${installed}` : ''
 }
 
 // An agent's part: its mark, the CTO's context once it reaches CONTEXT_FROM, the mark of a session
