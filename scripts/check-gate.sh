@@ -42,8 +42,8 @@ commit() { git -C "$1" add -A && git -C "$1" commit -qm "$2"; }
 install_gate() {
   mkdir -p "$1/.githooks" "$1/scripts"
   cp "$root/.githooks/pre-push" "$1/.githooks/pre-push"
-  cp "$root/scripts/squad-checks.sh" "$1/scripts/squad-checks.sh"
-  chmod +x "$1/.githooks/pre-push" "$1/scripts/squad-checks.sh"
+  cp "$root/scripts/squad-checks.sh" "$root/scripts/squad-timeout.sh" "$1/scripts/"
+  chmod +x "$1/.githooks/pre-push" "$1/scripts/squad-checks.sh" "$1/scripts/squad-timeout.sh"
 }
 
 # A clone with a bare remote and the gate installed as a playbook: git-ignored, in the main
@@ -418,5 +418,26 @@ else
   fail "an untracked file stopped the push, or no check ran"
 fi
 rm -f "$wt/untracked.txt"
+
+# 11. A remote that never lists its branches is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock
+#     time (agent-squad #435): the gate says so, and counts every ref pushed as new code, so the tag
+#     of 9, on a commit the remote has, is refused as one not checked out. The hook runs here as git
+#     runs it, with a git whose ls-remote never answers, its PID in hung.pid, ahead on PATH.
+mkdir -p "$lab/git-hang"
+printf '#!/usr/bin/env bash\ncase " $* " in *" ls-remote "*) echo "$$" > %q; exec sleep 60 ;; esac\nexec %q "$@"\n' \
+  "$lab/hung.pid" "$(type -P git)" > "$lab/git-hang/git"
+chmod +x "$lab/git-hang/git"
+started=$SECONDS
+errors="$(cd "$wt" && printf 'refs/tags/v1 %s refs/tags/v1 %s\n' "$(git rev-parse 'refs/tags/v1^{commit}')" "$(printf '%040d' 0)" \
+  | PATH="$lab/git-hang:$PATH" SQUAD_GH_TIMEOUT=1 "$playbook/.githooks/pre-push" origin "$lab/remote.git" 2>&1)"
+code=$?
+took=$((SECONDS - started))
+if [ "$code" -eq 1 ] && [ "$took" -le 5 ] \
+  && grep -qxF "pre-push: origin did not list its branches within 1 s, so every ref pushed counts as new code" <<<"$errors" \
+  && grep -qF "refs/tags/v1 is not the checked-out commit" <<<"$errors" && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
+  pass "a remote that never lists its branches is stopped after the bound, saying so, and every ref counts as new code"
+else
+  fail "a remote that never lists its branches: exit $code after $took s, said: $errors"
+fi
 
 exit "$status"

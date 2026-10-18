@@ -204,11 +204,13 @@ push_from() {
 # release-downloads.txt beside bin/. `gh api repos/gzurl/agent-squad/releases/tags/<tag> --jq <filter>`
 # runs the filter on a Release whose assets are GH_RELEASE's files, each with its digest, the
 # SHA-256 GitHub computes (agent-squad #330): none when GH_DIGEST is none, a wrong one when it is
-# wrong; it fails when GH_RELEASE is unset or the tag is not GH_TAG. Anything else fails.
+# wrong; it fails when GH_RELEASE is unset or the tag is not GH_TAG. GH_HANG=tarball makes the
+# tarball's download never answer, its PID in hung.pid beside bin/. Anything else fails.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
 if [ "${1:-}" = api ] && [ "${2:-}" = "repos/gzurl/agent-squad/tarball/${GH_TAG:-}" ]; then
+  if [ "${GH_HANG:-}" = tarball ]; then echo "$$" > "$(dirname "$0")/../hung.pid"; exec sleep 60; fi
   exec cat "$GH_TARBALL"
 fi
 if [ "${1:-}" = api ] && [ "${2:-}" = "repos/gzurl/agent-squad/releases/tags/${GH_TAG:-}" ] && [ "${3:-}" = --jq ]; then
@@ -1236,6 +1238,56 @@ cases_default_branch() {
     detached_at "$lab/new-project" "$lab/new-project/.agent-squad/worktrees/dev" main
 }
 
+# Case 16b.
+cases_unanswered() {
+  # 16b. A call to the remote that never answers stops after SQUAD_GH_TIMEOUT seconds of wall-clock
+  #      time, through squad-timeout.sh beside the installer, and the installer says so
+  #      (agent-squad #435): the tarball's download, and the remote asked for its default branch. An
+  #      installer with no squad-timeout.sh beside it, as one copied alone, asks the remote as before.
+  local target started
+  # `gone <pid file>` passes when the process it names no longer runs.
+  gone() { ! kill -0 "$(cat "$1")" 2>/dev/null; }
+  target="$(new_project unanswered-download)" || exit 2
+  started=$SECONDS
+  out="$(GH_HANG=tarball SQUAD_GH_TIMEOUT=1 "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "a download that never answers is stopped after the bound: exit 2, within seconds" \
+    bash -c '[ "$1" -eq 2 ] && [ "$2" -le 10 ]' _ "$code" "$((SECONDS - started))"
+  check "saying so, and that nothing was installed" \
+    bash -c 'grep -qxF "squad-timeout: gh did not end within 1 s, so it was stopped" <<<"$1" \
+      && grep -qF "cannot download $2 from gzurl/agent-squad; the installed playbook is unchanged" <<<"$1"' _ "$out" "$tag_a"
+  check "and the download no longer runs" gone "$lab/hung.pid"
+  check "and no playbook is installed" absent "$target" .agent-squad/playbook
+
+  # git, as far as the installer's step 6 is concerned: `remote set-head` and `ls-remote` never
+  # answer, their PIDs in hung-git.pid; every other command is git's own.
+  mkdir -p "$lab/git-hang"
+  printf '#!/usr/bin/env bash
+case " $* " in *" set-head "*|*" ls-remote "*) echo "$$" >> %q; exec sleep 60 ;; esac
+exec %q "$@"
+' \
+    "$lab/hung-git.pid" "$(type -P git)" > "$lab/git-hang/git"
+  chmod +x "$lab/git-hang/git"
+  target="$(new_project unanswered-remote)" || exit 2
+  git -C "$target" symbolic-ref --delete refs/remotes/origin/HEAD 2>/dev/null
+  started=$SECONDS
+  out="$(PATH="$lab/git-hang:$PATH" SQUAD_GH_TIMEOUT=1 "$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "a remote that never says its default branch is stopped after the bound: exit 1, within seconds" \
+    bash -c '[ "$1" -eq 1 ] && [ "$2" -le 15 ]' _ "$code" "$((SECONDS - started))"
+  check "and the installer says that it did not answer, instead of assuming main" \
+    contains "$out" "branch     NOT KNOWN: origin/HEAD is not set and the remote did not answer within 1 s"
+  check "and git no longer runs" bash -c 'while read -r pid; do ! kill -0 "$pid" 2>/dev/null || exit 1; done < "$1"' _ "$lab/hung-git.pid"
+
+  mkdir -p "$lab/alone" && cp "$install" "$lab/alone/"
+  target="$(new_project installer-alone)" || exit 2
+  git -C "$target" symbolic-ref --delete refs/remotes/origin/HEAD 2>/dev/null
+  out="$("$lab/alone/squad-install.sh" "$target" "$tag_a" 2>&1)"
+  code=$?
+  check "an installer with no squad-timeout.sh beside it asks the remote as before, and exits 0" \
+    bash -c '[ "$1" -eq 0 ] && grep -qF "recorded origin/HEAD -> origin/main" <<<"$2"' _ "$code" "$out"
+}
+
 # Case 17, in two: --check on an installed project broken one way at a time.
 cases_failure_paths() {
   # 17. The failure paths the first coverage report found that no test ran (#184). Each needs a
@@ -2036,6 +2088,7 @@ groups=(
   cases_check_import
   cases_uncommitted
   cases_default_branch
+  cases_unanswered
   cases_failure_paths
   cases_failure_installs
   cases_machine_excludes

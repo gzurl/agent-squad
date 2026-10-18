@@ -23,6 +23,13 @@
 #       failed; or the item carries other status labels than the one asked for, saying what it
 #       carries; 2 bad usage, before anything reaches GitHub.
 set -u
+# Each GitHub call goes through squad-timeout.sh, beside this script, which stops it after
+# SQUAD_GH_TIMEOUT seconds of wall-clock time (120 when unset, or not a whole number above 0),
+# saying so above this script's own message: a call that GitHub never answers fails, as any other
+# failure does (agent-squad #435).
+gh_seconds="${SQUAD_GH_TIMEOUT:-120}"
+[[ "$gh_seconds" =~ ^[1-9][0-9]*$ ]] || gh_seconds=120
+gh() { "$(dirname "$0")/squad-timeout.sh" "$gh_seconds" gh "$@"; }
 usage="usage: squad-set-status.sh <issue|pr> <number> <in-progress|in-review|blocked|approved|none>"
 # `refuse <reason>` stops on bad usage.
 refuse() {

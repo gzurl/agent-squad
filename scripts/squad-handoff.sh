@@ -53,6 +53,16 @@ handoff_dir="$main_checkout/.agent-squad/handoff"
 handoff_file="$handoff_dir/$session_id.md"
 charter="$main_checkout/.agent-squad/playbook/SQUAD.md"
 
+# Each GitHub call goes through squad-timeout.sh, beside this script, which stops it after
+# SQUAD_GH_TIMEOUT seconds of wall-clock time (10 when unset, or not a whole number above 0), so
+# that a hook ends well within Claude Code's time for it (agent-squad #435). `unread <status>
+# <word>` is what the snapshot says of a call that failed with <status>: that GitHub did not answer
+# within that time, or <word>, as for any other failure.
+gh_seconds="${SQUAD_GH_TIMEOUT:-10}"
+[[ "$gh_seconds" =~ ^[1-9][0-9]*$ ]] || gh_seconds=10
+gh() { "$(dirname "$0")/squad-timeout.sh" "$gh_seconds" gh "$@"; }
+unread() { if [ "$1" -eq 124 ]; then echo "GitHub did not answer within $gh_seconds s"; else echo "$2"; fi; }
+
 # gh lists 30 items unless told otherwise, and a cut list reads as a complete one. Both listings
 # ask for this many, and `limit_note <count> <what> <command>` says so, on a line of its own, when
 # one of them reaches it.
@@ -76,15 +86,18 @@ snapshot() {
   # commit is no longer the head, which is exactly the merge gate), and unresolved review threads.
   owner="$(gh repo view --json owner --jq .owner.login 2>/dev/null || true)"
   repo="$(gh repo view --json name --jq .name 2>/dev/null || true)"
-  prs="$(gh pr list --state open --limit "$limit" --json number,title,headRefName,headRefOid,labels 2>/dev/null || true)"
+  prs="$(gh pr list --state open --limit "$limit" --json number,title,headRefName,headRefOid,labels 2>/dev/null)"
+  listed=$?
   if [ -z "$prs" ]; then
-    echo "(gh unavailable)"
+    echo "($(unread "$listed" "gh unavailable"))"
   else
     printf '%s' "$prs" | jq -r '.[] | "\(.number)\t\(.headRefOid)\t\(.title) [\(.headRefName)] labels: \([.labels[].name] | join(", "))"' \
     | while IFS="$(printf '\t')" read -r n head rest; do
       echo "- PR #$n $rest"
       echo "  head ${head:0:7}"
-      if reviews="$(gh api --paginate "repos/$owner/$repo/pulls/$n/reviews" 2>/dev/null)"; then
+      reviews="$(gh api --paginate "repos/$owner/$repo/pulls/$n/reviews" 2>/dev/null)"
+      read_status=$?
+      if [ "$read_status" -eq 0 ]; then
         verdict="$(printf '%s' "$reviews" | jq -r '[.[] | select(.body | test("QA-VERDICT: "))] | last | if . == null then "none yet" else "\(.commit_id[0:7]) \(.body | split("\n") | map(select(test("QA-VERDICT: "))) | last)" end' 2>/dev/null || echo "unreadable")"
         case "$verdict" in
           "none yet"|"unreadable") ;;
@@ -92,11 +105,18 @@ snapshot() {
           *) verdict="$verdict (STALE: not the head)" ;;
         esac
       else
-        verdict="API error"
+        verdict="$(unread "$read_status" "API error")"
       fi
       threads="$(gh api graphql -f query="{repository(owner:\"$owner\",name:\"$repo\"){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}" \
-        --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length' 2>/dev/null || echo "unknown")"
+        --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length' 2>/dev/null)" \
+        || threads="$(unread $? "unknown")"
       echo "  verdict $verdict; unresolved threads $threads"
+      # GitHub that stopped answering would hold every PR after this one too: the snapshot stops
+      # asking, and says so.
+      if [ "$read_status" -eq 124 ]; then
+        echo "  (the PRs after this one are left out, since GitHub stopped answering)"
+        break
+      fi
     done
     limit_note "$(printf '%s' "$prs" | jq length)" "open pull requests" "gh pr list --limit 1000"
   fi
@@ -104,9 +124,10 @@ snapshot() {
   echo "## Issues in progress, in review or blocked"
   # Filtered here, on the labels' first character: gh's own --label filter silently finds nothing
   # for labels whose emoji is a ZWJ sequence (agent-squad #56).
-  issues="$(gh issue list --state open --limit "$limit" --json number,title,labels 2>/dev/null || true)"
+  issues="$(gh issue list --state open --limit "$limit" --json number,title,labels 2>/dev/null)"
+  listed=$?
   if [ -z "$issues" ]; then
-    echo "(gh unavailable)"
+    echo "($(unread "$listed" "gh unavailable"))"
   else
     printf '%s' "$issues" \
       | jq -r '.[] | select([.labels[].name] | any(startswith("🚧") or startswith("👀") or startswith("⛔"))) | "- #\(.number) \(.title) labels: \([.labels[].name] | join(", "))"'

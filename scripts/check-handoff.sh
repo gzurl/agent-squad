@@ -270,6 +270,54 @@ verdict_line "a verdict on an earlier commit is marked STALE" 2 "fedcba9 QA-VERD
 verdict_line "reviews without a verdict read none yet" 3 "none yet"
 verdict_line "reviews that cannot be read read API error" 4 "API error"
 
+# 7c. A call to GitHub that never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock
+#     time, and the snapshot says so where it says gh is unavailable (agent-squad #435). This gh never
+#     answers anything; the next one lists two PRs, then never answers the first one's reviews, so
+#     the snapshot asks nothing more about the PRs after it.
+mkdir -p "$lab/bin-hang" "$lab/bin-hang-reviews"
+printf '#!/usr/bin/env bash
+echo "$$" >> %q
+exec sleep 60
+' "$lab/hung.pid" > "$lab/bin-hang/gh"
+cat > "$lab/bin-hang-reviews/gh" <<GH
+#!/usr/bin/env bash
+case "\$1 \${2:-}" in
+  "repo view") echo sandbox ;;
+  "pr list") jq -n '[range(1; 3) | {number: ., title: "PR \(.)", headRefName: "b\(.)", headRefOid: "0123456789abcdef0123456789abcdef01234567", labels: []}]' ;;
+  "issue list") echo '[]' ;;
+  *) echo "\$\$" >> "$lab/hung.pid"; exec sleep 60 ;;
+esac
+GH
+chmod +x "$lab/bin-hang/gh" "$lab/bin-hang-reviews/gh"
+# `hung_snapshot <bin>` saves a snapshot against that gh, with a bound of 1 s, and prints it.
+hung_snapshot() {
+  rm -f "$handoff_dir/hung.md"
+  (cd "$main" && echo '{"session_id":"hung","trigger":"auto"}' | SQUAD_GH_TIMEOUT=1 PATH="$1:$PATH" "$handoff" save >/dev/null 2>&1)
+  cat "$handoff_dir/hung.md" 2>/dev/null
+}
+started=$SECONDS
+snapshot="$(hung_snapshot "$lab/bin-hang")"
+took=$((SECONDS - started))
+if [ "$(grep -cxF "(GitHub did not answer within 1 s)" <<<"$snapshot")" -eq 2 ] && [ "$took" -le 12 ] \
+  && grep -q '^## Default branch' <<<"$snapshot"; then
+  pass "a GitHub that never answers leaves the snapshot saying so, for PRs and issues, within seconds"
+else
+  fail "a GitHub that never answers: after $took s, the snapshot was: $snapshot"
+fi
+snapshot="$(hung_snapshot "$lab/bin-hang-reviews")"
+if grep -qxF "  verdict GitHub did not answer within 1 s; unresolved threads GitHub did not answer within 1 s" <<<"$snapshot" \
+  && grep -qxF "  (the PRs after this one are left out, since GitHub stopped answering)" <<<"$snapshot" \
+  && ! grep -q '^- PR #2 ' <<<"$snapshot"; then
+  pass "reviews that never answer read so, and the PRs after them are left out, saying so"
+else
+  fail "reviews that never answer: the snapshot was: $snapshot"
+fi
+if bash -c 'while read -r pid; do ! kill -0 "$pid" 2>/dev/null || exit 1; done < "$1"' _ "$lab/hung.pid"; then
+  pass "and no call is left running"
+else
+  fail "a call that never answered is still running"
+fi
+
 # 8. The snapshot's last section is the remote's default branch as git records it (origin/HEAD),
 #    whatever its name, not origin/main (#85); when git does not know it, the section says that it
 #    shows the local log instead.

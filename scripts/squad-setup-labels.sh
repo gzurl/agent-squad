@@ -27,6 +27,13 @@ set -u
 # jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
 # sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
 jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
+# Each GitHub call goes through squad-timeout.sh, beside this script, which stops it after
+# SQUAD_GH_TIMEOUT seconds of wall-clock time (120 when unset, or not a whole number above 0),
+# saying so above this script's own message: a call that GitHub never answers fails, as any other
+# failure does (agent-squad #435).
+gh_seconds="${SQUAD_GH_TIMEOUT:-120}"
+[[ "$gh_seconds" =~ ^[1-9][0-9]*$ ]] || gh_seconds=120
+gh() { "$(dirname "$0")/squad-timeout.sh" "$gh_seconds" gh "$@"; }
 usage="usage: squad-setup-labels.sh [--check]"
 check=false
 case "$*" in

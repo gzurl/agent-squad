@@ -106,6 +106,8 @@ case "$endpoint" in
       json="$(jq '.files = [range(300) | {filename: "bulk/\(.)"}]' <<<"$json")"
     fi ;;
   repos/o/r/pulls/7)
+    # GATE_HANG=pr makes every call that reads the PR never answer, its PID in $SCRATCH/../hung.pid.
+    if [ "${GATE_HANG:-}" = pr ]; then echo "$$" > "$SCRATCH/../hung.pid"; exec sleep 60; fi
     # GATE_LABELS=unreadable makes the call that reads the labels fail, and only that one.
     if [ "${GATE_LABELS:-}" = unreadable ]; then case "$filter" in *labels*) echo "gh: HTTP 502" >&2; exit 1 ;; esac; GATE_LABELS="[]"; fi
     json="$(jq -n --arg head "$head" --arg body "${PR_BODY:-}" --argjson labels "${GATE_LABELS:-[\"✅ status:approved\"]}" \
@@ -166,6 +168,20 @@ if grep -q 'WARNING' <<<"$err"; then
   fail "up to date: the gate warned: $err"
 else
   pass "up to date: no warning"
+fi
+
+# 1a. A call to GitHub that never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock
+#     time: the gate says so on its error output, though the call's own is hidden, and stops
+#     (agent-squad #435).
+started=$SECONDS
+GATE_HANG=pr SQUAD_GH_TIMEOUT=1 run_gate
+took=$((SECONDS - started))
+if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 5 ] \
+  && [ "$err" = "gate: GitHub did not answer within 1 s, so a call was stopped"$'\n'"gate FAILED: cannot read PR #7" ] \
+  && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
+  pass "a call that never answers stops the gate after its bound, exit 1, saying so, and is not left running"
+else
+  fail "a call that never answers: exit $code after $took s, printed '$out', said '$err'"
 fi
 
 # 1b. The state labels (#99): to be merged, a PR carries exactly one of the three, ✅ status:approved.
