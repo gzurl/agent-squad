@@ -20,6 +20,20 @@ set -u
 jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 pr="${1:-}"
 case "$pr" in ""|*[!0-9]*) echo "gate: usage: $0 <pr-number> [owner/repo]" >&2; exit 2 ;; esac
+# Each GitHub call goes through squad-timeout.sh, beside this script, which stops it after
+# SQUAD_GH_TIMEOUT seconds of wall-clock time (120 when unset, or not a whole number above 0)
+# (agent-squad #435). A call stopped so says it on the gate's own error output, which no call's
+# redirection hides, and fails as any other failure of gh's does: the gate then stops, as it does
+# on any of them.
+exec 3>&2
+gh_seconds="${SQUAD_GH_TIMEOUT:-120}"
+[[ "$gh_seconds" =~ ^[1-9][0-9]*$ ]] || gh_seconds=120
+gh() {
+  "$(dirname "$0")/squad-timeout.sh" "$gh_seconds" gh "$@"
+  local status=$?
+  [ "$status" -ne 124 ] || echo "gate: GitHub did not answer within $gh_seconds s, so a call was stopped" >&3
+  return "$status"
+}
 repo="${2:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
 owner="${repo%%/*}"; name="${repo##*/}"
 fail() { echo "gate FAILED: $*" >&2; exit 1; }

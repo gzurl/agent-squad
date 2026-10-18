@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Check scripts/squad-timeout.sh (agent-squad #430), which bounds a command by wall-clock time. A
-# command that ends in time keeps its input, output, error output and exit status; one that does not
-# is stopped past its bound, with SIGKILL if it ignores SIGTERM, and the script exits 124 saying so;
-# the bound counts the time the script itself was not running, as while the machine sleeps; an
-# interrupted run stops the command first; bad usage exits 2, running nothing. Everything happens in
-# a temporary directory.
+# command that ends in time keeps its input, output, error output and exit status, and one that ends
+# at once returns at once (agent-squad #437); one that does not is stopped past its bound, with
+# what it started (agent-squad #439) and SIGKILL if it ignores SIGTERM, and the script exits 124
+# saying so; the command stays in the caller's process group; the bound counts the time the
+# script itself was not running, as while the machine sleeps; an interrupted run stops the command
+# first; bad usage exits 2, running nothing. Everything happens in a temporary directory.
 # shellcheck disable=SC2016 # the commands' bash -c bodies take their values as arguments
 set -u
 
@@ -52,6 +53,34 @@ run 5 bash -c 'cat; echo "to stderr" >&2; exit 3'
 check "a command that ends in time keeps its input, output and exit status" \
   bash -c '[ "$1" -eq 3 ] && [ "$2" = "the caller'\''s input" ] && [ "$3" = "to stderr" ]' _ "$code" "$out" "$err"
 
+#    A command that ends at once returns at once, with no wait of the script's own (agent-squad
+#    #437): fifty of them take three seconds at most, where a tenth of a second each would take six.
+start=$SECONDS
+for _ in $(seq 50); do "$timeout" 5 true || break; done
+check "a command that ends at once returns at once: 50 runs within 3 s" bash -c '[ "$1" -le 3 ]' _ "$((SECONDS - start))"
+#    On every bash at hand, this one and /bin/bash when it is another, as macOS's 3.2 is: a command
+#    that ends at once is never taken for one stopped, even four loops of 100 at once, which its exit
+#    status says, whatever the time they take under a slow tracer such as CI's kcov; and one that a
+#    signal ends keeps its status, with no report of the shell's, such as "Killed: 9", on the error
+#    output (QA's finding on PR #442).
+shells=(bash)
+[ ! -x /bin/bash ] || [ "$(/bin/bash -c 'echo "$BASH_VERSION"')" = "$(bash -c 'echo "$BASH_VERSION"')" ] || shells+=(/bin/bash)
+for shell in "${shells[@]}"; do
+  version="$("$shell" -c 'echo "$BASH_VERSION"')"
+  rm -f "$lab/not-0"
+  for _ in 1 2 3 4; do
+    for _ in $(seq 100); do "$shell" "$timeout" 5 true 2>>"$lab/loops-err" || echo "$?" >> "$lab/not-0"; done &
+  done
+  wait
+  check "on bash $version, 400 runs of a command that ends at once, four loops at once, all exit 0, saying nothing" \
+    bash -c '[ ! -e "$1" ] && [ ! -s "$2" ]' _ "$lab/not-0" "$lab/loops-err"
+  rm -f "$lab/loops-err"
+  out="$("$shell" "$timeout" 5 bash -c 'kill -KILL $$' 2>"$lab/err")"
+  code=$?
+  check "on bash $version, a command that a signal ends keeps its status, and the shell reports nothing" \
+    bash -c '[ "$1" -eq 137 ] && [ ! -s "$2" ]' _ "$code" "$lab/err"
+done
+
 # 2. A command that never ends is stopped past its bound, and the script says so.
 run 1 "${endless[@]}"
 check "a command that never ends is stopped after its bound: exit 124, saying so" \
@@ -63,16 +92,37 @@ check "one that ignores SIGTERM gets SIGKILL two seconds later: exit 124" \
   bash -c '[ "$1" -eq 124 ] && [ "$2" -ge 3 ] && [ "$2" -le 6 ]' _ "$code" "$took"
 check "and it no longer runs" gone
 
-# 3. The bound is wall-clock time: squad-timeout.sh stopped past its bound, as a sleeping machine
-#    stops every process, stops the command as soon as it runs again, not a bound later.
+#    What the command started is stopped with it (agent-squad #439): a process it started, and the
+#    transport that git starts for a remote, here an ssh that never answers, are gone after the run.
+#    The command stays in this script's process group, so that a terminal it reads stays its own.
+#    The process the command starts holds none of its output, which would keep this run waiting.
+run 1 bash -c 'bash -c "echo \$\$ > \"\$1\"; exec sleep 60" _ "$1" >/dev/null 2>&1 & wait' _ "$lab/pid"
+check "a process the command started is stopped with it: exit 124 within seconds, and it no longer runs" \
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 4 ] && ! kill -0 "$(cat "$3")" 2>/dev/null' _ "$code" "$took" "$lab/pid"
+printf '#!/bin/sh\necho "$$" > %q\nexec sleep 60\n' "$lab/pid" > "$lab/ssh"
+chmod +x "$lab/ssh"
+rm -f "$lab/pid"
+GIT_SSH_COMMAND="$lab/ssh" run 1 git ls-remote ssh://example.invalid/repo
+check "a git whose ssh transport never answers is stopped with its transport: exit 124 within seconds, and neither runs" \
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 4 ] && [ -s "$3" ] && ! kill -0 "$(cat "$3")" 2>/dev/null' _ "$code" "$took" "$lab/pid"
+run 5 sh -c 'ps -o pgid= -p "$$"'
+check "the command runs in the caller's process group" \
+  bash -c '[ "$(tr -d " " <<<"$1")" = "$(ps -o pgid= -p "$2" | tr -d " ")" ]' _ "$out" "$$"
+
+# 3. The bound is wall-clock time: squad-timeout.sh stopped past its bound, with the command and
+#    the watcher it started, as a sleeping machine stops every process, stops the command as soon as
+#    they run again, not a bound later. `freeze <signal>` sends the signal to the runner and to the
+#    processes it started.
+# shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
+freeze() { kill "-$1" "$runner" $(pgrep -P "$runner"); }
 rm -f "$lab/pid"
 "$timeout" 4 "${endless[@]}" 2>/dev/null &
 runner=$!
 started
-kill -STOP "$runner"
+freeze STOP
 sleep 6
 start=$SECONDS
-kill -CONT "$runner"
+freeze CONT
 wait "$runner"
 code=$?
 check "stopped for longer than its bound, it stops the command once it runs again: exit 124" \
@@ -85,21 +135,25 @@ rm -f "$lab/pid" "$lab/stopped"
 "$timeout" 2 "${graceful[@]}" 2>/dev/null &
 runner=$!
 started
-kill -STOP "$runner" "$(cat "$lab/pid")"
+freeze STOP
 sleep 6
-kill -CONT "$(cat "$lab/pid")" "$runner"
+freeze CONT
 wait "$runner"
 code=$?
 check "stopped with it past the bound, a command still has two seconds after SIGTERM to end: exit 124" \
   bash -c '[ "$1" -eq 124 ] && [ "$(cat "$2")" = stopped ]' _ "$code" "$lab/stopped"
 check "and the command no longer runs" gone
 
-# 4. An interrupted run stops the command first. The run is started under job control, without
-#    which a command started in the background ignores SIGINT.
+# 4. An interrupted run stops the command first, with what it started (QA's finding on PR #444):
+#    the command here starts a process, which writes its PID to $lab/child.pid, then writes its
+#    own. The run is started under job control, without which a command started in the background
+#    ignores SIGINT.
+parent=(bash -c 'bash -c "echo \$\$ > \"\$1\"; exec sleep 60" _ "$1" >/dev/null 2>&1 &
+  until [ -s "$1" ]; do sleep 0.1; done; echo "$$" > "$2"; wait' _ "$lab/child.pid" "$lab/pid")
 for signal in INT:130 TERM:143; do
-  rm -f "$lab/pid"
+  rm -f "$lab/pid" "$lab/child.pid"
   set -m
-  "$timeout" 60 "${endless[@]}" &
+  "$timeout" 60 "${parent[@]}" &
   runner=$!
   set +m
   started
@@ -109,6 +163,7 @@ for signal in INT:130 TERM:143; do
   check "SIG${signal%:*} stops the command, and the run: exit ${signal#*:}" \
     bash -c '[ "$1" -eq "$2" ]' _ "$code" "${signal#*:}"
   check "and the command no longer runs" gone
+  check "nor what it started" bash -c '! kill -0 "$(cat "$1")" 2>/dev/null' _ "$lab/child.pid"
 done
 
 # 5. Bad usage exits 2, and runs nothing: no bound, no command, or a bound that is not a whole

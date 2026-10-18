@@ -70,10 +70,25 @@ for tool in git jq tar awk; do
   type -P "$tool" >/dev/null 2>&1 || die "$tool is required"
 done
 if [ "$mode" = install ] && [ -z "$source_dir" ]; then
-  command -v gh >/dev/null 2>&1 || die "gh is required to download the tag"
+  type -P gh >/dev/null 2>&1 || die "gh is required to download the tag"
   command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
     || die "sha256sum or shasum is required to check the tag's package"
 fi
+
+# Each call to the remote, gh's and git's, goes through squad-timeout.sh beside this script, which
+# stops it after SQUAD_GH_TIMEOUT seconds of wall-clock time (120 when unset, or not a whole number
+# above 0), saying so (agent-squad #435); install.sh fetches it beside the installer it runs. An
+# installer with none beside it, as one copied alone, makes those calls unbounded, as before.
+net_seconds="${SQUAD_GH_TIMEOUT:-120}"
+[[ "$net_seconds" =~ ^[1-9][0-9]*$ ]] || net_seconds=120
+bounded() {
+  if [ -x "$(dirname "$0")/squad-timeout.sh" ]; then
+    "$(dirname "$0")/squad-timeout.sh" "$net_seconds" "$@"
+  else
+    command "$@"
+  fi
+}
+gh() { bounded gh "$@"; }
 
 # The project is named by its main checkout (D7 of agent-squad #23), the one directory every
 # worktree shares.
@@ -1057,16 +1072,20 @@ fi
 #    whatever the remote says.
 if base="$(known_default_branch)"; then
   say branch "the remote's default branch is $base (origin/HEAD), the one the gate protects"
-elif git -C "$project" remote set-head origin --auto >/dev/null 2>&1 && base="$(known_default_branch)"; then
+elif bounded git -C "$project" remote set-head origin --auto >/dev/null 2>&1 && base="$(known_default_branch)"; then
   say branch "recorded origin/HEAD -> origin/$base, as the remote answered: the gate protects $base"
-elif refs="$(git -C "$project" ls-remote origin 2>/dev/null)" && [ -z "$refs" ]; then
+elif refs="$(bounded git -C "$project" ls-remote origin 2>/dev/null)" && [ -z "$refs" ]; then
   # The remote answers, but has no branch yet: a new project before its bootstrap commit.
   base=""
   say branch "NOT YET: the remote has no branch yet, so the gate protects main; run the installer again once the default branch has a commit"
   needs_decision=1
 else
+  # The remote's silence, when the last question got no answer in time, is named as such.
+  asked=$?
+  unasked="could not be asked"
+  [ "$asked" -ne 124 ] || unasked="did not answer within $net_seconds s"
   base=""
-  say branch "NOT KNOWN: origin/HEAD is not set and the remote could not be asked, so the gate protects main; set it with git remote set-head origin --auto and run again"
+  say branch "NOT KNOWN: origin/HEAD is not set and the remote $unasked, so the gate protects main; set it with git remote set-head origin --auto and run again"
   needs_decision=1
 fi
 

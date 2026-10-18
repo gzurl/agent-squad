@@ -50,7 +50,8 @@ described() { awk -F'\t' -v n="$1" '$1 == n { print $3 }' <<<"$rows"; }
 
 # GitHub, as far as the script is concerned: the repository's labels, a JSON array in $LABELS. Each
 # call is logged to $CALLS, one line, with what it read on its input. `gh label list` answers with
-# them, unless STUB_LIST=fail; `gh label create <name> --color <c> --description <d> --force`
+# them, unless STUB_LIST=fail, or STUB_LIST=hang, which never answers, its PID in $LABELS.pid;
+# `gh label create <name> --color <c> --description <d> --force`
 # creates or replaces one, unless its name is STUB_FAIL, which fails as gh does.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
@@ -60,6 +61,7 @@ case "$1 $2" in
   "label list")
     [ "$*" = "label list --limit 1000 --json name,color,description" ] || exit 1
     if [ "${STUB_LIST:-}" = fail ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+    if [ "${STUB_LIST:-}" = hang ]; then echo "$$" > "$LABELS.pid"; exec sleep 60; fi
     cat "$LABELS" ;;
   "label create")
     [ "$4 $6 $8" = "--color --description --force" ] || exit 1
@@ -162,6 +164,13 @@ check "and saying how many failed" bash -c '[ "$(tail -1 <<<"$1")" = "labels: 1 
 STUB_LIST=fail run
 check "a failed read: exit 1, with gh's message, and nothing more" \
   bash -c '[ "$1" -eq 1 ] && [ "$2" = "HTTP 502: Bad Gateway"$'\''\n'\''"labels: cannot read the repository'\''s labels, as gh says above" ]' _ "$code" "$out"
+#    A read that never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock time, saying
+#    so above the same line (agent-squad #435).
+started=$SECONDS
+STUB_LIST=hang SQUAD_GH_TIMEOUT=1 run
+check "a read that never answers: exit 1 after the bound, saying so, and nothing left running" \
+  bash -c '[ "$1" -eq 1 ] && [ "$2" -le 5 ] && [ "$3" = "squad-timeout: gh did not end within 1 s, so it was stopped"$'\''\n'\''"labels: cannot read the repository'\''s labels, as gh says above" ] \
+    && ! kill -0 "$(cat "$4")" 2>/dev/null' _ "$code" "$((SECONDS - started))" "$out" "$LABELS.pid"
 
 # 6. gh gets no input from the caller: the script never waits on its input.
 table_labels && run
