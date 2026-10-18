@@ -30,10 +30,10 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # STUB_AUTH=fail and STUB_REPO=fail make the login and the repository unreadable, STUB_CONTENTS=fail
 # makes the installer's download fail, STUB_CONTENTS=empty makes it succeed with nothing, and
 # STUB_CONTENTS=slow makes it wait; STUB_AUTH=hang, STUB_REPO=hang, STUB_TAGLIST=hang and
-# STUB_CONTENTS=hang make those calls never answer, their PID in $STUB_LAB/hung.pid. The installer it serves records its arguments, the mode
-# of the directory it runs from, whether an executable squad-timeout.sh is beside it, and what it
-# reads on stdin, prints a line, records that it got past it,
-# may wait (STUB_INSTALLER_SLEEP) and exits with STUB_INSTALLER_EXIT. Like every tag's installer
+# STUB_CONTENTS=hang make those calls never answer, their PID in $STUB_LAB/hung.pid. The installer
+# it serves records its arguments, the mode of the directory it runs from, whether an executable
+# squad-timeout.sh is beside it, and what it reads on stdin, prints a line, records that it got past
+# it, may wait (STUB_INSTALLER_SLEEP) and exits with STUB_INSTALLER_EXIT. Like every tag's installer
 # before v23, it does not ignore SIGPIPE itself.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'

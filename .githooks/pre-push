@@ -22,12 +22,32 @@ fi
 head="$(git rev-parse HEAD)" || exit 1
 zero=0000000000000000000000000000000000000000
 
-# The branch that only a PR changes: the remote's default one, as git records it for this remote,
-# or main when git does not know it.
+# The branches that only a PR changes: the remote's default one, as git records it for this remote,
+# or main when git does not know it, and the release branches the project declares in
+# .agent-squad-release-branches, one pattern per line, such as release/*, in the form of
+# .agent-squad-checks: blank lines and comments, indented ones included, count for nothing, and the
+# spaces around a pattern, a carriage return among them, are dropped (agent-squad #446). The
+# declaration is read from the default branch's tip as last fetched, so that a push cannot lift it
+# with its own commit; when the tip holds none, from the working tree.
 remote="${1:-}"
 protected="$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null)"
 protected="${protected#"$remote"/}"
 [ -n "$protected" ] || protected=main
+declared="$(git show "refs/remotes/$remote/$protected:.agent-squad-release-branches" 2>/dev/null)" \
+  || declared="$(cat "$(git rev-parse --show-toplevel)/.agent-squad-release-branches" 2>/dev/null)"
+# `held <branch>` passes when only a PR changes the branch.
+held() {
+  local pattern
+  [ "$1" = "$protected" ] && return 0
+  while IFS= read -r pattern || [ -n "$pattern" ]; do
+    pattern="${pattern#"${pattern%%[![:space:]]*}"}"
+    pattern="${pattern%"${pattern##*[![:space:]]}"}"
+    case "$pattern" in ''|'#'*) continue ;; esac
+    # shellcheck disable=SC2053 # the pattern is a glob on purpose
+    [[ "$1" == $pattern ]] && return 0
+  done <<<"$declared"
+  return 1
+}
 
 # `on_remote <commit>` passes when one of the remote's branches already contains the commit, as
 # the remote lists them now: a ref pointing there carries no new code, such as a tag of a past
@@ -58,11 +78,13 @@ on_remote() {
 # The checks test the working tree, so every new commit being pushed must be the one checked out.
 # A ref whose commit is already on the remote, like a deletion, pushes no code.
 pushes_code=0
-to_protected=0
+held_pushed=""
 while read -r local_ref local_sha remote_ref _; do
   [ "$local_sha" = "$zero" ] && continue # a deletion pushes no code
   commit="$(git rev-parse -q --verify "$local_sha^{commit}")" || continue
-  [ "$remote_ref" = "refs/heads/$protected" ] && to_protected=1
+  case "$remote_ref" in
+    refs/heads/*) ! held "${remote_ref#refs/heads/}" || held_pushed="${held_pushed:+$held_pushed, }${remote_ref#refs/heads/}" ;;
+  esac
   on_remote "$commit" && continue
   if [ "$commit" != "$head" ]; then
     echo "pre-push: $local_ref is not the checked-out commit; push it from a checkout of it, where the checks can run on it" >&2
@@ -71,21 +93,21 @@ while read -r local_ref local_sha remote_ref _; do
   pushes_code=1
 done
 
-# Only a PR reviewed by QA changes the protected branch. An exception is approved by the CEO on an
-# issue first, and named here; --no-verify is not the way, since it would skip the checks too.
-if [ "$to_protected" -eq 1 ]; then
+# Only a PR reviewed by QA changes a held branch. An exception is approved by the CEO on an issue
+# first, and named here; --no-verify is not the way, since it would skip the checks too.
+if [ -n "$held_pushed" ]; then
   if [ -z "${SQUAD_MAIN_EXCEPTION:-}" ]; then
-    echo "pre-push: this push updates $protected, which only a PR reviewed by QA may change (SQUAD.md §2.3), so it is refused. For an exception the CEO approved on an issue, push again with SQUAD_MAIN_EXCEPTION=#<issue>" >&2
+    echo "pre-push: this push updates $held_pushed, which only a PR reviewed by QA may change (SQUAD.md §2.3), so it is refused. For an exception the CEO approved on an issue, push again with SQUAD_MAIN_EXCEPTION=#<issue>" >&2
     exit 1
   fi
   issue="${SQUAD_MAIN_EXCEPTION#\#}"
   case "$issue" in
     ''|0*|*[!0-9]*)
-      echo "pre-push: SQUAD_MAIN_EXCEPTION='$SQUAD_MAIN_EXCEPTION' is not an issue number (digits, with or without a leading #), so the push to $protected is refused" >&2
+      echo "pre-push: SQUAD_MAIN_EXCEPTION='$SQUAD_MAIN_EXCEPTION' is not an issue number (digits, with or without a leading #), so the push to $held_pushed is refused" >&2
       exit 1
       ;;
   esac
-  echo "pre-push: pushing to $protected as the exception the CEO approved on #$issue; the checks still run on new code" >&2
+  echo "pre-push: pushing to $held_pushed as the exception the CEO approved on #$issue; the checks still run on new code" >&2
 fi
 [ "$pushes_code" -eq 1 ] || exit 0 # only deletions and commits the remote has: nothing to check
 

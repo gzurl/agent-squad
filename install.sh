@@ -110,9 +110,10 @@ vN (default: the latest), v$oldest or later, by running that tag's own scripts/s
 # that ends before its bound returns as soon as it ends (agent-squad #437).
 #
 # Usage: squad-timeout.sh <seconds> <command> [<argument>...]
-# The command keeps this script's input, output and error output. Past the bound it gets SIGTERM,
-# and SIGKILL if it is still running two seconds later; it is the command that is stopped, not
-# processes it started. Interrupted, this script stops the command first.
+# The command keeps this script's input, output and error output, and this script's process group,
+# so that a terminal it reads stays its own. Past the bound it gets SIGTERM, with every process it
+# started, and those still running two seconds later get SIGKILL (agent-squad #439). Interrupted,
+# this script stops them first.
 # Exit: the command's own; 124 when it was stopped, as GNU timeout's, after a line on stderr that
 #   says so; 2 bad usage.
 set -u
@@ -133,33 +134,57 @@ started=$SECONDS
 "$@" <&0 2>&3 3>&- &
 pid=$!
 
+# `family <pid>` prints the PIDs of every process that one started, deepest first, then its own, as
+# pgrep finds them: git's ssh transport, for one, outlives git when git alone is stopped. Without
+# pgrep, it prints <pid> alone. `alive <pid>...` passes while one of them still runs.
+family() {
+  local child
+  for child in $(pgrep -P "$1"); do family "$child"; done
+  echo "$1"
+}
+alive() {
+  local one
+  for one; do kill -0 "$one" && return 0; done
+  return 1
+}
+
 # The watcher, in the background, reads the wall clock, as $SECONDS counts it, every tenth of a
-# second. Once the bound has passed, it stops the command: SIGTERM, then SIGKILL if the command is
-# still running two seconds after it, counted from the SIGTERM, since after a sleep past the bound
-# the time since the start has used them up. It holds none of this script's output, which a caller
-# may be reading to its end.
+# second. Once the bound has passed, it stops the command and what it started, listed first, since
+# a process whose parent has ended is no longer found under it: SIGTERM, then SIGKILL to those still
+# running two seconds after it, counted from the SIGTERM, since after a sleep past the bound the
+# time since the start has used them up. It holds none of this script's output, which a caller may
+# be reading to its end.
 watch() {
+  local stopping
   while [ $((SECONDS - started)) -le "$bound" ]; do sleep 0.1; done
-  kill -TERM "$pid"
+  stopping="$(family "$pid")"
+  # shellcheck disable=SC2086 # the PIDs are split on purpose, one argument each
+  kill -TERM $stopping
   started=$SECONDS
-  while kill -0 "$pid" && [ $((SECONDS - started)) -le 2 ]; do sleep 0.1; done
-  kill -KILL "$pid"
+  # shellcheck disable=SC2086 # the same
+  while alive $stopping && [ $((SECONDS - started)) -le 2 ]; do sleep 0.1; done
+  # shellcheck disable=SC2086 # the same
+  kill -KILL $stopping
 }
 watch </dev/null >/dev/null 3>&- &
 watcher=$!
-trap 'kill "$pid" "$watcher"; exit 130' INT
-trap 'kill "$pid" "$watcher"; exit 143' TERM
+# shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
+trap 'kill $(family "$pid") "$watcher"; exit 130' INT
+# shellcheck disable=SC2046 # the same
+trap 'kill $(family "$pid") "$watcher"; exit 143' TERM
 
 # The command is waited for itself, so that one that ends at once returns at once. Whether it was
-# stopped is read from the same clock as the watcher's, the bound passed by the time it ended, and
-# the watcher, napping or not, is ended with SIGKILL, which it cannot miss (QA's finding on PR #442).
+# stopped is read from the same clock as the watcher's, the bound passed by the time it ended (QA's
+# finding on PR #442). Then the watcher is still stopping what the command started, and ends once
+# that has ended; otherwise it is ended with SIGKILL, which it cannot miss, napping or not.
 wait "$pid"
 status=$?
-kill -KILL "$watcher"
 if [ $((SECONDS - started)) -gt "$bound" ]; then
+  wait "$watcher"
   echo "squad-timeout: $1 did not end within $bound s, so it was stopped" >&3
   exit 124
 fi
+kill -KILL "$watcher"
 exit "$status"
 SQUAD-TIMEOUT
   chmod +x "$tmp/squad-timeout.sh" || fail "cannot make $tmp/squad-timeout.sh executable"

@@ -440,4 +440,78 @@ else
   fail "a remote that never lists its branches: exit $code after $took s, said: $errors"
 fi
 
+# 12. The release branches that .agent-squad-release-branches declares take a PR too (agent-squad
+#     #446). The declaration is read from main's tip as last fetched, here a list saved with CRLF,
+#     its comments and blank lines counting for nothing; so that a push whose own commit removes it
+#     is refused still. A branch that matches no pattern, and a tag whose commit a release branch on
+#     the remote holds, are not held. A list of comments only, or none, holds nothing; with none on
+#     main's tip, the working tree's counts. `declare_on_main <content>` pushes main with the list,
+#     or with none when the content is empty, as the exception of #1.
+declare_on_main() {
+  if [ -n "$1" ]; then printf '%b' "$1" > "$wt/.agent-squad-release-branches"; else rm -f "$wt/.agent-squad-release-branches"; fi
+  git -C "$wt" add -A && git -C "$wt" commit -qm "the release branches: ${1:-none}" \
+    && SQUAD_MAIN_EXCEPTION='#1' git -C "$wt" push -q origin HEAD:refs/heads/main 2>/dev/null
+}
+# `held_refused <case> <branch>` passes when the last push was refused by the rule, naming the
+# branch, before any check ran.
+held_refused() {
+  if [ "$code" -ne 0 ] && grep -qF "this push updates $2, which only a PR" <<<"$errors" && [ "$(runs)" = "$runs_before" ]; then
+    pass "$1"
+  else
+    fail "$1: exit $code, said: $errors"
+  fi
+}
+# `went_through <case>` passes when the last push went through, after the checks.
+went_through() {
+  if [ "$code" -eq 0 ] && [ "$(runs)" -gt "$runs_before" ]; then pass "$1"; else fail "$1: exit $code, said: $errors"; fi
+}
+declare_on_main '# the release branches\r\n\r\n  # an indented comment\r\nrelease/*\r\n' || exit 2
+runs_before="$(runs)"
+push_to HEAD:refs/heads/release/0.15
+code=$?
+held_refused "a push to a declared release branch is refused, naming it, before any check runs" release/0.15
+runs_before="$(runs)"
+push_to HEAD:refs/heads/release/0.15 SQUAD_MAIN_EXCEPTION='#7'
+code=$?
+went_through "SQUAD_MAIN_EXCEPTION lets it through, and the checks run"
+if grep -qF "pushing to release/0.15 as the exception the CEO approved on #7" <<<"$errors"; then
+  pass "naming the release branch and the issue"
+else
+  fail "the exception's line did not name them: $errors"
+fi
+git -C "$wt" rm -q .agent-squad-release-branches && git -C "$wt" commit -qm "the declaration removed" || exit 2
+runs_before="$(runs)"
+push_to HEAD:refs/heads/release/0.16
+code=$?
+held_refused "a push whose own commit removes the declaration is refused still, as main declares it" release/0.16
+git -C "$wt" checkout -q refs/remotes/origin/main -- .agent-squad-release-branches && git -C "$wt" commit -qm "the declaration back" || exit 2
+runs_before="$(runs)"
+push_to HEAD:refs/heads/feature/release
+code=$?
+went_through "a branch that matches no pattern goes through, after the checks"
+released="$(git -C "$wt" rev-parse refs/remotes/origin/release/0.15)"
+git -C "$wt" tag -a v15 -m "0.15, from its release branch" "$released"
+runs_before="$(runs)"
+errors="$(git -C "$wt" push -q origin refs/tags/v15 2>&1)"
+code=$?
+if [ "$code" -eq 0 ] && [ "$(runs)" = "$runs_before" ]; then
+  pass "a tag whose commit a release branch on the remote holds goes through with no check run"
+else
+  fail "a tag on a release branch's commit was refused, or ran the checks: exit $code, said: $errors"
+fi
+for content in '# none yet\n\n  # really none\n' ''; do
+  declare_on_main "$content" || exit 2
+  runs_before="$(runs)"
+  push_to HEAD:refs/heads/release/0.17
+  code=$?
+  if [ -n "$content" ]; then kind="a list of comments only"; else kind="no list"; fi
+  went_through "with $kind, a release branch is not held"
+done
+printf 'release/*\n' > "$wt/.agent-squad-release-branches"
+git -C "$wt" add .agent-squad-release-branches && git -C "$wt" commit -qm "a declaration main does not have yet" || exit 2
+runs_before="$(runs)"
+push_to HEAD:refs/heads/release/0.18
+code=$?
+held_refused "with no list on main's tip, the working tree's counts" release/0.18
+
 exit "$status"
