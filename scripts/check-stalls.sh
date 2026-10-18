@@ -394,6 +394,18 @@ if [ "$code" -eq 1 ] && [ -z "$out" ] && [ ! -e "$state" ] && [ "$took" -le 4 ] 
 else
   fail "a call that GitHub never answers: exit $code after $took s, printed '$out', said '$err'"
 fi
+#    A SQUAD_GH_TIMEOUT that is not a whole number above 0 is 120 s: the run reads GitHub as without
+#    one (QA's finding on PR #432).
+rm -f "$state"
+run 0 "${everyone_idle[@]}"
+expected="$code|$out"
+rm -f "$state"
+SQUAD_GH_TIMEOUT=abc run 0 "${everyone_idle[@]}"
+if [ "$expected" = "0|$out" ] && [ "$code" -eq 0 ]; then
+  pass "a SQUAD_GH_TIMEOUT that is no number reads GitHub as without one"
+else
+  fail "a SQUAD_GH_TIMEOUT that is no number: exit $code, printed '$out', said '$err'"
+fi
 
 # 8. Bad usage, and a place that is not a squad's checkout, exit 2.
 for args in "--session" "--session QA=asleep" "--session BOSS=idle" "--bogus"; do

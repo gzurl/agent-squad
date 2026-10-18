@@ -241,6 +241,16 @@ if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 4 ] \
 else
   fail "a call that GitHub never answers: exit $code after $took s, printed '$out', said '$err'"
 fi
+#    A SQUAD_GH_TIMEOUT that is not a whole number above 0 is 120 s: the run reads GitHub as without
+#    one (QA's finding on PR #432).
+run 50
+expected="$code|$out"
+SQUAD_GH_TIMEOUT=abc run 50
+if [ "$expected" = "0|$out" ] && [ "$code" -eq 0 ] && [ -n "$out" ]; then
+  pass "a SQUAD_GH_TIMEOUT that is no number reads GitHub as without one"
+else
+  fail "a SQUAD_GH_TIMEOUT that is no number: exit $code, printed '$out', said '$err'"
+fi
 
 # 5. Marks and times that do not hold.
 rm -f "$squad/triage.since"

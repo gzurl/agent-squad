@@ -29,6 +29,9 @@ check() {
 # when that process no longer runs.
 endless=(bash -c 'echo "$$" > "$1"; exec sleep 60' _ "$lab/pid")
 deaf=(bash -c 'trap "" TERM; echo "$$" > "$1"; exec sleep 60' _ "$lab/pid")
+# One whose SIGTERM handler takes a second, then writes $lab/stopped and ends.
+graceful=(bash -c 'trap "sleep 1; echo stopped > \"\$2\"; exit 0" TERM; echo "$$" > "$1"; while :; do sleep 0.1; done' \
+  _ "$lab/pid" "$lab/stopped")
 # shellcheck disable=SC2317,SC2329 # invoked through check
 gone() { ! kill -0 "$(cat "$lab/pid")" 2>/dev/null; }
 # `started` waits until the endless command has written its PID.
@@ -57,7 +60,7 @@ check "a command that never ends is stopped after its bound: exit 124, saying so
 check "and it no longer runs" gone
 run 1 "${deaf[@]}"
 check "one that ignores SIGTERM gets SIGKILL two seconds later: exit 124" \
-  bash -c '[ "$1" -eq 124 ] && [ "$2" -ge 3 ] && [ "$2" -le 5 ]' _ "$code" "$took"
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -ge 3 ] && [ "$2" -le 6 ]' _ "$code" "$took"
 check "and it no longer runs" gone
 
 # 3. The bound is wall-clock time: squad-timeout.sh stopped past its bound, as a sleeping machine
@@ -74,6 +77,21 @@ wait "$runner"
 code=$?
 check "stopped for longer than its bound, it stops the command once it runs again: exit 124" \
   bash -c '[ "$1" -eq 124 ] && [ "$2" -le 1 ]' _ "$code" "$((SECONDS - start))"
+check "and the command no longer runs" gone
+#    Its two seconds after SIGTERM count from the SIGTERM, not from the start, which a stop past
+#    the bound has used up: a command stopped with it gets them to end by itself (QA's finding on
+#    PR #432).
+rm -f "$lab/pid" "$lab/stopped"
+"$timeout" 2 "${graceful[@]}" 2>/dev/null &
+runner=$!
+started
+kill -STOP "$runner" "$(cat "$lab/pid")"
+sleep 6
+kill -CONT "$(cat "$lab/pid")" "$runner"
+wait "$runner"
+code=$?
+check "stopped with it past the bound, a command still has two seconds after SIGTERM to end: exit 124" \
+  bash -c '[ "$1" -eq 124 ] && [ "$(cat "$2")" = stopped ]' _ "$code" "$lab/stopped"
 check "and the command no longer runs" gone
 
 # 4. An interrupted run stops the command first. The run is started under job control, without

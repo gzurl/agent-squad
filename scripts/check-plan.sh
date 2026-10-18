@@ -541,6 +541,13 @@ check "a call that GitHub never answers is stopped after its bound: exit 1, sayi
   _ "$code" "$((SECONDS - started))" "$out" \
   "$(printf '%s\n%s' "squad-timeout: gh did not end within 1 s, so it was stopped" "plan: cannot read the open pull requests, as gh says above")" \
   "$W/hung.pid"
+#    A SQUAD_GH_TIMEOUT that is not a whole number above 0 is 120 s: the run reads GitHub as without
+#    one (QA's finding on PR #432).
+run
+expected="$code|$out"
+SQUAD_GH_TIMEOUT=abc run
+check "a SQUAD_GH_TIMEOUT that is no number reads GitHub as without one" \
+  bash -c '[ "$1" = "0|$2" ] && [ "$3" -eq 0 ]' _ "$expected" "$out" "$code"
 #    Sub-issues that cannot be read, added or removed stop no other plan (QA's finding on PR #393):
 #    the later plan, #12, still gets its table, and the run exits 1 at its end. #2, a sub-issue of
 #    #10 that left its milestone, is to be removed, and #1 added.

@@ -39,8 +39,11 @@ if ended_within "$bound"; then
   wait "$pid"
   exit
 fi
+# The two seconds before SIGKILL count from the SIGTERM: after a sleep past the bound, the time
+# since the start has used them up already.
 kill -TERM "$pid" 2>/dev/null
-ended_within $((bound + 2)) || kill -KILL "$pid" 2>/dev/null
+started=$SECONDS
+ended_within 2 || kill -KILL "$pid" 2>/dev/null
 wait "$pid" 2>/dev/null
 echo "squad-timeout: $1 did not end within $bound s, so it was stopped" >&2
 exit 124
