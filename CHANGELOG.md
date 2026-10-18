@@ -1,5 +1,38 @@
 # Changelog
 
+## v65 — 2026-10-18
+- **A GitHub call that never answers ends, and the stall watch goes on** (#430, #437, and #439,
+  found by QA in its review of PR #436). On 2026-10-18 a `/squad-watch` pass hung for 2 h 21 min
+  on a `gh` call whose connection died while the Mac slept, and the passes after it queued up
+  behind it. The new `scripts/squad-timeout.sh` bounds a command by wall-clock time, which moves on
+  while the machine sleeps, unlike `sleep`, `alarm` or GNU `timeout`. Past the bound, it stops the
+  command and every process the command started, such as a `git` call's ssh. A command that ends
+  in time returns as soon as it ends. `squad-stalls.sh`, `squad-outside.sh` and `squad-plan.sh` run each GitHub call
+  through it, 120 s by default (`SQUAD_GH_TIMEOUT`), and exit 1 with a message that says so when a
+  call does not answer. `squad-latest.sh` keeps its exit 0, and its line says when GitHub did not
+  answer within its 10 s.
+- **Every other call to GitHub or to the remote ends too** (#435). The session hooks' snapshot,
+  the merge gate, `squad-set-status.sh`, `squad-setup-labels.sh`, the installer and the pre-push
+  gate run each such call through `squad-timeout.sh`. The bound is 120 s, or 10 s in the session
+  hooks. A call that never answers fails, and the script says so. The snapshot reads
+  `(GitHub did not answer within 10 s)`. A pre-push gate whose remote did not list its branches
+  counts every ref pushed as new code.
+- **Going back to an older release names the sessions to restart** (#428, found by QA in its
+  review of PR #427). After a downgrade, `squad-sessions.sh` said that every session ran the
+  installed release, though each still ran the newer squad board until it restarted. It now names
+  a session on a newer release than the installed one to restart, as it names one on an older
+  release, and the band marks it the same way. `/squad-upgrade`, `/squad-resume` and the README
+  say so.
+- **The plan's table knows a release that takes no README read** (#429). §3: the CTO's note that a
+  release which only fixes things takes no read is a line of the plan issue's description, outside
+  its markers, that starts with `No README read:` and gives the reason. The table's README row
+  then shows the read as not taken, with that reason, before and after the tag, and the stall
+  watch asks for no read. Until now the row asked for a read, and showed one as done once tagged.
+- **Outside the release, already live:** `install.sh` runs from `main`, and it now bounds its own
+  calls to GitHub the same way. When one never answers, it exits 2 with nothing installed (#435).
+- **Upgrading from v64:** nothing to do by hand. Re-read §3's paragraph on plan issues, and
+  restart the three sessions to load the new squad board.
+
 ## v64 — 2026-10-17
 - **Going back to an older release names the rules it takes back** (#425, found by QA in its
   review of PR #424). `/squad-upgrade vN` to a release older than the one the project runs read
