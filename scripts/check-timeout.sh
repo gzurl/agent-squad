@@ -2,7 +2,8 @@
 # Check scripts/squad-timeout.sh (agent-squad #430), which bounds a command by wall-clock time. A
 # command that ends in time keeps its input, output, error output and exit status, and one that ends
 # at once returns at once (agent-squad #437); one that does not is stopped past its bound, with
-# SIGKILL if it ignores SIGTERM, and the script exits 124 saying so; the bound counts the time the
+# what it started (agent-squad #439) and SIGKILL if it ignores SIGTERM, and the script exits 124
+# saying so; the command stays in the caller's process group; the bound counts the time the
 # script itself was not running, as while the machine sleeps; an interrupted run stops the command
 # first; bad usage exits 2, running nothing. Everything happens in a temporary directory.
 # shellcheck disable=SC2016 # the commands' bash -c bodies take their values as arguments
@@ -90,6 +91,23 @@ run 1 "${deaf[@]}"
 check "one that ignores SIGTERM gets SIGKILL two seconds later: exit 124" \
   bash -c '[ "$1" -eq 124 ] && [ "$2" -ge 3 ] && [ "$2" -le 6 ]' _ "$code" "$took"
 check "and it no longer runs" gone
+
+#    What the command started is stopped with it (agent-squad #439): a process it started, and the
+#    transport that git starts for a remote, here an ssh that never answers, are gone after the run.
+#    The command stays in this script's process group, so that a terminal it reads stays its own.
+#    The process the command starts holds none of its output, which would keep this run waiting.
+run 1 bash -c 'bash -c "echo \$\$ > \"\$1\"; exec sleep 60" _ "$1" >/dev/null 2>&1 & wait' _ "$lab/pid"
+check "a process the command started is stopped with it: exit 124 within seconds, and it no longer runs" \
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 4 ] && ! kill -0 "$(cat "$3")" 2>/dev/null' _ "$code" "$took" "$lab/pid"
+printf '#!/bin/sh\necho "$$" > %q\nexec sleep 60\n' "$lab/pid" > "$lab/ssh"
+chmod +x "$lab/ssh"
+rm -f "$lab/pid"
+GIT_SSH_COMMAND="$lab/ssh" run 1 git ls-remote ssh://example.invalid/repo
+check "a git whose ssh transport never answers is stopped with its transport: exit 124 within seconds, and neither runs" \
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 4 ] && [ -s "$3" ] && ! kill -0 "$(cat "$3")" 2>/dev/null' _ "$code" "$took" "$lab/pid"
+run 5 sh -c 'ps -o pgid= -p "$$"'
+check "the command runs in the caller's process group" \
+  bash -c '[ "$(tr -d " " <<<"$1")" = "$(ps -o pgid= -p "$2" | tr -d " ")" ]' _ "$out" "$$"
 
 # 3. The bound is wall-clock time: squad-timeout.sh stopped past its bound, with the command and
 #    the watcher it started, as a sleeping machine stops every process, stops the command as soon as
