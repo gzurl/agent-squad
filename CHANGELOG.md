@@ -1,11 +1,13 @@
 # Changelog
 
 ## v65 — 2026-10-18
-- **A GitHub call that never answers ends, and the stall watch goes on** (#430). On 2026-10-18 a
-  `/squad-watch` pass hung for 2 h 21 min on a `gh` call whose connection died while the Mac
-  slept, and the passes after it queued up behind it. The new `scripts/squad-timeout.sh` bounds a
-  command by wall-clock time, which moves on while the machine sleeps, unlike `sleep`, `alarm` or
-  GNU `timeout`. `squad-stalls.sh`, `squad-outside.sh` and `squad-plan.sh` run each GitHub call
+- **A GitHub call that never answers ends, and the stall watch goes on** (#430, #437, and #439,
+  found by QA in its review of PR #436). On 2026-10-18 a `/squad-watch` pass hung for 2 h 21 min
+  on a `gh` call whose connection died while the Mac slept, and the passes after it queued up
+  behind it. The new `scripts/squad-timeout.sh` bounds a command by wall-clock time, which moves on
+  while the machine sleeps, unlike `sleep`, `alarm` or GNU `timeout`. Past the bound, it stops the
+  command and every process the command started, such as a `git` call's ssh. A command that ends
+  in time returns as soon as it ends. `squad-stalls.sh`, `squad-outside.sh` and `squad-plan.sh` run each GitHub call
   through it, 120 s by default (`SQUAD_GH_TIMEOUT`), and exit 1 with a message that says so when a
   call does not answer. `squad-latest.sh` keeps its exit 0, and its line says when GitHub did not
   answer within its 10 s.
