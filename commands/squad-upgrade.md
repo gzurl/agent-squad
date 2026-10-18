@@ -94,9 +94,12 @@ Work from the main checkout. The upstream repository is the one named on the `up
    release of the squad board, and any hook the release adds, only when it starts, and a session
    that restarts takes no turn until something writes to it. First run
    `"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-sessions.sh" "$(git rev-parse --path-format=absolute --git-common-dir)/.."`,
-   which names, from what each session's board recorded, the sessions still on an older release
-   (agent-squad #361): the roles on its `to restart` line, and those on its `to restart if open`
-   line, whose sessions may be closed. Ask the CEO to type `/restart` in each of those, DEV's
+   which names, from what each session's board recorded, the sessions still on another release
+   than the one installed, older or newer (agent-squad #361, #428): the roles on its `to restart`
+   line, and those on its `to restart if open` line, whose sessions may be closed. When the project
+   went back, that script is the older release's, which may name none of them, though every
+   session that started before step 4 still runs the newer board: name the three to restart, the
+   CTO's included, whatever the script says. Ask the CEO to type `/restart` in each of those, DEV's
    session and QA's first and yours last, and then `/squad-resume` in yours, so that you tell DEV
    and QA to carry on from the state they saved. The band marks each one too, as `DEV ⟳ v50→v53`,
    until it restarts.

@@ -366,7 +366,8 @@ and when the CTO runs `/squad-resume` or `/squad-watch`, never twice within a da
 once an hour while GitHub cannot be reached.
 After an upgrade, restart the three sessions, with `/restart` in each, to load the new board;
 until the CTO's session restarts, its line still shows the previous release. Until then, the band
-marks each session still on an older board with the release it loaded and the one installed,
+marks each session still on another board than the installed one, older, or newer after going back
+to an older release, with the release it loaded and the one installed,
 `DEV ⟳ v50→v53`, and the mark goes once that session restarts; `/squad-resume` names those
 sessions too. To turn it off, run
 the `claude plugin disable` line the installer printed, in the main checkout; the same line with

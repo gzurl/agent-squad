@@ -601,7 +601,7 @@ describe('a session to restart: older than the installed release (agent-squad #3
     expect(colorsOf(` ${RESTART} v50→v53`)).toEqual(['yellow', 'yellow_FOR_SUBAGENTS_ONLY'])
   })
 
-  test('releases compare as numbers: v9 is older than v10, and v100 is not', async ($, on) => {
+  test('releases compare as numbers: v9 is older than v10, and v100 newer, as after a downgrade (#428): both are marked', async ($, on) => {
     const w = world(on, {
       'proj/DEV': agent('DEV', 'proj', { release: 'v9' }),
       'proj/QA': agent('QA', 'proj', { release: 'v100' }),
@@ -611,7 +611,7 @@ describe('a session to restart: older than the installed release (agent-squad #3
     await start($, 'CTO:proj')
     const { part } = await band($)
     expect(await part('DEV')).toBe(` │ ${MARK.idle} ${SIGN.DEV}DEV ${RESTART} v9→v10`)
-    expect(await part('QA')).toBe(` │ ${MARK.idle} ${SIGN.QA}QA`)
+    expect(await part('QA')).toBe(` │ ${MARK.idle} ${SIGN.QA}QA ${RESTART} v100→v10`)
     expect(await part('CTO')).toBe(`${MARK.idle} ${SIGN.CTO}CTO`)
   })
 

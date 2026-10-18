@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Check scripts/squad-sessions.sh (agent-squad #361) in a scratch main checkout whose playbook holds
 # a board's plugin.json and whose .agent-squad/sessions/ holds records as each session's board
-# writes them. A session on the installed release, one older, compared as numbers, one newer, a
-# record three minutes old or more, a missing record and one that is not that shape each get their
-# line; the roles to restart, and those to restart if open, are named; an installed release that
+# writes them. A session on the installed release, one older, compared as numbers, one newer, as
+# after a downgrade (agent-squad #428), a record three minutes old or more, a missing record and one
+# that is not that shape each get their line; the roles to restart, and those to restart if open,
+# are named; an installed release that
 # cannot be read compares nothing; bad usage exits 2. Nothing reaches GitHub or a session.
 # shellcheck disable=SC2016 # the checks' bash -c bodies take their values as arguments
 set -u
@@ -48,7 +49,7 @@ run() {
 }
 
 # 1. Fresh records: the CTO on the installed v10, DEV on v9, older though "v9" sorts after "v10"
-#    as text, and QA on v100, newer: DEV is named to restart.
+#    as text, and QA on v100, newer, as after a downgrade: DEV and QA are named to restart.
 installed 10.0.0
 record CTO v10 5 && record DEV v9 5 && record QA v100 5
 run
@@ -57,8 +58,8 @@ check "it exits 0, a line per role in the order CTO, DEV, QA, then the roles to 
   _ "$code" "$out"
 check "a session on the installed release says so" has "sessions: CTO  CTO:proj runs v10, the installed release"
 check "one on an older release, compared as numbers, is to restart" has "sessions: DEV  DEV:proj runs v9, older than the installed v10: /restart it"
-check "one on a newer release is not" has "sessions: QA  QA:proj runs v100, the installed release"
-check "and the roles to restart are named" has "sessions: to restart: DEV"
+check "one on a newer release, as after a downgrade, is to restart too" has "sessions: QA  QA:proj runs v100, newer than the installed v10: /restart it"
+check "and the roles to restart are named" has "sessions: to restart: DEV QA"
 check "and none is to restart if open" bash -c '! grep -q "if open" <<<"$1"' _ "$out"
 
 # 2. Every record on the installed release: none to restart.
@@ -67,15 +68,18 @@ run
 check "with every session on the installed release, it says so, and names none" \
   bash -c 'grep -qxF "sessions: every open session runs v10" <<<"$1" && ! grep -q "to restart" <<<"$1"' _ "$out"
 
-# 3. A record three minutes old or more is a session that may be closed: an older one is to restart
-#    if it is open, and one on the installed release needs nothing.
-record DEV v9 600 && record QA v10 600
+# 3. A record three minutes old or more is a session that may be closed: an older one, or a newer
+#    one, is to restart if it is open, and one on the installed release needs nothing.
+record DEV v9 600 && record QA v10 600 && record CTO v11 600
 run
 check "an older record three minutes old or more is to restart if the session is open, with its age" \
   has "sessions: DEV  DEV:proj ran v9 until 10 min ago, older than the installed v10: /restart it if it is open"
+check "and so is a newer one" \
+  has "sessions: CTO  CTO:proj ran v11 until 10 min ago, newer than the installed v10: /restart it if it is open"
 check "one on the installed release needs nothing" has "sessions: QA  QA:proj ran v10 until 10 min ago, the installed release"
-check "and the role to restart if open is named, and none to restart for sure" \
-  bash -c 'grep -qxF "sessions: to restart if open: DEV" <<<"$1" && ! grep -q "^sessions: to restart: " <<<"$1"' _ "$out"
+check "and the roles to restart if open are named, and none to restart for sure" \
+  bash -c 'grep -qxF "sessions: to restart if open: CTO DEV" <<<"$1" && ! grep -q "^sessions: to restart: " <<<"$1"' _ "$out"
+record CTO v10 5
 
 # 4. A missing record, and one that is not that shape, are a session whose board writes none: an
 #    older board's, or no session at all.

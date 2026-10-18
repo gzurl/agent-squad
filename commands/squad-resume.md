@@ -40,8 +40,8 @@ The CEO is back. Your role is your session name. The squad's commands are in the
    - §6's agent lines (one per agent, in the order CTO, DEV, QA, with its state emoji): each
      agent's state now, then what it did while the CEO was away;
    - what was merged or released;
-   - the sessions still on an older release than the one installed, which need the CEO's
-     `/restart` (agent-squad #361): run
+   - the sessions still on another release than the one installed, older, or newer after a
+     downgrade, which need the CEO's `/restart` (agent-squad #361, #428): run
      `"$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook/scripts/squad-sessions.sh" "$(git rev-parse --path-format=absolute --git-common-dir)/.."`
      and name the roles on its `to restart` line, and those on its `to restart if open` line, whose
      sessions may be closed; say nothing when it prints `every open session runs` the release;
