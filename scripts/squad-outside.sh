@@ -31,7 +31,16 @@ set -u
 jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 
 usage() { sed -n 's/^# Usage: /usage: /p' "$0" >&2; exit 2; }
-die() { echo "squad-outside: $*" >&2; exit 1; }
+# Each GitHub call goes through squad-timeout.sh, beside this script, which stops it after
+# SQUAD_GH_TIMEOUT seconds of wall-clock time (120 when unset) and exits 124: a call that GitHub
+# never answers fails the run, as any other failure does, and die says why (agent-squad #430).
+gh_seconds="${SQUAD_GH_TIMEOUT:-120}"
+gh() { "$(dirname "$0")/squad-timeout.sh" "$gh_seconds" gh "$@"; }
+die() {
+  [ $? -ne 124 ] || echo "squad-outside: GitHub did not answer within $gh_seconds s" >&2
+  echo "squad-outside: $*" >&2
+  exit 1
+}
 is_time() { [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; }
 mark=""
 case "${1:-}" in

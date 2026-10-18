@@ -22,7 +22,8 @@
 #          start does (agent-squad #336).
 # Run by the session hooks (squad-handoff.sh) and by /squad-resume and /squad-watch. Without --due
 # it prints one line on what it knows, and exits 0 whatever GitHub answers; 2 is bad usage.
-# SQUAD_LATEST_TIMEOUT is how long gh may take, in seconds (10 when unset).
+# SQUAD_LATEST_TIMEOUT is how long gh may take, in seconds of wall-clock time (10 when unset), which
+# squad-timeout.sh, beside this script, enforces (agent-squad #430).
 set -u
 # jq on Windows ends each line with CRLF, and the shell keeps the CR in what it reads, as in an id
 # sent to GitHub, which then refuses it (agent-squad #405): every jq of this script drops it here.
@@ -78,7 +79,7 @@ if ! $is_due; then
   exit 0
 fi
 
-# The check: the attempt first, then gh, which gets `timeout` seconds before it is stopped.
+# The check: the attempt first, then gh, which squad-timeout.sh stops after `timeout` seconds.
 write "$tag" "$checked" "$now"
 upstream="$(sed -n 's/^upstream="\([^"]*\)"$/\1/p' "$(dirname "$0")/squad-install.sh" 2>/dev/null | head -n 1)"
 if ! [[ "$upstream" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
@@ -86,26 +87,17 @@ if ! [[ "$upstream" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
   exit 0
 fi
 answer="$file.answer.$$"
-gh api "repos/$upstream/releases/latest" --jq .tag_name </dev/null >"$answer" 2>/dev/null &
-pid=$!
-waited=0
-while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt $((timeout * 10)) ]; do
-  sleep 0.1
-  waited=$((waited + 1))
-done
-if kill -0 "$pid" 2>/dev/null; then
-  kill "$pid" 2>/dev/null
-  wait "$pid" 2>/dev/null
-  latest=""
-elif wait "$pid"; then
-  latest="$(head -n 1 "$answer")"
-else
-  latest=""
-fi
+"$(dirname "$0")/squad-timeout.sh" "$timeout" gh api "repos/$upstream/releases/latest" --jq .tag_name \
+  </dev/null >"$answer" 2>/dev/null
+asked=$?
+latest=""
+[ "$asked" -ne 0 ] || latest="$(head -n 1 "$answer")"
 rm -f "$answer"
 if [[ "$latest" =~ ^v[0-9]+$ ]]; then
   write "$latest" "$now" "$now"
   echo "latest release: $latest, checked now"
+elif [ "$asked" -eq 124 ]; then
+  echo "latest release: GitHub did not answer within $timeout s; the next attempt is in an hour"
 else
   echo "latest release: GitHub did not tell it; the next attempt is in an hour"
 fi

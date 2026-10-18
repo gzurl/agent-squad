@@ -38,7 +38,7 @@ squad="$repo/.agent-squad"
 # conversation comments, of comments on code and of each PR's reviews come from files in $lab/gh,
 # and each query is written down in $lab/queries.txt. GH_FAIL=<list> makes that call fail;
 # <list>-partial prints a first page, then fails; <list>-garbage answers with something that is not
-# JSON.
+# JSON; <list>-hang never answers, its PID in $lab/hung.pid.
 mkdir -p "$lab/bin" "$lab/gh"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -58,6 +58,7 @@ for arg; do
   case "${GH_FAIL:-}" in
     "$list") exit 1 ;;
     "$list-garbage") echo "not JSON"; exit 0 ;;
+    "$list-hang") echo "$$" > "$lab/hung.pid"; exec sleep 60 ;;
   esac
   echo "[$(cat "$lab/gh/$list${n:+-$n}.json" 2>/dev/null || echo '[]')]"
   [ "${GH_FAIL:-}" != "$list-partial" ] || exit 1
@@ -228,6 +229,18 @@ for what in repo opened opened-partial opened-garbage conversation conversation-
     fail "GitHub failing on $what: exit $code, printed '$out', said '$err'"
   fi
 done
+#    A call that GitHub never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock time,
+#    and fails the run as any other failure does, saying why (agent-squad #430).
+started=$SECONDS
+GH_FAIL=conversation-hang SQUAD_GH_TIMEOUT=1 run 50
+took=$((SECONDS - started))
+if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 4 ] \
+  && [ "$err" = "squad-outside: GitHub did not answer within 1 s"$'\n'"squad-outside: cannot read the comments; nothing was listed" ] \
+  && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
+  pass "a call that GitHub never answers is stopped after its bound: exit 1, saying so, and nothing left running"
+else
+  fail "a call that GitHub never answers: exit $code after $took s, printed '$out', said '$err'"
+fi
 
 # 5. Marks and times that do not hold.
 rm -f "$squad/triage.since"

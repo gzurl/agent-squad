@@ -20,6 +20,7 @@ scripts/check-triage.sh
 scripts/check-outside.sh
 scripts/check-release.sh
 scripts/check-latest.sh
+scripts/check-timeout.sh
 scripts/check-commands.sh
 scripts/check-sessions.sh
 scripts/check-set-status.sh

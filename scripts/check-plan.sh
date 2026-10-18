@@ -41,7 +41,8 @@ same() { diff "$1" <(printf '%s\n' "$out") >&2; }
 
 # GitHub, as far as the script is concerned: the files of the world $W. Each call is logged to
 # $CALLS, one line, with what it read on its input. A call whose words hold STUB_FAIL fails, as gh
-# does when GitHub cannot be reached.
+# does when GitHub cannot be reached, and one whose words hold STUB_HANG never answers, its PID in
+# $W/hung.pid.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -49,6 +50,7 @@ cat > "$lab/bin/gh" <<'GH'
 unset STUB_CRLF
 printf '%s | input: %s\n' "$*" "$(cat)" >> "$CALLS"
 if [ -n "${STUB_FAIL:-}" ] && [[ "$*" == *"$STUB_FAIL"* ]]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+if [ -n "${STUB_HANG:-}" ] && [[ "$*" == *"$STUB_HANG"* ]]; then echo "$$" > "$W/hung.pid"; exec sleep 60; fi
 case "$1 $2" in
   "repo view") echo o/r; exit 0 ;;
   "pr list") cat "$W/prs.json"; exit 0 ;;
@@ -530,6 +532,15 @@ matching-refs|cannot read the tags, as gh says above
 releases|cannot read the Releases, as gh says above
 issue edit|cannot write the plan issue #10, as gh says above
 CASES
+#    A call that GitHub never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock time,
+#    and fails the run as any other failure does, below the line that says why (agent-squad #430).
+started=$SECONDS
+STUB_HANG="pr list" SQUAD_GH_TIMEOUT=1 run --update
+check "a call that GitHub never answers is stopped after its bound: exit 1, saying so, and nothing left running" \
+  bash -c '[ "$1" -eq 1 ] && [ "$2" -le 4 ] && [ "$(tail -n 2 <<<"$3")" = "$4" ] && ! kill -0 "$(cat "$5")" 2>/dev/null' \
+  _ "$code" "$((SECONDS - started))" "$out" \
+  "$(printf '%s\n%s' "squad-timeout: gh did not end within 1 s, so it was stopped" "plan: cannot read the open pull requests, as gh says above")" \
+  "$W/hung.pid"
 #    Sub-issues that cannot be read, added or removed stop no other plan (QA's finding on PR #393):
 #    the later plan, #12, still gets its table, and the run exits 1 at its end. #2, a sub-issue of
 #    #10 that left its milestone, is to be removed, and #1 added.

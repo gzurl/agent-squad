@@ -618,7 +618,8 @@ JSON
   # fails here.
   commands_in_tree="$(cd "$lab/vb" && ls commands/squad-*.md)"
   [ "$(wc -l <<<"$commands_in_tree")" -ge 8 ] || exit 2
-  for missing in SQUAD.md scripts/squad-install.sh scripts/squad-latest.sh templates/AGENTS.md $commands_in_tree; do
+  for missing in SQUAD.md scripts/squad-install.sh scripts/squad-latest.sh scripts/squad-timeout.sh templates/AGENTS.md \
+    $commands_in_tree; do
     rm -rf "$lab/incomplete" && mkdir -p "$lab/incomplete" && cp -pR "$lab/vb/." "$lab/incomplete/"
     rm "$lab/incomplete/$missing"
     out="$("$install" --source "$lab/incomplete" "$project" vd 2>&1)"

@@ -44,7 +44,16 @@ set -u
 jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 
 usage() { sed -n 's/^# Usage: /usage: /p' "$0" >&2; exit 2; }
-die() { echo "squad-stalls: $*; nothing was checked" >&2; exit 1; }
+# Each GitHub call goes through squad-timeout.sh, beside this script, which stops it after
+# SQUAD_GH_TIMEOUT seconds of wall-clock time (120 when unset) and exits 124: a call that GitHub
+# never answers fails the run, as any other failure does, and die says why (agent-squad #430).
+gh_seconds="${SQUAD_GH_TIMEOUT:-120}"
+gh() { "$(dirname "$0")/squad-timeout.sh" "$gh_seconds" gh "$@"; }
+die() {
+  [ $? -ne 124 ] || echo "squad-stalls: GitHub did not answer within $gh_seconds s" >&2
+  echo "squad-stalls: $*; nothing was checked" >&2
+  exit 1
+}
 
 # The options: each role's session state, as ListAgents shows it.
 sessions='{}'
