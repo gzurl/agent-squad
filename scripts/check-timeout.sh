@@ -57,6 +57,28 @@ check "a command that ends in time keeps its input, output and exit status" \
 start=$SECONDS
 for _ in $(seq 50); do "$timeout" 5 true || break; done
 check "a command that ends at once returns at once: 50 runs within 3 s" bash -c '[ "$1" -le 3 ]' _ "$((SECONDS - start))"
+#    On every bash at hand, this one and /bin/bash when it is another, as macOS's 3.2 is: a command
+#    that ends at once is never taken for one stopped, even four loops of 100 at once; and one that
+#    a signal ends keeps its status, with no report of the shell's, such as "Killed: 9", on the error
+#    output (QA's finding on PR #442).
+shells=(bash)
+[ ! -x /bin/bash ] || [ "$(/bin/bash -c 'echo "$BASH_VERSION"')" = "$(bash -c 'echo "$BASH_VERSION"')" ] || shells+=(/bin/bash)
+for shell in "${shells[@]}"; do
+  version="$("$shell" -c 'echo "$BASH_VERSION"')"
+  rm -f "$lab/not-0"
+  start=$SECONDS
+  for _ in 1 2 3 4; do
+    for _ in $(seq 100); do "$shell" "$timeout" 5 true 2>>"$lab/loops-err" || echo "$?" >> "$lab/not-0"; done &
+  done
+  wait
+  check "on bash $version, 400 runs of a command that ends at once, four loops at once, all exit 0 at once, saying nothing" \
+    bash -c '[ ! -e "$1" ] && [ ! -s "$2" ] && [ "$3" -le 5 ]' _ "$lab/not-0" "$lab/loops-err" "$((SECONDS - start))"
+  rm -f "$lab/loops-err"
+  out="$("$shell" "$timeout" 5 bash -c 'kill -KILL $$' 2>"$lab/err")"
+  code=$?
+  check "on bash $version, a command that a signal ends keeps its status, and the shell reports nothing" \
+    bash -c '[ "$1" -eq 137 ] && [ ! -s "$2" ]' _ "$code" "$lab/err"
+done
 
 # 2. A command that never ends is stopped past its bound, and the script says so.
 run 1 "${endless[@]}"
