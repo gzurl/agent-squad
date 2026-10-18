@@ -31,8 +31,8 @@ each goal is.
   only to the CTO, in your own language.
 - 🔍 **Every change is a pull request** that QA reviews before it merges.
 - 🌳 **Each agent works in its own git worktree,** so nobody steps on anyone's files.
-- 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main`, no merge
-  without QA's approval.
+- 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main` or to a
+  release branch, no merge without QA's approval.
 - 🧭 **A live board, a Claude Code mod,** above the CTO's prompt: what each agent is doing, and
   who waits for you.
 - ☕ **Step away and come back:** pause the squad or leave it on autopilot, and get a summary when
@@ -543,6 +543,12 @@ terminal, for a permission or a question.
 
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
+
+**Can I ship a fix to a release that is already out?** Yes, from a release branch such as
+`release/1.2`, while `main` carries the next release. List the pattern of your release branches in
+`.agent-squad-release-branches`, at the project's root, and the squad holds those branches as it
+holds `main`: only a PR that QA reviews changes them, and the pre-push gate refuses a direct push.
+The fix goes to `main` first, and a backport carries it to the release branch.
 
 **Does it collect anything about me?** No. Nothing in **agent-squad** calls home, and nothing
 about you or your project is sent anywhere. Each release is published as a GitHub Release with
