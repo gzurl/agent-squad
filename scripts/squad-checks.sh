@@ -34,6 +34,12 @@ if [ "${#commands[@]}" -eq 0 ]; then
   exit 2
 fi
 
+# The machine does not idle-sleep while the checks run, which can take longer than its idle delay:
+# a sleep during a push's checks closes its connection to the remote (agent-squad #458). caffeinate
+# holds that for as long as this script runs, and lets go once it ends, however it ends. Where there
+# is no caffeinate, as off macOS, the attempt fails without a word and the checks run all the same.
+caffeinate -i -w "$$" </dev/null >/dev/null 2>&1 &
+
 # Each check runs on its own, so that one failing never hides behind another or behind a pipe.
 codes=()
 for command in "${commands[@]}"; do
