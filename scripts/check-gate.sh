@@ -432,7 +432,8 @@ errors="$(cd "$wt" && printf 'refs/tags/v1 %s refs/tags/v1 %s\n' "$(git rev-pars
   | PATH="$lab/git-hang:$PATH" SQUAD_GH_TIMEOUT=1 "$playbook/.githooks/pre-push" origin "$lab/remote.git" 2>&1)"
 code=$?
 took=$((SECONDS - started))
-if [ "$code" -eq 1 ] && [ "$took" -le 5 ] \
+# Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
+if [ "$code" -eq 1 ] && [ "$took" -le 30 ] \
   && grep -qxF "pre-push: origin did not list its branches within 1 s, so every ref pushed counts as new code" <<<"$errors" \
   && grep -qF "refs/tags/v1 is not the checked-out commit" <<<"$errors" && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a remote that never lists its branches is stopped after the bound, saying so, and every ref counts as new code"
@@ -442,7 +443,8 @@ fi
 
 # 12. The release branches that .agent-squad-release-branches declares take a PR too (agent-squad
 #     #446). The declaration is read from main's tip as last fetched, here a list saved with CRLF,
-#     its comments and blank lines counting for nothing; so that a push whose own commit removes it
+#     its comments, blank lines and the spaces around a pattern counting for nothing (QA's finding
+#     on PR #449); so that a push whose own commit removes it
 #     is refused still. A branch that matches no pattern, and a tag whose commit a release branch on
 #     the remote holds, are not held. A list of comments only, or none, holds nothing; with none on
 #     main's tip, the working tree's counts. `declare_on_main <content>` pushes main with the list,
@@ -465,7 +467,7 @@ held_refused() {
 went_through() {
   if [ "$code" -eq 0 ] && [ "$(runs)" -gt "$runs_before" ]; then pass "$1"; else fail "$1: exit $code, said: $errors"; fi
 }
-declare_on_main '# the release branches\r\n\r\n  # an indented comment\r\nrelease/*\r\n' || exit 2
+declare_on_main '# the release branches\r\n\r\n  # an indented comment\r\n  release/*  \r\n' || exit 2
 runs_before="$(runs)"
 push_to HEAD:refs/heads/release/0.15
 code=$?
@@ -513,5 +515,70 @@ runs_before="$(runs)"
 push_to HEAD:refs/heads/release/0.18
 code=$?
 held_refused "with no list on main's tip, the working tree's counts" release/0.18
+
+# 13. After checks that passed and ran longer than SQUAD_LONG_CHECKS seconds, the gate's last line
+#     says that a broken pipe from git means the connection closed while they ran, and to push
+#     again (agent-squad #438); after quick ones it says nothing of the kind.
+printf '# the sandbox checks\n./records.sh\nsleep 2\n' > "$wt/.agent-squad-checks"
+runs_before="$(runs)"
+push_to HEAD:refs/heads/long-checks SQUAD_LONG_CHECKS=1
+code=$?
+if [ "$code" -eq 0 ] && [ "$(runs)" -gt "$runs_before" ] \
+  && grep -qE "^pre-push: the checks passed after [0-9]+ s; if git now fails with a broken pipe or exit 141, its connection to origin closed while they ran, as across a sleep: push again$" <<<"$errors"; then
+  pass "after long checks that passed, the gate says what a broken pipe would mean, and to push again"
+else
+  fail "after long checks: exit $code, said: $errors"
+fi
+push_to HEAD:refs/heads/long-checks
+code=$?
+if [ "$code" -eq 0 ] && ! grep -q "broken pipe" <<<"$errors"; then
+  pass "after checks within the default 120 s, it says nothing of it"
+else
+  fail "after quick checks: exit $code, said: $errors"
+fi
+printf '# the sandbox checks\n./records.sh\n' > "$wt/.agent-squad-checks"
+
+# 14. A push by URL is held as one by the name of the remote whose URL it is (agent-squad #450): a
+#     commit that removes the declaration main's tip holds is refused on a release branch, and the
+#     remote's default branch, here trunk, takes a PR, by URL as by name. A URL that no remote has
+#     is taken as it is: the working tree's declaration, and main. `push_by <url> <refspec>
+#     [<VAR=value>...]` commits something new in the worktree and pushes it by that URL.
+push_by() {
+  local url="$1" refspec="$2"
+  shift 2
+  echo "$refspec" >> "$wt/pushed.txt"
+  commit "$wt" "a push by URL to $refspec" >/dev/null
+  errors="$(env "$@" git -C "$wt" push -q "$url" "$refspec" 2>&1)"
+}
+declare_on_main 'release/*\n' || exit 2
+git -C "$wt" rm -q --ignore-unmatch .agent-squad-release-branches && git -C "$wt" commit -qm "the declaration removed" || exit 2
+runs_before="$(runs)"
+push_by "$lab/remote.git" HEAD:refs/heads/release/0.20
+code=$?
+held_refused "by URL, a push whose own commit removes the declaration is refused, as by the remote's name" release/0.20
+git -C "$work" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+runs_before="$(runs)"
+push_by "$lab/remote.git" HEAD:refs/heads/trunk
+code=$?
+held_refused "by URL, a push to the remote's default branch, trunk, is refused" trunk
+git -C "$work" symbolic-ref --delete refs/remotes/origin/HEAD
+#     A remote's push URL counts as its URL does: viapush fetches from one repository and pushes to
+#     another, whose default branch, as git records it for viapush, is trunk.
+git init -q --bare "$lab/fetched.git" && git init -q --bare "$lab/pushed.git" || exit 2
+git -C "$work" remote add viapush "$lab/fetched.git" && git -C "$work" config remote.viapush.pushurl "$lab/pushed.git" || exit 2
+git -C "$work" symbolic-ref refs/remotes/viapush/HEAD refs/remotes/viapush/trunk
+runs_before="$(runs)"
+push_by "$lab/pushed.git" HEAD:refs/heads/trunk
+code=$?
+held_refused "by a remote's push URL, its default branch is refused too" trunk
+git init -q --bare "$lab/other.git" || exit 2
+runs_before="$(runs)"
+push_by "$lab/other.git" HEAD:refs/heads/release/0.20
+code=$?
+went_through "by a URL that no remote has, the working tree's declaration, here none, counts"
+runs_before="$(runs)"
+push_by "$lab/other.git" HEAD:refs/heads/main
+code=$?
+held_refused "and main is held" main
 
 exit "$status"

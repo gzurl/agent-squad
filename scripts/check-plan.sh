@@ -592,8 +592,9 @@ CASES
 #    and fails the run as any other failure does, below the line that says why (agent-squad #430).
 started=$SECONDS
 STUB_HANG="pr list" SQUAD_GH_TIMEOUT=1 run --update
+# Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
 check "a call that GitHub never answers is stopped after its bound: exit 1, saying so, and nothing left running" \
-  bash -c '[ "$1" -eq 1 ] && [ "$2" -le 4 ] && [ "$(tail -n 2 <<<"$3")" = "$4" ] && ! kill -0 "$(cat "$5")" 2>/dev/null' \
+  bash -c '[ "$1" -eq 1 ] && [ "$2" -le 30 ] && [ "$(tail -n 2 <<<"$3")" = "$4" ] && ! kill -0 "$(cat "$5")" 2>/dev/null' \
   _ "$code" "$((SECONDS - started))" "$out" \
   "$(printf '%s\n%s' "squad-timeout: gh did not end within 1 s, so it was stopped" "plan: cannot read the open pull requests, as gh says above")" \
   "$W/hung.pid"
