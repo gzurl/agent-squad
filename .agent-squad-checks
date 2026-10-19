@@ -1,4 +1,7 @@
 # agent-squad's own checks: the commands its CI runs, one per line (scripts/squad-checks.sh).
+# They run side by side: each works in a lab of its own, and they took 96 to 108 s together where
+# one after another took 261 to 273 s (agent-squad #459).
+# squad-checks: side by side
 for f in scripts/*.sh .githooks/* install.sh; do bash -n "$f" || exit 1; done
 uvx --from shellcheck-py shellcheck scripts/*.sh .githooks/* install.sh
 scripts/check-links.sh
