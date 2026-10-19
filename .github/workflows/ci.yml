@@ -98,19 +98,28 @@ jobs:
       KCOV_DEPS: binutils-dev cmake libcurl4-openssl-dev libdw-dev libelf-dev libiberty-dev libssl-dev zlib1g-dev
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: kcov v43, built once and cached
+      # kcov v43 with two fixes of upstream's that no release has yet, to its bash engine alone, as
+      # upstream wrote them (agent-squad #454): ba17585, from kcov's pull request 501, reads a traced
+      # $'...' that holds an escaped quote, which v43 took for an open quote, so that it skipped the
+      # traces after it and a line that ran could read as unrun; 76bf685, from its pull request 504,
+      # stops printing the rest of a trace that spans lines. Once a release has both, CI builds it.
+      - name: kcov v43 with two fixes, built once and cached
         id: kcov
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/kcov
-          key: kcov-a39874f938ce13f7a65f253120d1ec946b349ffe-${{ runner.os }}
-      - name: Build kcov v43
+          key: kcov-a39874f938ce13f7a65f253120d1ec946b349ffe-ba17585-76bf685-${{ runner.os }}
+      - name: Build kcov v43 with two fixes
         if: steps.kcov.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq $KCOV_DEPS >/dev/null
           git clone -q https://github.com/SimonKagstrom/kcov "$RUNNER_TEMP/kcov"
           git -C "$RUNNER_TEMP/kcov" checkout -q a39874f938ce13f7a65f253120d1ec946b349ffe
+          for fix in ba1758516d4a256df5dacd3a4de47df45ba9497f 76bf6853f5d373790673f8940dc0c71050e53f59; do
+            git -C "$RUNNER_TEMP/kcov" diff "$fix^" "$fix" -- src/engines/bash-engine.cc > "$RUNNER_TEMP/fix.patch"
+            git -C "$RUNNER_TEMP/kcov" apply "$RUNNER_TEMP/fix.patch"
+          done
           cmake -S "$RUNNER_TEMP/kcov" -B "$RUNNER_TEMP/kcov/build" -DCMAKE_INSTALL_PREFIX="$HOME/kcov" >/dev/null
           make -s -C "$RUNNER_TEMP/kcov/build" -j"$(nproc)" install >/dev/null
       # The cached kcov runs with the runner's own libraries; apt installs them only when one is
