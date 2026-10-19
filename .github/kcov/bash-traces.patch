@@ -1,0 +1,63 @@
+kcov's bash engine at a39874f (v43), as agent-squad's CI builds it (agent-squad #454).
+
+kcov reads bash's trace through a tracker of single quotes, and skips every trace it reads while
+it believes one is open. bash 4.4 and later write a traced word that holds a newline as $'...',
+in which \' is an escaped quote, and the tracker, which knows only '...', takes the rest for an
+open quote: the traces after it went uncounted until another quote seemed to close it, so a line
+that ran once could read as unrun. With this patch, a line that starts with a trace is read as
+one, and kcov names on its error output each trace it does not count, which ci-coverage.sh reads.
+
+--- a/src/engines/bash-engine.cc
++++ b/src/engines/bash-engine.cc
+@@ -279,19 +279,30 @@
+ 
+ 		std::string cur(curLine);
+ 		// Line markers always start with kcov@
++		size_t kcovStr = cur.find("kcov@");
++
++		// A line that starts with a marker, its k repeated once per level of subshell, is a trace
++		// of its own, whatever quote the lines before it seem to leave open: bash 4.4 and later
++		// write a newline in a traced word as $'\n', and a quote of that kind, or one between
++		// double quotes, misleads getInputType (agent-squad #454).
++		if (kcovStr != std::string::npos && cur.find_first_not_of('k') == kcovStr + 1)
++			m_inputType = INPUT_NORMAL;
+ 
+ 		if (m_inputType == INPUT_SINGLE_QUOTE) {
+ 			m_inputType = getInputType(cur);
++			reportUncounted(cur, 0);
+ 			return true;
+ 		}
+ 
+-		size_t kcovStr = cur.find("kcov@");
+ 		if (kcovStr == std::string::npos)
+ 		{
+ 			fprintf(stderr, "%s", cur.c_str());
+ 			return true;
+ 		}
+ 		m_inputType = getInputType(cur);
++		// A process that writes a long trace in pieces can have another's trace land in the
++		// middle of it, on the same line: only the first marker counts.
++		reportUncounted(cur, kcovStr + 1);
+ 
+ 		std::vector<std::string> parts = split_string(cur.substr(kcovStr), "@");
+ 
+@@ -534,6 +545,19 @@
+ 		return out;
+ 	}
+ 
++	// Say on stderr which traces of a line, from <from> on, are not counted, so that whoever
++	// reads the coverage knows those lines ran (agent-squad #454).
++	void reportUncounted(const std::string &str, size_t from)
++	{
++		for (size_t at = str.find("kcov@", from); at != std::string::npos; at = str.find("kcov@", at + 1)) {
++			std::vector<std::string> parts = split_string(str.substr(at), "@");
++
++			if (parts.size() >= 3 && string_is_integer(parts[2]))
++				fprintf(stderr, "kcov: did not count a trace of %s, line %s\n",
++						get_real_path(parts[1]).c_str(), parts[2].c_str());
++		}
++	}
++
+ 	enum InputType getInputType(const std::string &str)
+ 	{
+ 		enum InputType out = m_inputType;
