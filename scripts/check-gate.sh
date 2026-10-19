@@ -584,9 +584,9 @@ held_refused "and main is held" main
 # 15. The machine does not idle-sleep while the checks run (agent-squad #458): squad-checks.sh, as
 #     the gate runs it from the worktree, holds caffeinate on itself, and where there is none, runs
 #     its checks as before. Its check here waits for $lab/release, then exits with the status that
-#     file holds. `checks_in_background <PATH>` starts the run with that PATH, in a process group of
-#     its own, as a terminal's Ctrl-C finds it, with its PID in $checker and its errors in
-#     $lab/checks.err. `within <tenths> <command>...` passes once the command does, tried every
+#     file holds. `checks_in_background [<VAR=value>...]` starts the run with those variables, in a
+#     process group of its own, as a terminal's Ctrl-C finds it, with its PID in $checker and its
+#     errors in $lab/checks.err. `within <tenths> <command>...` passes once the command does, tried every
 #     tenth of a second, for at most that many tenths.
 # shellcheck disable=SC2016 # the command substitution is the check's own, run when it runs
 printf '#!/usr/bin/env bash\nuntil [ -e %q ]; do sleep 0.1; done\nexit "$(cat %q)"\n' \
@@ -595,7 +595,7 @@ chmod +x "$lab/waits.sh"
 list "$wt" "$(printf %q "$lab/waits.sh")"
 checks_in_background() {
   set -m
-  (cd "$wt" && exec env PATH="$1" "$runner") </dev/null >/dev/null 2>"$lab/checks.err" &
+  (cd "$wt" && exec env "$@" "$runner") </dev/null >/dev/null 2>"$lab/checks.err" &
   checker=$!
   set +m
 }
@@ -614,7 +614,7 @@ mkdir -p "$lab/stub"
 printf '#!/usr/bin/env bash\necho "$*" > %q\n' "$lab/caffeinated" > "$lab/stub/caffeinate"
 chmod +x "$lab/stub/caffeinate"
 echo 0 > "$lab/release"
-checks_in_background "$lab/stub:$PATH"
+checks_in_background PATH="$lab/stub:$PATH"
 wait "$checker"
 code=$?
 if [ "$code" -eq 0 ] && within 50 test -s "$lab/caffeinated" && [ "$(cat "$lab/caffeinated")" = "-i -w $checker" ]; then
@@ -655,7 +655,7 @@ released() { ! held_for "$1" && ! pgrep -fx "caffeinate -i -w $1" >/dev/null; }
 if command -v caffeinate >/dev/null && command -v pmset >/dev/null; then
   for outcome in passed:0 failed:1 "been interrupted:130"; do
     rm -f "$lab/release"
-    checks_in_background "$PATH"
+    checks_in_background
     if within 50 held_for "$checker"; then held=yes; else held=no; fi
     case "$outcome" in
       "been interrupted":*) kill -INT -- "-$checker" ;;
@@ -672,5 +672,114 @@ if command -v caffeinate >/dev/null && command -v pmset >/dev/null; then
 else
   echo "  note    no caffeinate and pmset here, as off macOS: the hold itself is checked on macOS only" >&2
 fi
+
+
+# 16. The checks run side by side when the list has the line `# squad-checks: side by side`, blanks
+#     around it aside, and one after another without it (agent-squad #459). Two checks that each
+#     wait for the other tell them apart: each leaves its mark, then waits five seconds at most for
+#     the other's, which one after another the first never sees. `meet <list>` writes the list from
+#     its lines, \n between them, and runs the checks from the worktree, with their errors in
+#     $errors and their exit status in $code.
+# shellcheck disable=SC2016 # the expansions are the script's own, run when it runs
+printf '#!/usr/bin/env bash\ntouch %q/"$1"\nfor _ in $(seq 50); do [ -e %q/"$2" ] && exit 0; sleep 0.1; done\nexit 1\n' \
+  "$lab/marks" "$lab/marks" > "$lab/meets.sh"
+chmod +x "$lab/meets.sh"
+meets="$(printf %q "$lab/meets.sh")"
+meet() {
+  rm -rf "$lab/marks" && mkdir -p "$lab/marks" "$lab/tmp"
+  printf '%b\n' "$1" > "$wt/.agent-squad-checks"
+  errors="$(cd "$wt" && TMPDIR="$lab/tmp" "$runner" </dev/null 2>&1)"
+  code=$?
+}
+meet "# the sandbox checks\n$meets a b\n$meets b a"
+if [ "$code" -eq 1 ] && grep -qxF "  FAILED  $meets a b (exit 1)" <<<"$errors" && grep -qxF "  ok      $meets b a" <<<"$errors"; then
+  pass "without the line, the checks run one after another"
+else
+  fail "without the line: exit $code, said: $errors"
+fi
+meet "# the sandbox checks\n  # squad-checks: side by side \r\n$meets a b\n$meets b a"
+if [ "$code" -eq 0 ] && [ "$(grep -c '^  ok      ' <<<"$errors")" -eq 2 ] && [ -z "$(ls -A "$lab/tmp")" ]; then
+  pass "with it, indented and saved with CRLF, they run side by side, and leave nothing in TMPDIR"
+else
+  fail "with the line: exit $code, left in TMPDIR: $(ls -A "$lab/tmp"), said: $errors"
+fi
+meet "# the sandbox checks\n# squad-checks: side-by-side\n$meets a b\n$meets b a"
+if [ "$code" -eq 1 ] && grep -qxF "  FAILED  $meets a b (exit 1)" <<<"$errors"; then
+  pass "a line that only looks like it opts in to nothing"
+else
+  fail "a line that only looks like it: exit $code, said: $errors"
+fi
+meet '# squad-checks: side by side'
+if [ "$code" -eq 2 ] && grep -qF 'lists no command' <<<"$errors"; then
+  pass "the line alone lists no command"
+else
+  fail "the line alone: exit $code, said: $errors"
+fi
+#     A failing check gets its status line, and its output is shown, after a line that names it;
+#     the output of one that passed is not. A check that sends itself SIGINT is ended by it: the
+#     checks, run in the background, still take SIGINT as a terminal leaves it, as the tests of an
+#     interruption among them need.
+meet "# squad-checks: side by side\necho passed-quietly\necho failed-loudly; echo to-stderr >&2; exit 3\nkill -INT \$\$; exit 0"
+if [ "$code" -eq 1 ] && grep -qxF "  ok      echo passed-quietly" <<<"$errors" && ! grep -qxF passed-quietly <<<"$errors" \
+  && grep -qxF "  FAILED  echo failed-loudly; echo to-stderr >&2; exit 3 (exit 3)" <<<"$errors" \
+  && grep -A2 -xF "checks: output of echo failed-loudly; echo to-stderr >&2; exit 3:" <<<"$errors" | grep -qxF to-stderr \
+  && grep -qxF "  FAILED  kill -INT \$\$; exit 0 (exit 130)" <<<"$errors"; then
+  pass "side by side, a failing check's output is shown, a passing one's is not, and a check takes SIGINT"
+else
+  fail "side by side, with a failing check: exit $code, said: $errors"
+fi
+#     Through the gate, a failing check refuses the push, and passing ones let it through.
+printf '# squad-checks: side by side\ntrue\nfalse\n' > "$wt/.agent-squad-checks"
+commit "$wt" "failing checks, side by side" >/dev/null
+if errors="$(git -C "$wt" push -q origin HEAD:refs/heads/side-by-side 2>&1)"; then
+  fail "side by side, a failing check let the push through"
+else
+  pass "side by side, a failing check refuses the push"
+fi
+printf '# squad-checks: side by side\ntrue\n./records.sh\n' > "$wt/.agent-squad-checks"
+commit "$wt" "passing checks, side by side" >/dev/null
+runs_before="$(runs)"
+if errors="$(git -C "$wt" push -q origin HEAD:refs/heads/side-by-side 2>&1)" && [ "$(runs)" -gt "$runs_before" ]; then
+  pass "side by side, passing checks let the push through"
+else
+  fail "side by side, passing checks: said: $errors"
+fi
+#     Interrupted, the run stops every check, with what each started: each check here starts a
+#     sleep, writes its PID and its own to $lab/started, and waits. The second ignores SIGTERM, as
+#     its sleep then does, and gets SIGKILL; the third starts its sleep under job control, in a
+#     process group of its own, as the tests of an interruption do; the fourth ends at once, and
+#     leaves its sleep behind, with no parent but in its process group.
+printf '#!/usr/bin/env bash\nstarted=%q\n' "$lab/started" > "$lab/starts.sh"
+cat >> "$lab/starts.sh" <<'CHECK'
+case "${1:-}" in
+  deaf) trap "" TERM ;;
+  apart) set -m ;;
+  orphan) (sleep 60 & echo "$! $$" >> "$started"); exit 0 ;;
+esac
+sleep 60 &
+echo "$! $$" >> "$started"
+wait
+CHECK
+chmod +x "$lab/starts.sh"
+starts="$(printf %q "$lab/starts.sh")"
+printf '# squad-checks: side by side\n%s\n%s deaf\n%s apart\n%s orphan\n' "$starts" "$starts" "$starts" "$starts" \
+  > "$wt/.agent-squad-checks"
+rm -rf "$lab/started" "$lab/tmp" && mkdir -p "$lab/tmp"
+checks_in_background TMPDIR="$lab/tmp"
+# shellcheck disable=SC2317,SC2329 # run through within
+started_all() { [ "$(grep -c . "$lab/started" 2>/dev/null)" = 4 ]; }
+if within 50 started_all; then started=yes; else started=no; fi
+kill -INT -- "-$checker"
+wait "$checker"
+code=$?
+# shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
+stopped() { ! kill -0 $(cat "$lab/started") 2>/dev/null; }
+if [ "$started" = yes ] && [ "$code" -eq 130 ] && within 30 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
+  pass "interrupted, the run stops every check, with what each started, and leaves nothing in TMPDIR"
+else
+  fail "interrupted: all started: $started, exit $code, still running: $(if stopped; then echo none; else cat "$lab/started"; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
+fi
+# shellcheck disable=SC2046 # the same
+kill -KILL $(cat "$lab/started") 2>/dev/null
 
 exit "$status"
