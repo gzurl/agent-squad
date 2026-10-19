@@ -41,11 +41,12 @@ Your session name tells you who you are: `CTO:<project-name>`, `DEV:<project-nam
 ## Environment facts (from the bootstrap)
 - GitHub account arrangement: <shared | separate>.
 - `main` protection: <protected: a PR required, no bypass | unprotected: the pre-push gate refuses pushes to `main`, the other gates hold by discipline>.
+- Release branches (SQUAD.md §2.3): <none | the patterns of `.agent-squad-release-branches`, protected on GitHub as `main` is | the patterns of `.agent-squad-release-branches`, held by the pre-push gate alone>.
 
 ## Git conventions
 - **Commits:** Conventional Commits, in English.
 - **Branches:** `<type>/<short-kebab-description>`; `qa/` is a branch prefix for QA-owned tests.
-- **Base branch:** `main`. Never force-push it. **Merge strategy:** squash.
+- **Base branch:** `main`, and the release branch a backport targets. Never force-push either. **Merge strategy:** squash.
 
 ## Specs
 Product decisions agreed between the CEO and the CTO are recorded under `openspec/`.
