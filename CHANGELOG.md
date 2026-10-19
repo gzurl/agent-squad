@@ -2,18 +2,18 @@
 
 ## v66 — 2026-10-19
 - **A release branch is held as `main` is** (#441, reported by trivial-tape's CTO from its QA's
-  finding; #446; and #450, found by QA in its review of PR #449). trivial-tape ships 0.15.2 from `release/0.15` while `main` carries 0.16, and
-  the pre-push gate let a direct push to that branch through, since it held the default branch
-  alone. §2.3: a project lists the patterns of its release branches in
-  `.agent-squad-release-branches`, at its root, in the form of `.agent-squad-checks`. Only a PR
-  reviewed by QA changes a branch that matches, with the same exception as `main`. The pre-push
-  gate refuses a direct push to one, and reads the declaration from the default branch's tip, so
-  that a push cannot lift it with its own commit. A push by URL is held as one by the name of the
-  remote whose URL or push URL it is, for the default branch as for a release branch. A fix goes
-  to `main` first, and a backport, a PR
-  that names the PR it carries (`Backport of #M`), takes it to the release branch: §2.4, §3, §4.1,
-  §4.2, §5 and §6 say so. BOOTSTRAP's row 6 protects the release branches on GitHub, and
-  `templates/AGENTS.md` records them.
+  finding; #446; and #450, found by QA in its review of PR #449). trivial-tape ships 0.15.2 from
+  `release/0.15` while `main` carries 0.16, and the pre-push gate let a direct push to that branch
+  through, since it held the default branch alone. §2.3: a project lists the patterns of its
+  release branches in `.agent-squad-release-branches`, at its root, in the form of
+  `.agent-squad-checks`. Only a PR reviewed by QA changes a branch that matches, with the same
+  exception as `main`. The pre-push gate refuses a direct push to one, and reads the declaration
+  from the default branch's tip, so that a push cannot lift it with its own commit. A push by URL
+  is held as one by the name of the remote whose URL or push URL it is, for the default branch as
+  for a release branch. A fix goes to `main` first, and a backport, a PR that names the PR it
+  carries (`Backport of #M`), takes it to the release branch: §2.4, §3, §4.1, §4.2, §5 and §6 say
+  so. BOOTSTRAP's row 6 protects the release branches on GitHub, and `templates/AGENTS.md`
+  records them.
 - **A push whose checks take minutes reaches the remote over ssh** (#438, found by DEV on PR
   #436). `git push` opens its ssh connection before the pre-push checks run. On 2026-10-18 the
   connection was closed while it sat idle through 7 minutes of checks, so the push died of a
