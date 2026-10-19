@@ -29,6 +29,9 @@ each goal is.
 
 - 👥 **A full team:** a CTO, a developer and a QA, each in its own Claude Code session. You talk
   only to the CTO, in your own language.
+- 🐙 **Everything is on GitHub:** the work in issues, each change and its review in a pull request,
+  every decision in writing. A [pinned plan issue](#when-you-step-away) shows the release live, row
+  by row, so you can follow it from your phone.
 - 🔍 **Every change is a pull request** that QA reviews before it merges.
 - 🌳 **Each agent works in its own git worktree,** so nobody steps on anyone's files.
 - 🔒 **Rules enforced by scripts:** checks before every push, nothing straight to `main` or to a
@@ -263,6 +266,8 @@ changes whenever an agent changes the state of an issue or a pull request, and a
 same table. The plan issue also lists the release's issues as its sub-issues, up to the 100
 GitHub allows, with GitHub's bar of how many are done, and each of them names the plan issue as its
 parent.
+
+<p align="center"><img src="docs/images/plan.png" alt="A release's plan issue on GitHub: one row per issue, with its state and whose the next step is, then the release's own steps" width="800"></p>
 
 Whenever the CTO reports on the agents, during these commands or when you ask how they are doing,
 each agent gets a line of its own, always in the order CTO, DEV, QA, with an emoji for its state:
