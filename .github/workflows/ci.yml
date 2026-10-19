@@ -12,7 +12,11 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
+      # The whole history, with its tags: scripts/check-version.sh compares the charter with the
+      # last release's tag (agent-squad #460).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       # The runner's image has shellcheck; apt installs it only on one that does not.
       - name: Shell syntax and shellcheck
         run: |
@@ -25,6 +29,8 @@ jobs:
         run: scripts/check-link-checker.sh
       - name: Charter version matches the changelog
         run: scripts/check-version.sh
+      - name: The version check names each changed section the upgrade item leaves out
+        run: scripts/check-version-checker.sh
       - name: No squad script filters gh by label
         run: scripts/check-gh-filters.sh
       - name: Every squad script that runs jq drops the CR it ends its lines with on Windows
@@ -97,7 +103,10 @@ jobs:
       # What kcov needs to be built, and the libraries it then runs with.
       KCOV_DEPS: binutils-dev cmake libcurl4-openssl-dev libdw-dev libelf-dev libiberty-dev libssl-dev zlib1g-dev
     steps:
+      # The whole history, with its tags, which scripts/check-version.sh compares the charter with.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       # kcov v43 with two fixes of upstream's that no release has yet, to its bash engine alone, as
       # upstream wrote them (agent-squad #454): ba17585, from kcov's pull request 501, reads a traced
       # $'...' that holds an escaped quote, which v43 took for an open quote, so that it skipped the
