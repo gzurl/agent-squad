@@ -165,11 +165,13 @@ table() {
       || die "cannot read the tags, as gh says above"
     gh api --paginate --slurp "repos/$repo/releases?per_page=100" </dev/null > "$work/releases.json" \
       || die "cannot read the Releases, as gh says above"
-    installed=false
-    ! tail -1 "$squad/install.log" 2>/dev/null | grep -q -- "-> v$version\$" || installed=true
-    release="$(jq -c --argjson charter "$charter" --argjson version "$version" --argjson tagged "$tagged" --argjson installed "$installed" \
+    # The release that the last install here brought in, from install.log's last line, "<time>
+    # <from> -> vN": a release is installed once that one is it, or a later one, which brings it in
+    # (agent-squad #462).
+    installed="$(tail -1 "$squad/install.log" 2>/dev/null | sed -n 's/.* -> v\([0-9][0-9]*\)$/\1/p')"
+    release="$(jq -c --argjson charter "$charter" --argjson version "$version" --argjson tagged "$tagged" --argjson by "${installed:-null}" \
       '{charter: $charter, version: $version, tagged: $tagged, published: (add // [] | any(.[]; .tag_name == "v\($version)")),
-        installed: $installed}' "$work/releases.json")" || die "cannot read the Releases"
+        installed: ($by != null and $by >= $version), installed_by: $by}' "$work/releases.json")" || die "cannot read the Releases"
   fi
 
   # The table, in the CEO's format (agent-squad #370): a title line, then one row per issue, then
@@ -235,10 +237,23 @@ table() {
     | ($plan.body | plan_parts | .before + .after | [splits("\n") | capture("^No README read:\\s*(?<why>\\S.*?)\\s*$").why]
        | first) as $no_read
     | {step: "README read", who: "CEO", state: "➖ not taken: \($no_read // "" | short)", next: "—"} as $not_taken
+    # A read that the CEO gives another role (agent-squad #462): a line of the description, outside
+    # its markers, that starts with "README read by:", names the role, then gives the reason, as
+    # "README read by: QA, as the CEO asked on 2026-10-19". The row is that role'"'"'s, with the reason:
+    # `read_by($waiting; $done)` gives it while it waits for that step, then once it is done.
+    | ($plan.body | plan_parts | .before + .after
+       | [splits("\n") | capture("^README read by:\\s*(?<who>CEO|CTO|DEV|QA)\\b[\\s,:;]*(?<why>\\S.*?)\\s*$")] | first) as $by
+    | def read_by($waiting; $done):
+        {step: "README read", who: $by.who,
+         state: (if $done then "✅ done by \($by.who): \($by.why | short)"
+                 elif $waiting then "⚪ \($waiting); \($by.who) reads it: \($by.why | short)"
+                 else "⏳ \($by.who) reads it: \($by.why | short)" end),
+         next: (if $done or $waiting then "—" else "\($by.who): read it" end)};
     # The release'"'"'s own steps: the README read everywhere; the version PR, the tag, the Release
     # and the install where the repository tracks SQUAD.md with a Version: line. The version PR,
     # while it is open, shows as an issue'"'"'s PR does, whether the milestone'"'"'s issues are closed or not.
-    | (if $release == null and $no_read then [$not_taken]
+    (if $release == null and $no_read then [$not_taken]
+       elif $release == null and $by then [read_by($waits; false)]
        elif $release == null then
          [{step: "README read", who: "CEO",
            state: (if $asked then "⏳ waits for the CEO" elif $waits then "⚪ \($waits)" else "⚪ not asked yet" end),
@@ -250,18 +265,22 @@ table() {
                elif $version_pr != null then $version_pr | version_cells
                elif $waits then {state: "⚪ \($waits)", next: "—"}
                else {state: "⚪ not started", next: "CTO: open it"} end),
-            (if $no_read then $not_taken else
+            (if $no_read then $not_taken
+             elif $by then read_by(if $versioned then null else "waits for the version PR" end; $release.tagged)
+             else
              {step: "README read", who: "CEO",
               state: (if $release.tagged then "✅ done" elif $asked then "⏳ waits for the CEO"
                       elif $versioned | not then "⚪ waits for the version PR" else "⚪ not asked yet" end),
               next: (if $release.tagged then "—" elif $asked then "CEO: read it" elif $versioned then "CTO: ask the CEO" else "—" end)}
              end),
-            # With no read, the tag waits for the version PR alone, and the CTO tags it (§3).
-            {step: "Tag, Release, install here", who: "CTO",
-             state: (if $release.tagged and $release.published and $release.installed then "✅ done"
+            # With no read, the tag waits for the version PR alone, and the CTO tags it (§3). An install
+            # by a later release names it.
+            (if $release.installed and $release.installed_by > $release.version then " by v\($release.installed_by)" else "" end) as $by_later
+            | {step: "Tag, Release, install here", who: "CTO",
+             state: (if $release.tagged and $release.published and $release.installed then "✅ done\(if $by_later == "" then "" else ", installed\($by_later)" end)"
                      elif ($release.tagged | not) and $no_read then (if $versioned then "⚪ not tagged yet" else "⚪ waits for the version PR" end)
                      elif $release.tagged | not then "⚪ waits for the CEO'"'"'s OK"
-                     else "⏳ tag ✅, Release \(if $release.published then "✅" else "⚪" end), install \(if $release.installed then "✅" else "⚪" end)" end),
+                     else "⏳ tag ✅, Release \(if $release.published then "✅" else "⚪" end), install \(if $release.installed then "✅\($by_later)" else "⚪" end)" end),
              next: (if $release.tagged and $release.published and $release.installed then "—"
                     elif ($release.tagged | not) and $no_read then (if $versioned then "CTO: tag it" else "—" end)
                     elif $release.tagged | not then "CTO: tag it, on the CEO'"'"'s OK"

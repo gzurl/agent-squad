@@ -368,6 +368,19 @@ expect_steps "installed here: every step done" \
 "| 2 | Version PR | CTO | ✅ done | — |
 | 3 | README read | CEO | ✅ done | — |
 | 4 | Tag, Release, install here | CTO | ✅ done | — |"
+#    A later release's install brings this one in, and the row names it (agent-squad #462).
+printf '2026-10-14 09:00 v55 -> v56\n' >> "$project/.agent-squad/install.log"
+expect_steps "installed by a later release, v56: done, naming it" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ✅ done | — |
+| 4 | Tag, Release, install here | CTO | ✅ done, installed by v56 | — |"
+echo '[{"tag_name": "v54"}]' > "$W/releases.json"
+expect_steps "and with its Release not published, the install is still done, by v56" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ✅ done | — |
+| 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ✅ by v56 | CTO: publish the Release |"
+echo '[{"tag_name": "v54"}, {"tag_name": "v55"}]' > "$W/releases.json"
+printf '2026-10-14 09:00 v55 -> v56\n' > "$project/.agent-squad/install.log"
 check "with the header counting the issues closed, the plan issue left out" \
   bash -c '[[ "$(head -1 <<<"$1")" == *" · 1 of 1 issues closed · "* ]]' _ "$out"
 
@@ -415,6 +428,51 @@ expect_steps "after the markers too, its pipe escaped" \
 "| 2 | Version PR | CTO | ✅ done | — |
 | 3 | README read | CEO | ➖ not taken: a fix \\| no rule | — |
 | 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
+
+# 4c. A README read that the CEO gives another role (agent-squad #462): a line of the plan issue's
+#     description, outside its markers, that starts with "README read by:", names the role, then
+#     gives the reason. The row is that role's, with the reason, while it waits for the version PR,
+#     then while the role reads it, then once the release is tagged; in a project, while issues are
+#     open, then once they are closed. A line with no role or no reason is no such line, and a
+#     release that takes no read says so whatever names a reader.
+world && upstream 54
+issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
+plan_issue 10
+plan_body $'The plan of v55.\n\nREADME read by: QA, as the CEO asked on 2026-10-19'
+expect_steps "given to QA, the version PR not merged: QA's row waits for it, with the reason" \
+"| 2 | Version PR | CTO | ⚪ not started | CTO: open it |
+| 3 | README read | QA | ⚪ waits for the version PR; QA reads it: as the CEO asked on 2026-10-19 | — |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+upstream 55
+expect_steps "the version PR merged: QA reads it" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | QA | ⏳ QA reads it: as the CEO asked on 2026-10-19 | QA: read it |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+echo '[{"ref": "refs/tags/v55"}]' > "$W/refs.json"
+expect_steps "tagged: done by QA" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | QA | ✅ done by QA: as the CEO asked on 2026-10-19 | — |
+| 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ⚪ | CTO: publish the Release |"
+echo '[]' > "$W/refs.json"
+for text in 'README read by: someone, as the CEO asked' 'README read by: QA' 'Note: README read by: QA, as the CEO asked'; do
+  plan_body "$text"
+  expect_steps "'$text' is no such line: the CEO's row" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+done
+plan_body $'No README read: it only fixes things\nREADME read by: QA, as the CEO asked'
+expect_steps "a release that takes no read says so, whoever is named to read it" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
+| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
+world
+issue 1 open "Open" "👨🏼‍💻 owner:dev"
+plan_issue 10 && plan_body 'README read by: CTO: the CEO is away'
+expect_steps "a project, an issue open: the CTO's row waits for it, with the reason" \
+  "| 2 | README read | CTO | ⚪ waits for #1; CTO reads it: the CEO is away | — |"
+set_issue 1 '.state = "closed"'
+expect_steps "and every issue closed: the CTO reads it" "| 2 | README read | CTO | ⏳ CTO reads it: the CEO is away | CTO: read it |"
 
 # 5. The release's version PR (agent-squad #384), upstream: the open PR whose description names the
 #    plan issue ("Part of #10") and that closes no issue. None of these is it, each numbered above
