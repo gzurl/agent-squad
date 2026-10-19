@@ -17,7 +17,8 @@
 # starts with vN, the version PR before it, and the tag, the Release and the install here after
 # it. While the version PR is open, its row shows it as an issue's row shows its
 # PR: the version PR names the plan issue ("Part of #N") and closes no issue (SQUAD.md §3,
-# agent-squad #384). Everything comes from GitHub, except the install, which comes from
+# agent-squad #384). One that GitHub links to an issue all the same, through words other than
+# "Closes #N", still shows there, with that issue named (agent-squad #461). Everything comes from GitHub, except the install, which comes from
 # .agent-squad/install.log of the main checkout.
 #
 # --update rewrites what lies between each plan issue's markers, and only when the table changed,
@@ -136,13 +137,13 @@ table() {
     "$work/closers.pages" > "$work/closers.json" || die "cannot read the PRs that closed the milestone's issues"
 
   # The open PRs that close one of its issues; the release's version PR, the open PR that names the
-  # plan issue ("Part of #N") and closes no issue, the highest-numbered of several, as a list of one
-  # or none (agent-squad #384); and the latest verdict on each.
+  # plan issue ("Part of #N") and closes no issue on purpose, the highest-numbered of several, as a
+  # list of one or none (agent-squad #384, #461); and the latest verdict on each.
   jq -c -L "$here" --slurpfile issues "$work/issues.json" 'include "squad-steps";
     [$issues[0][].number] as $ours | map(select(any(closes[]; IN($ours[]))))' "$work/open-prs.json" > "$work/prs.json" \
     || die "cannot read the open pull requests"
   jq -c -L "$here" --argjson plan_issue "$(jq .number <<<"$plan")" 'include "squad-steps";
-    map(select(closes == [] and any(.body // "" | scan("(?i)\\bpart of #([0-9]+)"); .[0] | tonumber == $plan_issue)))
+    map(select(closes_on_purpose == [] and any(.body // "" | scan("(?i)\\bpart of #([0-9]+)"); .[0] | tonumber == $plan_issue)))
     | sort_by(.number) | .[-1:]' "$work/open-prs.json" > "$work/version-pr.json" \
     || die "cannot read the open pull requests"
   : > "$work/verdicts.jsonl"
@@ -198,6 +199,13 @@ table() {
              elif $v.verdict == "APPROVED" then "approved" else "changes requested" end)
           + " (`\(.headRefOid[0:7])`), \(ci)"),
          next: (if $step.owner == "requested" then $step.short else "\($step.owner): \($step.short)" end)};
+    # The version PR: as any open PR, and with each issue that GitHub links it to, which its merge
+    # would close, named, and its author'"'"'s next step to unlink it (agent-squad #461).
+    def version_cells:
+      pr_cells as $cells | (stray_links | map("#\(.)") | join(", ")) as $stray
+      | if $stray == "" then $cells
+        else {state: "\($cells.state), ⚠️ GitHub links it to \($stray), which its merge would close",
+              next: "\(author // "CTO"): unlink \($stray)"} end;
     # An issue: where it stands, and its next step and whose it is. Its open PR, the latest that
     # closes it, stands for it.
     def row:
@@ -237,7 +245,7 @@ table() {
          ($release.charter >= $release.version) as $versioned
          | [{step: "Version PR", who: "CTO"}
             + (if $versioned then {state: "✅ done", next: "—"}
-               elif $version_pr != null then $version_pr | pr_cells
+               elif $version_pr != null then $version_pr | version_cells
                elif $waits then {state: "⚪ \($waits)", next: "—"}
                else {state: "⚪ not started", next: "CTO: open it"} end),
             (if $no_read then $not_taken else

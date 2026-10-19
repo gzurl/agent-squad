@@ -10,6 +10,12 @@
 def closes: [(.closingIssuesReferences // [])[].number]
   + [.body // "" | scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?) #([0-9]+)") | .[0] | tonumber];
 
+# The issues a PR closes on purpose, as the squad writes it: "Closes #N" (SQUAD.md §3). GitHub links
+# a PR to an issue on other words too, such as "closed: #N" in a sentence, and its merge then closes
+# that issue all the same: such an issue is a stray link (agent-squad #461).
+def closes_on_purpose: [.body // "" | scan("\\bCloses #([0-9]+)") | .[0] | tonumber];
+def stray_links: closes_on_purpose as $meant | [(.closingIssuesReferences // [])[].number | select(IN($meant[]) | not)];
+
 # A PR's author: the role whose signature opens the first line of its description (SQUAD.md §6), in
 # bold or not; null when none does.
 def author: (.body // "" | split("\n") | first // "" | gsub("\\*\\*"; "")) as $line
