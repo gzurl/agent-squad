@@ -744,11 +744,12 @@ if errors="$(git -C "$wt" push -q origin HEAD:refs/heads/side-by-side 2>&1)" && 
 else
   fail "side by side, passing checks: said: $errors"
 fi
-#     Interrupted, the run stops every check, with what each started: each check here starts a
-#     sleep, writes its PID and its own to $lab/started, and waits. The second ignores SIGTERM, as
-#     its sleep then does, and gets SIGKILL; the third starts its sleep under job control, in a
-#     process group of its own, as the tests of an interruption do; the fourth ends at once, and
-#     leaves its sleep behind, with no parent but in its process group.
+#     Interrupted, hung up or terminated, as a signal to the run's process group, the run stops every
+#     check, with what each started (QA's finding on PR #472): each check here starts a sleep, writes
+#     its PID and its own to $lab/started, and waits. The second ignores SIGTERM, as its sleep then
+#     does, and gets SIGKILL; the third starts its sleep under job control, in a process group of its
+#     own, as the tests of an interruption do; the fourth ends at once, and leaves its sleep behind,
+#     with no parent but in its process group.
 printf '#!/usr/bin/env bash\nstarted=%q\n' "$lab/started" > "$lab/starts.sh"
 cat >> "$lab/starts.sh" <<'CHECK'
 case "${1:-}" in
@@ -764,22 +765,25 @@ chmod +x "$lab/starts.sh"
 starts="$(printf %q "$lab/starts.sh")"
 printf '# squad-checks: side by side\n%s\n%s deaf\n%s apart\n%s orphan\n' "$starts" "$starts" "$starts" "$starts" \
   > "$wt/.agent-squad-checks"
-rm -rf "$lab/started" "$lab/tmp" && mkdir -p "$lab/tmp"
-checks_in_background TMPDIR="$lab/tmp"
 # shellcheck disable=SC2317,SC2329 # run through within
 started_all() { [ "$(grep -c . "$lab/started" 2>/dev/null)" = 4 ]; }
-if within 50 started_all; then started=yes; else started=no; fi
-kill -INT -- "-$checker"
-wait "$checker"
-code=$?
 # shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
 stopped() { ! kill -0 $(cat "$lab/started") 2>/dev/null; }
-if [ "$started" = yes ] && [ "$code" -eq 130 ] && within 30 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
-  pass "interrupted, the run stops every check, with what each started, and leaves nothing in TMPDIR"
-else
-  fail "interrupted: all started: $started, exit $code, still running: $(if stopped; then echo none; else cat "$lab/started"; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
-fi
-# shellcheck disable=SC2046 # the same
-kill -KILL $(cat "$lab/started") 2>/dev/null
+for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
+  rm -rf "$lab/started" "$lab/tmp" && mkdir -p "$lab/tmp"
+  checks_in_background TMPDIR="$lab/tmp"
+  if within 50 started_all; then started=yes; else started=no; fi
+  kill "-${signal%%:*}" -- "-$checker"
+  wait "$checker"
+  code=$?
+  expected="${signal#*:}" how="${signal##*:}"
+  if [ "$started" = yes ] && [ "$code" -eq "${expected%%:*}" ] && within 30 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
+    pass "$how, the run stops every check, with what each started, and leaves nothing in TMPDIR"
+  else
+    fail "$how: all started: $started, exit $code, still running: $(if stopped; then echo none; else cat "$lab/started"; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
+  fi
+  # shellcheck disable=SC2046 # the same
+  kill -KILL $(cat "$lab/started") 2>/dev/null
+done
 
 exit "$status"

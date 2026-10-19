@@ -561,8 +561,8 @@ The fix goes to `main` first, and a backport carries it to the release branch.
 port, database or fixed file that two of them use. Add the line `# squad-checks: side by side` to
 `.agent-squad-checks`, and the pre-push gate starts them all at once. Each still gets its status
 line, the output of one that fails is shown once it ends, and the push is refused when any fails.
-Without that line they run one after another, and so they do under a release that does not know
-it, which reads it as a comment.
+A check run so must not read the terminal, which would stop it. Without that line they run one
+after another, and so they do under a release that does not know it, which reads it as a comment.
 
 **Does it collect anything about me?** No. Nothing in **agent-squad** calls home, and nothing
 about you or your project is sent anywhere. Each release is published as a GitHub Release with

@@ -93,7 +93,11 @@ else
     # shellcheck disable=SC2086 # the same
     kill -KILL -- $stopping "${pids[@]/#/-}" 2>/dev/null
   }
+  # Interrupted, hung up, as a closed terminal does, or terminated, the run stops every check first:
+  # in groups of their own, the checks get none of these signals themselves (QA's finding on PR
+  # #472). SIGKILL, which no trap catches, leaves them running.
   trap 'stop; exit 130' INT
+  trap 'stop; exit 129' HUP
   trap 'stop; exit 143' TERM
   for i in "${!commands[@]}"; do
     wait "${pids[$i]}"
