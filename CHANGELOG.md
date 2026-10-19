@@ -1,5 +1,19 @@
 # Changelog
 
+## v67 — 2026-10-20
+- **The pre-push checks keep the Mac awake while they run** (#458). On 2026-10-18 a push failed
+  because the Mac idle-slept during its checks: Claude Code keeps the machine awake only five
+  minutes at a time, which seems not to be renewed during one long command. `squad-checks.sh` now
+  holds `caffeinate -i` for as long as it runs, and lets go once it ends, however it ends. Off
+  macOS, the checks run as before.
+- **A reference to a third-party issue or PR counts as posting there** (#463). §6: GitHub copies a
+  reference written as `owner/repo#N`, or as its link, to the other repository's page, where
+  neither an edit nor a deletion removes it. So it needs the CEO's authorisation, as any post
+  outside does.
+- **The README shows the plan as GitHub renders it** (#466, the CEO's idea). The features list
+  names the squad's work on GitHub, and a screenshot of a plan issue follows it.
+- **Upgrading from v66:** nothing to do by hand. Restart the three sessions, since §6 changes.
+
 ## v66 — 2026-10-19
 - **A release branch is held as `main` is** (#441, reported by trivial-tape's CTO from its QA's
   finding; #446; and #450, found by QA in its review of PR #449). trivial-tape ships 0.15.2 from
