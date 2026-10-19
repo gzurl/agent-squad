@@ -29,7 +29,19 @@ zero=0000000000000000000000000000000000000000
 # spaces around a pattern, a carriage return among them, are dropped (agent-squad #446). The
 # declaration is read from the default branch's tip as last fetched, so that a push cannot lift it
 # with its own commit; when the tip holds none, from the working tree.
+# A push by URL names no remote, and git gives the URL as both arguments: the remote whose URL, or
+# push URL, it is stands for it, so that its default branch and its declaration hold as for a push
+# by its name (agent-squad #450). A URL that no remote has is taken as it is.
 remote="${1:-}"
+if ! git remote | grep -qxF -- "$remote"; then
+  urls="$(git config --get-regexp '^remote\..*\.(url|pushurl)$' 2>/dev/null)"
+  while read -r key value; do
+    [ "$value" = "${2:-}" ] || continue
+    key="${key#remote.}"
+    remote="${key%.*}"
+    break
+  done <<<"$urls"
+fi
 protected="$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null)"
 protected="${protected#"$remote"/}"
 [ -n "$protected" ] || protected=main
