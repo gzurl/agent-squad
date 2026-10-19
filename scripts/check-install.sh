@@ -127,7 +127,7 @@ check_reports() {
   code=$?
   failed="$(sed -n 's/^check: FAILED  \([^:]*\):.*/\1/p' <<<"$out" | LC_ALL=C sort)"
   if [ $# -eq 0 ]; then
-    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 13 ]
+    [ "$code" -eq 0 ] && [ -z "$failed" ] && [ "$(grep -c '^check: ok ' <<<"$out")" -eq 14 ]
   else
     [ "$code" -eq 1 ] && [ "$failed" = "$(printf '%s\n' "$@" | LC_ALL=C sort)" ]
   fi
@@ -1238,6 +1238,74 @@ cases_default_branch() {
     detached_at "$lab/new-project" "$lab/new-project/.agent-squad/worktrees/dev" main
 }
 
+# Case 16c.
+cases_ssh_keepalive() {
+  # 16c. A push keeps its ssh connection while its checks run (agent-squad #438): the installer sets
+  #      core.sshCommand to a keepalive in the project's .git/config, and says so; a second run
+  #      finds it there; --check fails without it. A core.sshCommand that the project or the
+  #      machine set is left as it is, and passes --check, and so is a GIT_SSH, which
+  #      core.sshCommand would override (QA's finding on PR #452). The uninstaller removes the
+  #      squad's keepalive, and leaves the project's own.
+  local keepalive="ssh -o ServerAliveInterval=30" target out code item
+  item="core.sshCommand keeps a push's ssh connection alive, or the project's own ssh is used"
+  target="$(new_project keepalive)" || exit 2
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  check "an install sets core.sshCommand to a keepalive in the project's .git/config, and says so" \
+    bash -c '[ "$(git -C "$1" config --local --get core.sshCommand)" = "$2" ] \
+      && grep -qF "install: ssh        set core.sshCommand to '\''$2'\'' in .git/config" <<<"$3"' _ "$target" "$keepalive" "$out"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  check "a second install finds it there" contains "$out" "install: ssh        core.sshCommand already keeps a push's ssh connection alive"
+  out="$("$install" --check "$target" 2>&1)"
+  check "and --check passes it" contains "$out" "check: ok      $item"
+  git -C "$target" config --local --unset core.sshCommand
+  out="$("$install" --check "$target" 2>&1)"
+  check "without it, --check fails the item, saying to install again" \
+    contains "$out" "check: FAILED  $item: core.sshCommand is not set, so a push whose checks take minutes can lose its connection; install again, which sets it"
+
+  target="$(new_project own-ssh)" || exit 2
+  git -C "$target" config --local core.sshCommand "ssh -i ~/.ssh/project_key"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  check "a project's own core.sshCommand is left as it is, saying so" \
+    bash -c '[ "$(git -C "$1" config --local --get core.sshCommand)" = "ssh -i ~/.ssh/project_key" ] \
+      && grep -qF "core.sshCommand is the project'\''s or this machine'\''s own (ssh -i ~/.ssh/project_key), so it is left as it is" <<<"$2"' _ "$target" "$out"
+  out="$("$install" --check "$target" 2>&1)"
+  check "and passes --check" contains "$out" "check: ok      $item"
+  out="$("$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" 2>&1)"
+  check "and the uninstaller leaves it" \
+    bash -c '[ "$(git -C "$1" config --local --get core.sshCommand)" = "ssh -i ~/.ssh/project_key" ] && ! grep -q "keepalive" <<<"$2"' _ "$target" "$out"
+
+  target="$(new_project machine-ssh)" || exit 2
+  printf '[core]\n\tsshCommand = ssh -o ServerAliveInterval=60\n' > "$lab/machine-ssh.gitconfig"
+  out="$(GIT_CONFIG_GLOBAL="$lab/machine-ssh.gitconfig" "$install" "$target" "$tag_a" 2>&1)"
+  check "this machine's core.sshCommand is left as it is, and none is set in .git/config" \
+    bash -c '! git -C "$1" config --local --get core.sshCommand >/dev/null && grep -qF "this machine'\''s own (ssh -o ServerAliveInterval=60)" <<<"$2"' _ "$target" "$out"
+
+  target="$(new_project own-git-ssh)" || exit 2
+  out="$(GIT_SSH=/usr/local/bin/plink "$install" "$target" "$tag_a" 2>&1)"
+  check "with GIT_SSH set, no core.sshCommand is set, which would override it, saying so" \
+    bash -c '! git -C "$1" config --get core.sshCommand >/dev/null \
+      && grep -qF "GIT_SSH names this machine'\''s own program (/usr/local/bin/plink), which core.sshCommand would override, so none is set" <<<"$2"' _ "$target" "$out"
+  out="$(GIT_SSH=/usr/local/bin/plink "$install" --check "$target" 2>&1)"
+  check "and --check passes with it" contains "$out" "check: ok      $item"
+
+  target="$(new_project locked-config)" || exit 2
+  : > "$target/.git/config.lock"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  rm -f "$target/.git/config.lock"
+  check "a .git/config that cannot be written makes the installer exit 1, saying so" \
+    bash -c '[ "$1" -eq 1 ] && grep -qF "install: ssh        NOT INSTALLED: cannot write core.sshCommand in .git/config; fix it and run again" <<<"$2" \
+      && ! git -C "$3" config --local --get core.sshCommand >/dev/null' _ "$code" "$out" "$target"
+
+  target="$(new_project removable-keepalive)" || exit 2
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  out="$("$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" 2>&1)"
+  code=$?
+  check "the uninstaller removes the squad's keepalive, saying so" \
+    bash -c '[ "$1" -eq 0 ] && ! git -C "$2" config --local --get core.sshCommand >/dev/null \
+      && grep -qF "uninstall: ssh        removed the keepalive from .git/config'\''s core.sshCommand" <<<"$3"' _ "$code" "$target" "$out"
+}
+
 # Case 16b.
 cases_unanswered() {
   # 16b. A call to the remote that never answers stops after SQUAD_GH_TIMEOUT seconds of wall-clock
@@ -2088,6 +2156,7 @@ groups=(
   cases_check_import
   cases_uncommitted
   cases_default_branch
+  cases_ssh_keepalive
   cases_unanswered
   cases_failure_paths
   cases_failure_installs

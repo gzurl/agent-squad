@@ -442,7 +442,8 @@ fi
 
 # 12. The release branches that .agent-squad-release-branches declares take a PR too (agent-squad
 #     #446). The declaration is read from main's tip as last fetched, here a list saved with CRLF,
-#     its comments and blank lines counting for nothing; so that a push whose own commit removes it
+#     its comments, blank lines and the spaces around a pattern counting for nothing (QA's finding
+#     on PR #449); so that a push whose own commit removes it
 #     is refused still. A branch that matches no pattern, and a tag whose commit a release branch on
 #     the remote holds, are not held. A list of comments only, or none, holds nothing; with none on
 #     main's tip, the working tree's counts. `declare_on_main <content>` pushes main with the list,
@@ -465,7 +466,7 @@ held_refused() {
 went_through() {
   if [ "$code" -eq 0 ] && [ "$(runs)" -gt "$runs_before" ]; then pass "$1"; else fail "$1: exit $code, said: $errors"; fi
 }
-declare_on_main '# the release branches\r\n\r\n  # an indented comment\r\nrelease/*\r\n' || exit 2
+declare_on_main '# the release branches\r\n\r\n  # an indented comment\r\n  release/*  \r\n' || exit 2
 runs_before="$(runs)"
 push_to HEAD:refs/heads/release/0.15
 code=$?
@@ -513,5 +514,27 @@ runs_before="$(runs)"
 push_to HEAD:refs/heads/release/0.18
 code=$?
 held_refused "with no list on main's tip, the working tree's counts" release/0.18
+
+# 13. After checks that passed and ran longer than SQUAD_LONG_CHECKS seconds, the gate's last line
+#     says that a broken pipe from git means the connection closed while they ran, and to push
+#     again (agent-squad #438); after quick ones it says nothing of the kind.
+printf '# the sandbox checks\n./records.sh\nsleep 2\n' > "$wt/.agent-squad-checks"
+runs_before="$(runs)"
+push_to HEAD:refs/heads/long-checks SQUAD_LONG_CHECKS=1
+code=$?
+if [ "$code" -eq 0 ] && [ "$(runs)" -gt "$runs_before" ] \
+  && grep -qE "^pre-push: the checks passed after [0-9]+ s; if git now fails with a broken pipe or exit 141, its connection to origin closed while they ran, as across a sleep: push again$" <<<"$errors"; then
+  pass "after long checks that passed, the gate says what a broken pipe would mean, and to push again"
+else
+  fail "after long checks: exit $code, said: $errors"
+fi
+push_to HEAD:refs/heads/long-checks
+code=$?
+if [ "$code" -eq 0 ] && ! grep -q "broken pipe" <<<"$errors"; then
+  pass "after checks within the default 120 s, it says nothing of it"
+else
+  fail "after quick checks: exit $code, said: $errors"
+fi
+printf '# the sandbox checks\n./records.sh\n' > "$wt/.agent-squad-checks"
 
 exit "$status"
