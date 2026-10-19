@@ -14,10 +14,7 @@
 # case branch, a `(` alone that opens a subshell, and a `done` or `)` followed only by redirections
 # or a `&`, such as `done < "$list"` or `) &` (agent-squad #246). Each of those counts only if it
 # ran. A line that ends with the comment `# coverage: excluded, <reason>` is not counted at all, and
-# the summary lists it with its reason: it is for a line that no test can reach sensibly. The kcov
-# that CI builds, with .github/kcov/bash-traces.patch, names on its error output, in each test's
-# log, every trace it did not count (agent-squad #454): such a line ran, so it counts as run, and
-# the summary lists it.
+# the summary lists it with its reason: it is for a line that no test can reach sensibly.
 #
 # Usage: ci-coverage.sh [--summary-only] <output directory>
 # It writes there summary.md, which CI adds to the job's summary: the total, one line per script,
@@ -80,11 +77,6 @@ done
 recorded=()
 while IFS= read -r file; do recorded+=("$file"); done < <(find "$out/runs" -name codecov.json)
 [ ${#recorded[@]} -gt 0 ] || { echo "ci-coverage: kcov recorded nothing in $out/runs" >&2; exit 1; }
-# The traces kcov did not count, as its error output names them in each test's log: one
-# {path, line} per line, which ran.
-missed="$(cat "$out"/runs/*.log 2>/dev/null \
-  | sed -n 's/^kcov: did not count a trace of \(.*\), line \([0-9][0-9]*\)$/\1 \2/p' \
-  | jq -Rs '[split("\n")[] | select(. != "") | capture("^(?<path>.*) (?<line>[0-9]+)$")] | unique')"
 
 # 2. Per script, across every test and every copy with the same lines: the lines kcov measures,
 #    and those that ran at least once. kcov writes a line's hits as a number, or as "hits/total".
@@ -179,25 +171,21 @@ if [ ${#unreadable[@]} -gt 0 ]; then
   exit 1
 fi
 printf '%s' "$records" \
-  | jq -s -r --arg root "$run_root" --arg failed "${failed[*]}" --argjson shape "$shape" --argjson missed "$missed" '
+  | jq -s -r --arg root "$run_root" --arg failed "${failed[*]}" --argjson shape "$shape" '
   def hits: if type == "number" then . else tostring | split("/")[0] | tonumber end;
   def basename: split("/") | last;
   def pct($r; $m): if $m == 0 then "not run" else "\($r * 1000 / $m | round / 10) %" end;
-  # path -> {line: ran?}, every test merged, and a line whose trace kcov did not count, ran.
+  # path -> {line: ran?}, every test merged.
   (map(.source as $source | .coverage | to_entries[] | .key |= $source + .) | group_by(.key)
    | map({key: .[0].key, value: (map(.value | with_entries(.value |= (hits > 0))) | reduce .[] as $m ({};
        reduce ($m | to_entries[]) as $l (.; .[$l.key] = ((.[$l.key] // false) or $l.value))))})
-   | from_entries
-   | reduce $missed[] as $m (.; if .[$m.path][$m.line] == null then . else .[$m.path][$m.line] = true end))
-  as $files
+   | from_entries) as $files
   | [$ARGS.positional[] as $script | ($root + "/" + $script) as $path
      | if $files[$path] == null then {script: $script, measured: 0, ran: 0}
        else ($files[$path] | keys) as $all
          | [$files | to_entries[] | select((.key | basename) == ($script | basename) and (.value | keys) == $all)]
            as $copies
          | [$all[] | . as $l | select(any($copies[]; .value[$l])) | tonumber] as $hit
-         | [$missed[] | . as $m | select(any($copies[]; .key == $m.path and .value[$m.line] != null))
-            | .line | tonumber] | unique as $uncounted
          | $shape[$script].continued as $continued | $shape[$script].empty as $empty
          | $shape[$script].excluded as $excluded
          # A line belongs to the statement that starts at the first line of its run of continued
@@ -214,15 +202,14 @@ printf '%s' "$records" \
          | {script: $script, measured: ($statements | length), copies: (($copies | length) - 1),
             ran: ([$statements[] | select(.ran)] | length),
             left_out: [.[] | select((.ran or (.multi | not)) | not) | .start],
-            excluded: $excluded, unrun: [$statements[] | select(.ran | not) | .start],
-            uncounted: $uncounted}
+            excluded: $excluded, unrun: [$statements[] | select(.ran | not) | .start]}
        end]
   | sort_by(if .measured == 0 then -1 else .ran / .measured end) as $rows
   | ($rows | map(.ran) | add) as $ran | ($rows | map(.measured) | add) as $all
   | ($rows | map(.left_out // [] | length) | add) as $left_out
   | "## Test coverage of the scripts",
   "",
-  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end) A line that kcov never records, though it runs (an empty case branch, a lone `(`, a `done` or `)` with only redirections or a `&` after it), counts only if it ran, and a line marked `# coverage: excluded, <reason>` does not count. A line whose trace kcov did not count, as its error output says, counts as run. The HTML report that kcov writes, in the `coverage` artifact, counts every line it measures and leaves the copies out, so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back from the records in that artifact.",
+  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end) A line that kcov never records, though it runs (an empty case branch, a lone `(`, a `done` or `)` with only redirections or a `&` after it), counts only if it ran, and a line marked `# coverage: excluded, <reason>` does not count. The HTML report that kcov writes, in the `coverage` artifact, counts every line it measures and leaves the copies out, so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back from the records in that artifact.",
   "",
   "| Script | Lines run | Lines measured | Coverage |",
   "|---|--:|--:|--:|",
@@ -233,12 +220,6 @@ printf '%s' "$records" \
   "<details><summary>The lines no test ran</summary>",
   "",
   ($rows[] | select((.unrun // []) != []) | "- `\(.script)`: \(.unrun | map(tostring) | join(", "))"),
-  "",
-  "</details>",
-  "",
-  "<details><summary>The lines that ran though kcov did not count their trace</summary>",
-  "",
-  ($rows[] | select((.uncounted // []) != []) | "- `\(.script)`: \(.uncounted | map(tostring) | join(", "))"),
   "",
   "</details>",
   "",

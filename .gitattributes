@@ -3,7 +3,6 @@
 /AGENTS.md export-ignore
 /CLAUDE.md export-ignore
 /.github/workflows export-ignore
-/.github/kcov export-ignore
 /.agent-squad-checks export-ignore
 /scripts/check-*.sh export-ignore
 /scripts/ci-*.sh export-ignore
