@@ -432,7 +432,8 @@ errors="$(cd "$wt" && printf 'refs/tags/v1 %s refs/tags/v1 %s\n' "$(git rev-pars
   | PATH="$lab/git-hang:$PATH" SQUAD_GH_TIMEOUT=1 "$playbook/.githooks/pre-push" origin "$lab/remote.git" 2>&1)"
 code=$?
 took=$((SECONDS - started))
-if [ "$code" -eq 1 ] && [ "$took" -le 5 ] \
+# Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
+if [ "$code" -eq 1 ] && [ "$took" -le 30 ] \
   && grep -qxF "pre-push: origin did not list its branches within 1 s, so every ref pushed counts as new code" <<<"$errors" \
   && grep -qF "refs/tags/v1 is not the checked-out commit" <<<"$errors" && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a remote that never lists its branches is stopped after the bound, saying so, and every ref counts as new code"

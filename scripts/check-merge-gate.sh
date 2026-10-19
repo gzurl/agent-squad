@@ -176,7 +176,8 @@ fi
 started=$SECONDS
 GATE_HANG=pr SQUAD_GH_TIMEOUT=1 run_gate
 took=$((SECONDS - started))
-if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 5 ] \
+# Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
+if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 30 ] \
   && [ "$err" = "gate: GitHub did not answer within 1 s, so a call was stopped"$'\n'"gate FAILED: cannot read PR #7" ] \
   && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a call that never answers stops the gate after its bound, exit 1, saying so, and is not left running"

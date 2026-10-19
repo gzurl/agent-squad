@@ -234,7 +234,8 @@ done
 started=$SECONDS
 GH_FAIL=conversation-hang SQUAD_GH_TIMEOUT=1 run 50
 took=$((SECONDS - started))
-if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 4 ] \
+# Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
+if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 30 ] \
   && [ "$err" = "squad-outside: GitHub did not answer within 1 s"$'\n'"squad-outside: cannot read the comments; nothing was listed" ] \
   && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a call that GitHub never answers is stopped after its bound: exit 1, saying so, and nothing left running"

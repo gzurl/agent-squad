@@ -301,7 +301,8 @@ hung_snapshot() {
 started=$SECONDS
 snapshot="$(hung_snapshot "$lab/bin-hang")"
 took=$((SECONDS - started))
-if [ "$(grep -cxF "(GitHub did not answer within 1 s)" <<<"$snapshot")" -eq 2 ] && [ "$took" -le 12 ] \
+# Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
+if [ "$(grep -cxF "(GitHub did not answer within 1 s)" <<<"$snapshot")" -eq 2 ] && [ "$took" -le 30 ] \
   && grep -q '^## Default branch' <<<"$snapshot"; then
   pass "a GitHub that never answers leaves the snapshot saying so, for PRs and issues, within seconds"
 else
