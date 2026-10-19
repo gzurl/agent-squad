@@ -18,8 +18,8 @@
 # it. While the version PR is open, its row shows it as an issue's row shows its
 # PR: the version PR names the plan issue ("Part of #N") and closes no issue (SQUAD.md §3,
 # agent-squad #384). One that GitHub links to an issue all the same, through words other than
-# "Closes #N", still shows there, with that issue named (agent-squad #461). Everything comes from GitHub, except the install, which comes from
-# .agent-squad/install.log of the main checkout.
+# "Closes #N", still shows there, with that issue named (agent-squad #461). Everything comes from
+# GitHub, except the install, which comes from .agent-squad/install.log of the main checkout.
 #
 # --update rewrites what lies between each plan issue's markers, and only when the table changed,
 # its time left out. Editing a description notifies nobody, and updates by several agents converge,
@@ -137,13 +137,15 @@ table() {
     "$work/closers.pages" > "$work/closers.json" || die "cannot read the PRs that closed the milestone's issues"
 
   # The open PRs that close one of its issues; the release's version PR, the open PR that names the
-  # plan issue ("Part of #N") and closes no issue on purpose, the highest-numbered of several, as a
-  # list of one or none (agent-squad #384, #461); and the latest verdict on each.
+  # plan issue ("Part of #N") and closes no issue, the highest-numbered of several, as a list of one
+  # or none (agent-squad #384), or that closes none on purpose though GitHub links it to one
+  # (agent-squad #461); and the latest verdict on each.
   jq -c -L "$here" --slurpfile issues "$work/issues.json" 'include "squad-steps";
     [$issues[0][].number] as $ours | map(select(any(closes[]; IN($ours[]))))' "$work/open-prs.json" > "$work/prs.json" \
     || die "cannot read the open pull requests"
   jq -c -L "$here" --argjson plan_issue "$(jq .number <<<"$plan")" 'include "squad-steps";
-    map(select(closes_on_purpose == [] and any(.body // "" | scan("(?i)\\bpart of #([0-9]+)"); .[0] | tonumber == $plan_issue)))
+    map(select((closes == [] or (closes_on_purpose == [] and stray_links != []))
+      and any(.body // "" | scan("(?i)\\bpart of #([0-9]+)"); .[0] | tonumber == $plan_issue)))
     | sort_by(.number) | .[-1:]' "$work/open-prs.json" > "$work/version-pr.json" \
     || die "cannot read the open pull requests"
   : > "$work/verdicts.jsonl"

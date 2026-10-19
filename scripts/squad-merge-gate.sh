@@ -5,8 +5,9 @@
 #   p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" &&
 #   head=$("$p/scripts/squad-merge-gate.sh" <pr>) && gh pr merge <pr> --squash --match-head-commit "$head"
 # cannot merge over an open thread, a stale verdict, a missing label or a second state label, a
-# needs-ceo label (agent-squad #283), an unsettled body-only finding, a red or absent CI, or a head that moved between the check and the
-# merge. Only the reviews and comments of the repository's owner, its organization's members and
+# needs-ceo label (agent-squad #283), an unsettled body-only finding, a red or absent CI, a PR that
+# names a plan issue but that GitHub links to an issue it does not close on purpose (agent-squad
+# #461), or a head that moved between the check and the merge. Only the reviews and comments of the repository's owner, its organization's members and
 # its collaborators count (agent-squad #160). When the PR is behind its base, it says what the
 # base changed since (agent-squad #64), and stops when the base changed a file the PR changes too,
 # until the author acknowledges that base with SQUAD_BEHIND_CHECKED (agent-squad #80).
@@ -91,6 +92,22 @@ unsettled="$(gh api --paginate --slurp "repos/$repo/issues/$pr/comments" \
       | length' 2>&1)" \
   || fail "${unsettled#jq: error (at <stdin>:*): }"
 [ "$unsettled" = "0" ] || fail "$unsettled body-only finding(s) without a Settled: line"
+
+# 3b. A PR that names a plan issue ("Part of #N"), as a release's version PR does (SQUAD.md §3),
+#     closes on purpose only what its description closes as "Closes #N". GitHub links a PR to an
+#     issue on other words too, such as "closed: #N" in a sentence, and the merge would close that
+#     issue all the same: the gate stops, naming each such issue (agent-squad #461). squad-steps.jq,
+#     beside this script, tells them apart, as for the plan's table. An answer without the links
+#     stops the gate too: one that cannot see them would let such a merge through.
+links="$(gh api graphql -f query="{repository(owner:\"$owner\",name:\"$name\"){pullRequest(number:$pr){body closingIssuesReferences(first:100){nodes{number}}}}}")" \
+  || fail "cannot read the issues that GitHub links PR #$pr to"
+stray="$(jq -r -L "$(dirname "$0")" 'include "squad-steps"; .data.repository.pullRequest
+    | if (.closingIssuesReferences.nodes | type) != "array" then error("no links in the answer") else . end
+    | {body, closingIssuesReferences: .closingIssuesReferences.nodes}
+    | if .body // "" | test("(?i)\\bpart of #[0-9]+") then stray_links | map("#\(.)") | join(", ") else "" end' \
+  <<<"$links" 2>/dev/null)" || fail "cannot read the issues that GitHub links PR #$pr to"
+[ -z "$stray" ] \
+  || fail "PR names a plan issue, and GitHub links it to $stray, which its description does not close with \"Closes #N\": the merge would close it. Reword the description so that GitHub links it to no such issue, then run the gate again"
 
 # 4. The PR carries the approved status label, and no other of the three state labels: with two, a
 #    reader cannot tell which is current (agent-squad #99). It carries no needs-ceo either: that

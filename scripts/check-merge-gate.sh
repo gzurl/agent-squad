@@ -42,8 +42,10 @@ fail() { echo "  FAILED  $1" >&2; status=1; }
 # of names, replaces the PR's labels, GATE_REVIEWS, a JSON array of reviews, replaces QA's approval
 # (a review bound to the head unless it names its commit_id), and GATE_COMMENTS and GATE_INLINE,
 # JSON arrays of bodies, are the PR's comments and its inline review comments. A comment given as
-# an object keeps the author_association it carries, or none; any other is the owner's. Files are
-# reported as GitHub does: a rename under its new name, with the old one as previous_filename.
+# an object keeps the author_association it carries, or none; any other is the owner's. GATE_LINKS,
+# a JSON array of numbers, is the issues GitHub links the PR to, none when unset, and
+# GATE_LINKS=unreadable answers without them. Files are reported as GitHub does: a rename under its
+# new name, with the old one as previous_filename.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -52,12 +54,13 @@ shift
 filter=""
 slurp=0
 endpoint=""
+query=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --jq) filter="$2"; shift 2 ;;
     --slurp) slurp=1; shift ;;
     --paginate) shift ;;
-    -f) shift 2 ;;
+    -f) query="${2#query=}"; shift 2 ;;
     *) endpoint="$1"; shift ;;
   esac
 done
@@ -70,7 +73,16 @@ changed() {
 }
 case "$endpoint" in
   graphql)
-    json='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":true}]}}}}}' ;;
+    case "$query" in
+      *closingIssuesReferences*)
+        if [ "${GATE_LINKS:-}" = unreadable ]; then
+          json="$(jq -n --arg body "${PR_BODY:-}" '{data: {repository: {pullRequest: {body: $body}}}}')"
+        else
+          json="$(jq -n --arg body "${PR_BODY:-}" --argjson links "${GATE_LINKS:-[]}" \
+            '{data: {repository: {pullRequest: {body: $body, closingIssuesReferences: {nodes: [$links[] | {number: .}]}}}}}')"
+        fi ;;
+      *) json='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":true}]}}}}}' ;;
+    esac ;;
   repos/o/r/pulls/7/reviews)
     approved='[{"body": "a review\n\nQA-VERDICT: APPROVED", "author_association": "OWNER"}]'
     json="$(jq --arg head "$head" '[.[] | .commit_id //= $head]' <<<"${GATE_REVIEWS:-$approved}")" ;;
@@ -403,6 +415,47 @@ else
 fi
 run_gate
 result_unchanged "the same PR on main, which the release branch's commit did not reach"
+
+# 1g. A PR that names a plan issue closes on purpose only what it closes as "Closes #N" (agent-squad
+#     #461): one that GitHub links to an issue all the same, as "closed: #428" in a sentence makes
+#     it, is stopped, exit 1, naming that issue, whether it is a version PR or one that also closes
+#     its own issue. A version PR that GitHub links to no issue, a task PR linked only to what it
+#     closes, and a PR that names no plan issue go through as before. An answer that lacks the
+#     links stops the gate. `linked <case> <description's last line> <links> [<expected reason>]`
+#     runs the gate with that description and those links, and expects the reason, or a pass.
+linked() {
+  local default="$PR_BODY"
+  export PR_BODY="$default"$'\n\n'"$2" GATE_LINKS="$3"
+  run_gate
+  export PR_BODY="$default"
+  unset GATE_LINKS
+  if [ -z "${4:-}" ]; then
+    result_unchanged "$1"
+  elif [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$err" = "gate FAILED: $4" ]; then
+    pass "$1: the gate fails, exit 1, saying so"
+  else
+    fail "$1: the gate exited $code, printed '$out', and said: $err"
+  fi
+}
+stray_reason() {
+  echo "PR names a plan issue, and GitHub links it to $1, which its description does not close with \"Closes #N\": the merge would close it. Reword the description so that GitHub links it to no such issue, then run the gate again"
+}
+version_pr="**👷🏼‍♂️[CTO]:** v65's version and CHANGELOG entry. Part of #431."
+export PR_BODY="$version_pr"
+linked "a version PR that GitHub links to no issue" "The milestone's issues are all closed." '[]'
+linked "a version PR that GitHub links to #428, through \"closed: #428\"" \
+  "The milestone's issues are all closed: #428 and #430." '[428]' "$(stray_reason "#428")"
+linked "a version PR that GitHub links to two issues, naming both" \
+  "The milestone's issues are all closed: #428 and #430." '[428, 430]' "$(stray_reason "#428, #430")"
+export PR_BODY="**👨🏼‍💻[DEV]:** Closes #7. Part of #431."
+linked "a task PR that names the plan, linked only to the issue it closes" "" '[7]'
+linked "a task PR that names the plan, linked also to #428" "It follows #428, now closed: #428." '[7, 428]' \
+  "$(stray_reason "#428")"
+export PR_BODY="**👨🏼‍💻[DEV]:** Closes #7."$'\n\n'"$pr_text"
+linked "a PR that names no plan issue, whatever GitHub links it to" "It fixes #428 too." '[7, 428]'
+export PR_BODY="$version_pr"
+linked "a version PR whose links GitHub's answer lacks" "" unreadable "cannot read the issues that GitHub links PR #7 to"
+export PR_BODY="**👨🏼‍💻[DEV]:** Closes #7."$'\n\n'"$pr_text"
 
 # 2. Behind, with no file in common: main gains a commit that touches README.md and other.txt and
 #    adds two files: `a`, which the description only seems to name ("a note"), and `notes`, which
