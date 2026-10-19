@@ -1279,6 +1279,15 @@ cases_ssh_keepalive() {
   check "this machine's core.sshCommand is left as it is, and none is set in .git/config" \
     bash -c '! git -C "$1" config --local --get core.sshCommand >/dev/null && grep -qF "this machine'\''s own (ssh -o ServerAliveInterval=60)" <<<"$2"' _ "$target" "$out"
 
+  target="$(new_project locked-config)" || exit 2
+  : > "$target/.git/config.lock"
+  out="$("$install" "$target" "$tag_a" 2>&1)"
+  code=$?
+  rm -f "$target/.git/config.lock"
+  check "a .git/config that cannot be written makes the installer exit 1, saying so" \
+    bash -c '[ "$1" -eq 1 ] && grep -qF "install: ssh        NOT INSTALLED: cannot write core.sshCommand in .git/config; fix it and run again" <<<"$2" \
+      && ! git -C "$3" config --local --get core.sshCommand >/dev/null' _ "$code" "$out" "$target"
+
   target="$(new_project removable-keepalive)" || exit 2
   "$install" "$target" "$tag_a" >/dev/null 2>&1
   out="$("$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" 2>&1)"
