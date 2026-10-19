@@ -68,9 +68,12 @@ run() {
   out="$("$latest" "$@" "$checkout" 2>&1)"
   code=$?
 }
-# `holds <jq filter>` passes when the file satisfies the filter, `now` being the time.
+# `holds <jq filter>` passes when the file satisfies the filter, `now` being the time, and $recent
+# the 30 s within which a time counts as now: room for a loaded machine, as under CI's kcov or with
+# every check running at once, and far from the hour and the day the cases tell apart (agent-squad
+# #468).
 # shellcheck disable=SC2317,SC2329 # invoked through check
-holds() { jq -e --argjson now "$(date +%s)" "$1" "$file" >/dev/null 2>&1; }
+holds() { jq -e --argjson now "$(date +%s)" --argjson recent 30 "$1" "$file" >/dev/null 2>&1; }
 
 # 1. No file: a check is due, gh is asked for o/r's latest Release, and the file holds its answer.
 rm -f "$file"
@@ -82,7 +85,7 @@ check "and a check asks gh for the upstream's latest Release, by its tag" \
   bash -c '[ "$(cat "$1")" = "api repos/o/r/releases/latest --jq .tag_name" ]' _ "$lab/gh.log"
 check "and says what it found" bash -c '[ "$1" -eq 0 ] && [ "$2" = "latest release: v50, checked now" ]' _ "$code" "$out"
 check "and writes the tag, checked and attempted now, in the board's format" \
-  holds 'keys == ["attemptedAt", "checkedAt", "tag"] and .tag == "v50" and (now - .checkedAt) < 5 and .attemptedAt == .checkedAt'
+  holds 'keys == ["attemptedAt", "checkedAt", "tag"] and .tag == "v50" and (now - .checkedAt) < $recent and .attemptedAt == .checkedAt'
 check "leaving no file of its own beside it" bash -c '[ "$(ls -A "$1")" = latest-release ]' _ "$checkout/.agent-squad"
 
 # 1b. Times later than now, as a clock that ran ahead leaves them, count as never (agent-squad #309).
@@ -96,7 +99,7 @@ done
 run
 check "and a run asks, and writes the time of now" \
   bash -c 'grep -q releases/latest "$1"' _ "$lab/gh.log"
-check "so that the next check is due a day after now, not after that future" holds '(now - .checkedAt) < 5'
+check "so that the next check is due a day after now, not after that future" holds '(now - .checkedAt) < $recent'
 
 # 2. Checked less than a day ago: nothing is due, and nothing is asked.
 for since in 100 $((day - 60)); do
@@ -115,7 +118,7 @@ run --due
 check "checked a day and a minute ago, a check is due" [ "$code" -eq 0 ]
 GH_ANSWER=v51 run
 check "and a run asks, and writes the newer tag" bash -c 'grep -q releases/latest "$1"' _ "$lab/gh.log"
-check "with the time of the check" holds '.tag == "v51" and (now - .checkedAt) < 5'
+check "with the time of the check" holds '.tag == "v51" and (now - .checkedAt) < $recent'
 
 # 2b. --now, as a session start runs it, asks whatever the last check's age (agent-squad #336): a
 #     minute after a check that worked, and right after a failed attempt, with a tag known or not.
@@ -126,7 +129,7 @@ now_asks() {
   GH_ANSWER=v51 run --now
   check "--now asks GitHub after $1, says what it found, and writes it" \
     bash -c '[ "$1" -eq 0 ] && [ "$2" = "latest release: v51, checked now" ] && grep -q releases/latest "$3"' _ "$code" "$out" "$lab/gh.log"
-  check "and the file holds v51, checked and attempted now" holds '.tag == "v51" and (now - .checkedAt) < 5 and .attemptedAt == .checkedAt'
+  check "and the file holds v51, checked and attempted now" holds '.tag == "v51" and (now - .checkedAt) < $recent and .attemptedAt == .checkedAt'
 }
 now_asks "a check a minute ago" '"v50"' 60 60
 now_asks "a failed attempt a minute ago" '"v50"' $((day + 60)) 60
@@ -139,7 +142,7 @@ known '"v50"' 60 60
 GH_FAILS=1 run --now
 check "a --now that fails keeps the tag and records the attempt" \
   bash -c '[ "$1" = "latest release: GitHub did not tell it; the next attempt is in an hour" ]' _ "$out"
-check "and its file still names v50, with the attempt now" holds '.tag == "v50" and (now - .attemptedAt) < 5'
+check "and its file still names v50, with the attempt now" holds '.tag == "v50" and (now - .attemptedAt) < $recent'
 
 # 3. A failure keeps the tag and its time, records the attempt, and waits an hour.
 known '"v50"' $((day + 60)) $((day + 60))
@@ -153,7 +156,7 @@ for answer in failed wrong empty two-words; do
   check "an answer that is $answer keeps the tag and when it was checked, and records the attempt now" \
     bash -c '[ "$1" -eq 0 ] && [ "$2" = "latest release: GitHub did not tell it; the next attempt is in an hour" ]' _ "$code" "$out"
   check "so that the file still names v50, and its attempt is now" \
-    holds '.tag == "v50" and (now - .checkedAt) > 86400 and (now - .attemptedAt) < 5'
+    holds '.tag == "v50" and (now - .checkedAt) > 86400 and (now - .attemptedAt) < $recent'
   known '"v50"' $((day + 60)) $((day + 60))
 done
 known '"v50"' $((day + 60)) 60
@@ -168,14 +171,19 @@ check "before any check has worked, a run says when GitHub was last asked" \
   bash -c '[ "$1" = "latest release: not known yet; GitHub was asked 0 h ago" ] && [ ! -e "$2" ]' _ "$out" "$lab/gh.log"
 
 # 4. A gh that takes longer than SQUAD_LATEST_TIMEOUT is stopped, and counts as a failure, which its
-#    line names (agent-squad #430).
+#    line names (agent-squad #430). Its gh would answer after 60 s; stopped after the 1 s bound, the
+#    run ends within 30 s, which a loaded machine leaves room for (agent-squad #468).
 known '"v50"' $((day + 60)) $((day + 60))
 started=$SECONDS
-SQUAD_LATEST_TIMEOUT=1 GH_SLEEP=5 run
-check "a gh that takes too long is stopped after the timeout, and counts as a failure, saying so" \
-  bash -c '[ $(($3 - $4)) -lt 4 ] && [ "$1" = "latest release: GitHub did not answer within 1 s; the next attempt is in an hour" ] && [ "$2" -eq 0 ]' \
-  _ "$out" "$code" "$SECONDS" "$started"
-check "and keeps the tag" holds '.tag == "v50" and (now - .attemptedAt) < 5 and (now - .checkedAt) > 86400'
+SQUAD_LATEST_TIMEOUT=1 GH_SLEEP=60 run
+took=$((SECONDS - started))
+if [ "$took" -le 30 ] && [ "$out" = "latest release: GitHub did not answer within 1 s; the next attempt is in an hour" ] \
+  && [ "$code" -eq 0 ]; then
+  pass "a gh that takes too long is stopped after the timeout, and counts as a failure, saying so"
+else
+  fail "a gh that takes too long: exit $code after $took s, said: $out"
+fi
+check "and keeps the tag" holds '.tag == "v50" and (now - .attemptedAt) < $recent and (now - .checkedAt) > 86400'
 check "and is not left running" bash -c '! kill -0 "$(cat "$1")" 2>/dev/null' _ "$lab/gh.pid"
 
 # 5. The attempt is written before gh answers, so that a session starting meanwhile asks nothing.
@@ -198,7 +206,7 @@ for content in 'not json' '["v50"]' '{} {}' '{"tag": "v50", "checkedAt": "today"
 done
 printf 'not json' > "$file"
 run
-check "and a check rewrites it in the board's format" holds '.tag == "v50" and (now - .checkedAt) < 5'
+check "and a check rewrites it in the board's format" holds '.tag == "v50" and (now - .checkedAt) < $recent'
 #    A tag that is not vN is no tag, even when its times say no check is due.
 known '"latest"' 100 100
 run
@@ -224,7 +232,7 @@ out="$("$alone/squad-latest.sh" "$checkout" 2>&1)"
 check "with no squad-install.sh beside it, it asks nothing and says why" \
   bash -c '[ "$1" = "latest release: cannot tell the upstream from $2/squad-install.sh; not checked" ] && [ ! -e "$3" ]' \
   _ "$out" "$alone" "$lab/gh.log"
-check "and records the attempt, so that it tries again in an hour" holds '.tag == "v50" and (now - .attemptedAt) < 5'
+check "and records the attempt, so that it tries again in an hour" holds '.tag == "v50" and (now - .attemptedAt) < $recent'
 
 # 8. Bad usage exits 2, and asks nothing.
 for args in "" "--due" "--now" "$checkout $checkout" "$lab/playbook"; do
