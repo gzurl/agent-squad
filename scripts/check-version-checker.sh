@@ -124,6 +124,13 @@ edit 's/What every agent relies on./What every agent relies on, always./'
 verdict
 fails "a change to §2's own text fails when the item names its child, §2.1" \
   "SQUAD.md's §2 changed since v1, but v2's Upgrading item does not name it"
+#    A line added alone makes a hunk that leaves its count out (QA's finding on PR #470).
+release "restart the sessions, since §2 changes."
+edit '/^Signatures.$/s/$/\
+In bold./'
+verdict
+fails "a single line added to §4 fails when the item names §2 only" \
+  "SQUAD.md's §4 changed since v1, but v2's Upgrading item does not name it"
 
 # 3. A line under an unnumbered heading is in the section above it, and an item of a numbered list
 #    right under a section's heading is a section, which the text after the list is not.
@@ -154,6 +161,13 @@ release "re-read §2.2 to §4."
 edit '/^Signatures.$/d; s/One account./One shared account./; s/2. \*\*Review\*\* before the merge./2. **Review** before every merge./'
 verdict
 passes "and changes to §2.2, §3.2 and §4 pass when it is §2.2 to §4"
+#    The item's lines are read as one, as an item wrapped at the margin needs: a range that the
+#    wrapping splits still covers its sections (QA's finding on PR #470).
+release "re-read the sections from §2.2
+  to §4."
+edit '/^Signatures.$/d; s/One account./One shared account./; s/2. \*\*Review\*\* before the merge./2. **Review** before every merge./'
+verdict
+passes "and so they do when the item's wrapping splits the range across two lines"
 
 # 5. An entry with no Upgrading item fails for every section that changed, saying it has none.
 release ""

@@ -58,10 +58,11 @@ if [ "$charter" -gt "$last" ]; then
     changed_lines
   } | awk '$1 != "changed" { at[$1 " " $2] = $3; next } { print at[$2 " " $3] }' | grep . | sort -u)"
 
-  # The Upgrading item of the newest entry, from its first line to the next item or entry, and the
+  # The Upgrading item of the newest entry, from its first line to the next item or entry, its
+  # lines joined, so that a range its wrapping splits reads whole (QA's finding on PR #470), and the
   # sections it names.
   item="$(awk '/^## v/ { n++ } n == 1' CHANGELOG.md \
-    | awk '/^- / { on = /^- \*\*Upgrading/ } /^## / { on = 0 } on')"
+    | awk '/^- / { on = /^- \*\*Upgrading/ } /^## / { on = 0 } on' | tr -s '\n ' '  ')"
   named=" $(grep -oE '§[0-9]+(\.[0-9]+)*' <<<"$item" | tr '\n' ' ')"
   # A range names each section between its ends, in the charter's order.
   order="$(sections new < SQUAD.md | awk '$3 != "" && $3 != last { print $3; last = $3 }')"
