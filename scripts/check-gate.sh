@@ -581,4 +581,96 @@ push_by "$lab/other.git" HEAD:refs/heads/main
 code=$?
 held_refused "and main is held" main
 
+# 15. The machine does not idle-sleep while the checks run (agent-squad #458): squad-checks.sh, as
+#     the gate runs it from the worktree, holds caffeinate on itself, and where there is none, runs
+#     its checks as before. Its check here waits for $lab/release, then exits with the status that
+#     file holds. `checks_in_background <PATH>` starts the run with that PATH, in a process group of
+#     its own, as a terminal's Ctrl-C finds it, with its PID in $checker and its errors in
+#     $lab/checks.err. `within <tenths> <command>...` passes once the command does, tried every
+#     tenth of a second, for at most that many tenths.
+# shellcheck disable=SC2016 # the command substitution is the check's own, run when it runs
+printf '#!/usr/bin/env bash\nuntil [ -e %q ]; do sleep 0.1; done\nexit "$(cat %q)"\n' \
+  "$lab/release" "$lab/release" > "$lab/waits.sh"
+chmod +x "$lab/waits.sh"
+list "$wt" "$(printf %q "$lab/waits.sh")"
+checks_in_background() {
+  set -m
+  (cd "$wt" && exec env PATH="$1" "$runner") </dev/null >/dev/null 2>"$lab/checks.err" &
+  checker=$!
+  set +m
+}
+within() {
+  local tenths="$1"
+  shift
+  until "$@"; do
+    tenths=$((tenths - 1))
+    [ "$tenths" -gt 0 ] || return 1
+    sleep 0.1
+  done
+}
+#     On every platform, a caffeinate ahead on PATH records how it was called: on the run itself,
+#     for as long as it runs.
+mkdir -p "$lab/stub"
+printf '#!/usr/bin/env bash\necho "$*" > %q\n' "$lab/caffeinated" > "$lab/stub/caffeinate"
+chmod +x "$lab/stub/caffeinate"
+echo 0 > "$lab/release"
+checks_in_background "$lab/stub:$PATH"
+wait "$checker"
+code=$?
+if [ "$code" -eq 0 ] && within 50 test -s "$lab/caffeinated" && [ "$(cat "$lab/caffeinated")" = "-i -w $checker" ]; then
+  pass "the checks hold caffeinate -i -w on their own run"
+else
+  fail "the checks with caffeinate on PATH: exit $code, caffeinate called with '$(cat "$lab/caffeinated" 2>/dev/null)', not '-i -w $checker'"
+fi
+#     Without caffeinate on PATH, the checks run as before, and say nothing more: each its line, and
+#     the exit status of one that failed. PATH holds only what the run needs.
+mkdir -p "$lab/bare"
+for tool in bash git; do ln -s "$(type -P "$tool")" "$lab/bare/$tool"; done
+list "$wt" 'true
+false'
+errors="$(cd "$wt" && PATH="$lab/bare" "$runner" </dev/null 2>&1)"
+code=$?
+if [ "$code" -eq 1 ] && [ "$errors" = "checks: running: true
+checks: running: false
+checks: summary
+  ok      true
+  FAILED  false (exit 1)" ]; then
+  pass "without caffeinate, the checks run as before, and a failing one fails the run"
+else
+  fail "without caffeinate: exit $code, said: $errors"
+fi
+list "$wt" "$(printf %q "$lab/waits.sh")"
+#     On macOS, pmset lists a PreventUserIdleSystemSleep that caffeinate holds on behalf of the run
+#     while it runs, and none once it has ended: passed, failed or interrupted. `held_for <pid>`
+#     passes while pmset lists it for that process, and `released <pid>` once neither the assertion
+#     nor its caffeinate is left.
+held_for() {
+  pmset -g assertions | awk -v pid="$1" '
+    /PreventUserIdleSystemSleep/ { idle = 1; next }
+    idle && $0 ~ "caffeinate asserting on behalf of Process ID " pid "[[:space:]]*$" { found = 1 }
+    { idle = 0 }
+    END { exit !found }'
+}
+released() { ! held_for "$1" && ! pgrep -fx "caffeinate -i -w $1" >/dev/null; }
+if command -v caffeinate >/dev/null && command -v pmset >/dev/null; then
+  for outcome in passed:0 failed:1 "been interrupted:130"; do
+    rm -f "$lab/release"
+    checks_in_background "$PATH"
+    if within 50 held_for "$checker"; then held=yes; else held=no; fi
+    case "$outcome" in
+      "been interrupted":*) kill -INT -- "-$checker" ;;
+      *) echo "${outcome#*:}" > "$lab/release" ;;
+    esac
+    wait "$checker"
+    code=$?
+    if [ "$held" = yes ] && [ "$code" -eq "${outcome#*:}" ] && within 30 released "$checker"; then
+      pass "pmset lists the run's PreventUserIdleSystemSleep while its checks run, and none once they have ${outcome%:*}"
+    else
+      fail "once the checks have ${outcome%:*}: held while they ran: $held, exit $code, released: $(released "$checker" && echo yes || echo no)"
+    fi
+  done
+else
+  echo "  note    no caffeinate and pmset here, as off macOS: the hold itself is checked on macOS only" >&2
+fi
+
 exit "$status"
