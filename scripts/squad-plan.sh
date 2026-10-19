@@ -12,14 +12,16 @@
 # squad-steps.jq, which the stall detector shares. Then the release's own steps: the CEO's read of
 # the README, which SQUAD.md §3 asks of a milestone that does not only fix things, shown as not taken
 # when the plan issue's description has a line, outside its markers, that starts with
-# "No README read:" and gives the reason (agent-squad #429), and, where the repository tracks
-# SQUAD.md with a Version: line, as the method's own repository does, and the milestone's title
-# starts with vN, the version PR before it, and the tag, the Release and the install here after
-# it. While the version PR is open, its row shows it as an issue's row shows its
+# "No README read:" and gives the reason (agent-squad #429), and as another role's when such a line
+# starts with "README read by:", names the role and gives the reason (agent-squad #462), and, where
+# the repository tracks SQUAD.md with a Version: line, as the method's own repository does, and the
+# milestone's title starts with vN, the version PR before it, and the tag, the Release and the
+# install here after it. While the version PR is open, its row shows it as an issue's row shows its
 # PR: the version PR names the plan issue ("Part of #N") and closes no issue (SQUAD.md §3,
 # agent-squad #384). One that GitHub links to an issue all the same, through words other than
 # "Closes #N", still shows there, with that issue named (agent-squad #461). Everything comes from
-# GitHub, except the install, which comes from .agent-squad/install.log of the main checkout.
+# GitHub, except the install, which comes from .agent-squad/install.log of the main checkout: a
+# release is installed once the last install brought it in or a later one (agent-squad #462).
 #
 # --update rewrites what lies between each plan issue's markers, and only when the table changed,
 # its time left out. Editing a description notifies nobody, and updates by several agents converge,
