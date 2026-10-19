@@ -34,12 +34,13 @@ zero=0000000000000000000000000000000000000000
 # by its name (agent-squad #450). A URL that no remote has is taken as it is.
 remote="${1:-}"
 if ! git remote | grep -qxF -- "$remote"; then
+  urls="$(git config --get-regexp '^remote\..*\.(url|pushurl)$' 2>/dev/null)"
   while read -r key value; do
     [ "$value" = "${2:-}" ] || continue
     key="${key#remote.}"
     remote="${key%.*}"
     break
-  done < <(git config --get-regexp '^remote\..*\.(url|pushurl)$' 2>/dev/null)
+  done <<<"$urls"
 fi
 protected="$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null)"
 protected="${protected#"$remote"/}"
