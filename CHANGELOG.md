@@ -12,6 +12,17 @@
   that names the PR it carries (`Backport of #M`), takes it to the release branch: §2.4, §3, §4.1,
   §4.2, §5 and §6 say so. BOOTSTRAP's row 6 protects the release branches on GitHub, and
   `templates/AGENTS.md` records them.
+- **A push whose checks take minutes reaches the remote over ssh** (#438, found by DEV on PR
+  #436). `git push` opens its ssh connection before the pre-push checks run. On 2026-10-18 the
+  connection was closed while it sat idle through 7 minutes of checks, so the push died of a
+  broken pipe once they had passed. The installer now sets `core.sshCommand` to
+  `ssh -o ServerAliveInterval=30` in the project's own `.git/config`. It leaves alone a
+  `core.sshCommand` that the project or the machine has set already, and a `GIT_SSH`, which it
+  would override. `--check` has an item for it, and the uninstaller removes it. After checks that
+  ran longer than `SQUAD_LONG_CHECKS` seconds, 120 by default, the gate's last line says that a
+  broken pipe from git then means the connection closed while they ran, and that the push should
+  be made again. With the keepalive, a push came through an 8-minute hook; without it, it died at
+  482 s.
 - **Upgrading from v65:** a project with release branches lists them in
   `.agent-squad-release-branches` and commits it to `main` through a PR, protects them on GitHub
   as `main` is (`BOOTSTRAP.md`, row 6), and records them in `AGENTS.md`. Then restart the three
