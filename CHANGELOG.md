@@ -1,5 +1,22 @@
 # Changelog
 
+## v66 — 2026-10-19
+- **A release branch is held as `main` is** (#441, reported by trivial-tape's CTO from its QA's
+  finding, and #446). trivial-tape ships 0.15.2 from `release/0.15` while `main` carries 0.16, and
+  the pre-push gate let a direct push to that branch through, since it held the default branch
+  alone. §2.3: a project lists the patterns of its release branches in
+  `.agent-squad-release-branches`, at its root, in the form of `.agent-squad-checks`. Only a PR
+  reviewed by QA changes a branch that matches, with the same exception as `main`. The pre-push
+  gate refuses a direct push to one, and reads the declaration from the default branch's tip, so
+  that a push cannot lift it with its own commit. A fix goes to `main` first, and a backport, a PR
+  that names the PR it carries (`Backport of #M`), takes it to the release branch: §2.4, §3, §4.1,
+  §4.2, §5 and §6 say so. BOOTSTRAP's row 6 protects the release branches on GitHub, and
+  `templates/AGENTS.md` records them.
+- **Upgrading from v65:** a project with release branches lists them in
+  `.agent-squad-release-branches` and commits it to `main` through a PR, protects them on GitHub
+  as `main` is (`BOOTSTRAP.md`, row 6), and records them in `AGENTS.md`. Then restart the three
+  sessions, since §2.3, §2.4, §3, §4 and §5 change.
+
 ## v65 — 2026-10-18
 - **A GitHub call that never answers ends, and the stall watch goes on** (#430, #437, and #439,
   found by QA in its review of PR #436). On 2026-10-18 a `/squad-watch` pass hung for 2 h 21 min
