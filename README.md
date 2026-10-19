@@ -44,6 +44,8 @@ each goal is.
   command.
 - 🏗️ **Built by its own squad,** which plans, writes and reviews every change.
 
+<p align="center"><img src="docs/images/plan.png" alt="A release's plan issue on GitHub: one row per issue, with its state and whose the next step is, then the release's own steps" width="800"></p>
+
 
 ### 👥 The team
 
@@ -266,8 +268,6 @@ changes whenever an agent changes the state of an issue or a pull request, and a
 same table. The plan issue also lists the release's issues as its sub-issues, up to the 100
 GitHub allows, with GitHub's bar of how many are done, and each of them names the plan issue as its
 parent.
-
-<p align="center"><img src="docs/images/plan.png" alt="A release's plan issue on GitHub: one row per issue, with its state and whose the next step is, then the release's own steps" width="800"></p>
 
 Whenever the CTO reports on the agents, during these commands or when you ask how they are doing,
 each agent gets a line of its own, always in the order CTO, DEV, QA, with an emoji for its state:
