@@ -552,6 +552,13 @@ you what it needs to know.
 holds `main`: only a PR that QA reviews changes them, and the pre-push gate refuses a direct push.
 The fix goes to `main` first, and a backport carries it to the release branch.
 
+**Can the checks before a push run side by side?** Yes, when they keep out of each other's way: no
+port, database or fixed file that two of them use. Add the line `# squad-checks: side by side` to
+`.agent-squad-checks`, and the pre-push gate starts them all at once. Each still gets its status
+line, the output of one that fails is shown once it ends, and the push is refused when any fails.
+Without that line they run one after another, and so they do under a release that does not know
+it, which reads it as a comment.
+
 **Does it collect anything about me?** No. Nothing in **agent-squad** calls home, and nothing
 about you or your project is sent anywhere. Each release is published as a GitHub Release with
 its package attached, which the installer downloads and checks against the SHA-256 GitHub
