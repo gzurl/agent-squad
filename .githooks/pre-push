@@ -117,4 +117,18 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   exit 1
 fi
 
-exec "$checks"
+# Checks that run for minutes can outlast the connection that git push opened before this gate
+# ran, as across a sleep, and git then dies of SIGPIPE once they pass, with nothing pushed; the
+# installer keeps the connection alive with core.sshCommand where it can (agent-squad #438). After
+# checks that passed and ran longer than SQUAD_LONG_CHECKS seconds (120 when unset, or not a whole
+# number above 0), the gate's last line says what such a failure means, and what to do.
+long="${SQUAD_LONG_CHECKS:-120}"
+[[ "$long" =~ ^[1-9][0-9]*$ ]] || long=120
+started=$SECONDS
+"$checks"
+passed=$?
+took=$((SECONDS - started))
+if [ "$passed" -eq 0 ] && [ "$took" -gt "$long" ]; then
+  echo "pre-push: the checks passed after $took s; if git now fails with a broken pipe or exit 141, its connection to $remote closed while they ran, as across a sleep: push again" >&2
+fi
+exit "$passed"

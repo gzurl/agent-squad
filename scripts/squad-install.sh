@@ -306,6 +306,13 @@ exec "$gate" "$@" <<<"$refs"
 SHIM
 )"
 
+# The keepalive on a push's ssh connection (agent-squad #438): git push opens its connection to the
+# remote before the pre-push gate runs the checks, and GitHub closes one that has been idle for
+# some minutes, so a push whose checks took that long died of SIGPIPE, though they passed. It is set
+# as core.sshCommand in the project's own .git/config, unless core.sshCommand is set already, by
+# the project or by the machine, which is then left as it is.
+ssh_keepalive="ssh -o ServerAliveInterval=30"
+
 # --check: one status line per item of the installation (agent-squad #36); it changes nothing in the
 # project.
 # `verdict <item> <why>` prints the item as ok when <why> is empty, as FAILED with <why> otherwise.
@@ -677,6 +684,13 @@ check_installation() {
   fi
   verdict "the worktrees' copies of the project's instructions are left out of every session" "$why"
 
+  # 15. A push keeps its ssh connection while its checks run (agent-squad #438): core.sshCommand is
+  #     the squad's keepalive, or one the project or the machine set.
+  why=""
+  [ -n "$(git -C "$project" config --get core.sshCommand 2>/dev/null)" ] \
+    || why="core.sshCommand is not set, so a push whose checks take minutes can lose its connection; install again, which sets it"
+  verdict "core.sshCommand keeps a push's ssh connection alive, or is the project's own" "$why"
+
   [ "$failed_items" -eq 0 ]
 }
 
@@ -1042,6 +1056,20 @@ else
   mkdir -p "$hooks_dir"
   printf '%s\n' "$shim" > "$hooks_dir/pre-push" && chmod +x "$hooks_dir/pre-push"
   say pre-push "wrote the shim"
+fi
+
+# 4b. The keepalive on a push's ssh connection (agent-squad #438), in the project's .git/config,
+#     unless core.sshCommand is set already, by the project or by the machine.
+ssh_command="$(git -C "$project" config --get core.sshCommand 2>/dev/null)"
+if [ "$ssh_command" = "$ssh_keepalive" ]; then
+  say ssh "core.sshCommand already keeps a push's ssh connection alive"
+elif [ -n "$ssh_command" ]; then
+  say ssh "core.sshCommand is the project's or this machine's own ($ssh_command), so it is left as it is"
+elif git -C "$project" config --local core.sshCommand "$ssh_keepalive" 2>/dev/null; then
+  say ssh "set core.sshCommand to '$ssh_keepalive' in .git/config, so that a push keeps its connection while its checks run"
+else
+  say ssh "NOT INSTALLED: cannot write core.sshCommand in .git/config; fix it and run again"
+  needs_decision=1
 fi
 
 # 5. GitHub templates, created from the playbook only when the project has none; the project owns

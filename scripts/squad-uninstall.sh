@@ -7,7 +7,8 @@
 #   is kept;
 # - the squad's commands in .claude/commands/, apart from one the project tracks;
 # - the pre-push shim, putting back the project's own pre-push, which the shim ran as
-#   pre-push.local;
+#   pre-push.local, and the squad's keepalive in .git/config's core.sshCommand, when it is still
+#   the squad's (agent-squad #438);
 # - the worktrees under .agent-squad/worktrees/, and .agent-squad/ itself. The compaction snapshots
 #   (handoff/), the review evidence (evidence/) and the token history (tokens.tsv) are records: they
 #   are kept in .agent-squad/, unless --records is given.
@@ -244,6 +245,14 @@ if [ -f "$hooks_dir/pre-push" ] && grep -q "agent-squad pre-push shim" "$hooks_d
     act rm -f "$hooks_dir/pre-push"
     say pre-push "$(did "removed the shim" "would remove the shim")"
   fi
+fi
+
+# 5b. The keepalive on a push's ssh connection, in .git/config, when core.sshCommand there is still
+#     the one the installer set (agent-squad #438): another one is the project's own.
+if [ "$(git -C "$project" config --local --get core.sshCommand 2>/dev/null)" = "ssh -o ServerAliveInterval=30" ]; then
+  found=true
+  act git -C "$project" config --local --unset core.sshCommand
+  say ssh "$(did "removed the keepalive from .git/config's core.sshCommand" "would remove the keepalive from .git/config's core.sshCommand")"
 fi
 
 # 6. The worktrees, then .agent-squad/, but for the records unless --records. A worktree git will

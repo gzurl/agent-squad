@@ -420,7 +420,7 @@ the main checkout, without `--resume`.
 you what would go and what would stay. When you say yes, it first merges a PR for what git tracks,
 then removes the rest. With no squad session open, run `.agent-squad/playbook/scripts/squad-uninstall.sh .` from
 the project's main checkout, with `--dry-run` first to see what it would do.
-- **What it removes:** what the installer wrote outside git. That is the hooks, the exclusion of the worktrees' instructions, the commands, the pre-push shim (your own pre-push goes back in place), the board's mods, the worktrees and `.agent-squad/`.
+- **What it removes:** what the installer wrote outside git. That is the hooks, the exclusion of the worktrees' instructions, the commands, the pre-push shim (your own pre-push goes back in place), the ssh keepalive in `.git/config`, the board's mods, the worktrees and `.agent-squad/`.
 - **What it keeps:** the squad's records (compaction snapshots, review evidence, token history), and what a worktree held that git ignores, such as a `.env`, which it moves into `.agent-squad/kept/`. `--records` removes them too.
 - **When it stops:** while a worktree holds work that is not committed or not pushed, it removes nothing.
 - **What it leaves:** a list of the tracked files the squad added, for the CTO to remove through a PR.
@@ -454,6 +454,8 @@ the installer touches only the files listed before it:
 │                                                   left out, next to your settings
 ├── .claude/commands/squad-*.md           ignored   the squad's commands
 ├── .git/hooks/pre-push                   in .git   runs the pre-push gate, after any hook you had
+├── .git/config                           in .git   core.sshCommand, an ssh keepalive, so that a push
+│                                                   outlasts long checks, unless you set your own
 └── .agent-squad/                         ignored
     ├── playbook/          the installed release: charter, scripts, templates, mods
     ├── .claude-plugin/    the project's marketplace for the squad's mods, which are playbook/mods/
