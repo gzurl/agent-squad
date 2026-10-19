@@ -89,9 +89,13 @@ check "a command that never ends is stopped after its bound: exit 124, saying so
   bash -c '[ "$1" -eq 124 ] && [ "$2" = "squad-timeout: bash did not end within 1 s, so it was stopped" ] && [ "$3" -ge 1 ] && [ "$3" -le 30 ]' \
   _ "$code" "$err" "$took"
 check "and it no longer runs" gone
+#    The SIGKILL's two seconds are timed against the plain stop just above, which kcov slows as much
+#    (QA's finding on PR #453).
+stopped_in=$took
 run 1 "${deaf[@]}"
 check "one that ignores SIGTERM gets SIGKILL two seconds later: exit 124" \
-  bash -c '[ "$1" -eq 124 ] && [ "$2" -ge 3 ] && [ "$2" -le 30 ]' _ "$code" "$took"
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 30 ] && [ $(($2 - $3)) -ge 1 ] && [ $(($2 - $3)) -le 4 ]' \
+  _ "$code" "$took" "$stopped_in"
 check "and it no longer runs" gone
 
 #    What the command started is stopped with it (agent-squad #439): a process it started, and the
