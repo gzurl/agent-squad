@@ -537,4 +537,47 @@ else
 fi
 printf '# the sandbox checks\n./records.sh\n' > "$wt/.agent-squad-checks"
 
+# 14. A push by URL is held as one by the name of the remote whose URL it is (agent-squad #450): a
+#     commit that removes the declaration main's tip holds is refused on a release branch, and the
+#     remote's default branch, here trunk, takes a PR, by URL as by name. A URL that no remote has
+#     is taken as it is: the working tree's declaration, and main. `push_by <url> <refspec>
+#     [<VAR=value>...]` commits something new in the worktree and pushes it by that URL.
+push_by() {
+  local url="$1" refspec="$2"
+  shift 2
+  echo "$refspec" >> "$wt/pushed.txt"
+  commit "$wt" "a push by URL to $refspec" >/dev/null
+  errors="$(env "$@" git -C "$wt" push -q "$url" "$refspec" 2>&1)"
+}
+declare_on_main 'release/*\n' || exit 2
+git -C "$wt" rm -q --ignore-unmatch .agent-squad-release-branches && git -C "$wt" commit -qm "the declaration removed" || exit 2
+runs_before="$(runs)"
+push_by "$lab/remote.git" HEAD:refs/heads/release/0.20
+code=$?
+held_refused "by URL, a push whose own commit removes the declaration is refused, as by the remote's name" release/0.20
+git -C "$work" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+runs_before="$(runs)"
+push_by "$lab/remote.git" HEAD:refs/heads/trunk
+code=$?
+held_refused "by URL, a push to the remote's default branch, trunk, is refused" trunk
+git -C "$work" symbolic-ref --delete refs/remotes/origin/HEAD
+#     A remote's push URL counts as its URL does: viapush fetches from one repository and pushes to
+#     another, whose default branch, as git records it for viapush, is trunk.
+git init -q --bare "$lab/fetched.git" && git init -q --bare "$lab/pushed.git" || exit 2
+git -C "$work" remote add viapush "$lab/fetched.git" && git -C "$work" config remote.viapush.pushurl "$lab/pushed.git" || exit 2
+git -C "$work" symbolic-ref refs/remotes/viapush/HEAD refs/remotes/viapush/trunk
+runs_before="$(runs)"
+push_by "$lab/pushed.git" HEAD:refs/heads/trunk
+code=$?
+held_refused "by a remote's push URL, its default branch is refused too" trunk
+git init -q --bare "$lab/other.git" || exit 2
+runs_before="$(runs)"
+push_by "$lab/other.git" HEAD:refs/heads/release/0.20
+code=$?
+went_through "by a URL that no remote has, the working tree's declaration, here none, counts"
+runs_before="$(runs)"
+push_by "$lab/other.git" HEAD:refs/heads/main
+code=$?
+held_refused "and main is held" main
+
 exit "$status"
