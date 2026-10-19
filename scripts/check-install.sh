@@ -1251,8 +1251,9 @@ cases_unanswered() {
   started=$SECONDS
   out="$(GH_HANG=tarball SQUAD_GH_TIMEOUT=1 "$install" "$target" "$tag_a" 2>&1)"
   code=$?
+  # Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
   check "a download that never answers is stopped after the bound: exit 2, within seconds" \
-    bash -c '[ "$1" -eq 2 ] && [ "$2" -le 10 ]' _ "$code" "$((SECONDS - started))"
+    bash -c '[ "$1" -eq 2 ] && [ "$2" -le 30 ]' _ "$code" "$((SECONDS - started))"
   check "saying so, and that nothing was installed" \
     bash -c 'grep -qxF "squad-timeout: gh did not end within 1 s, so it was stopped" <<<"$1" \
       && grep -qF "cannot download $2 from gzurl/agent-squad; the installed playbook is unchanged" <<<"$1"' _ "$out" "$tag_a"
@@ -1273,8 +1274,9 @@ exec %q "$@"
   started=$SECONDS
   out="$(PATH="$lab/git-hang:$PATH" SQUAD_GH_TIMEOUT=1 "$install" "$target" "$tag_a" 2>&1)"
   code=$?
+  # Within 45 s: well under the two stubs' 60 s, and over what CI's kcov takes (#447).
   check "a remote that never says its default branch is stopped after the bound: exit 1, within seconds" \
-    bash -c '[ "$1" -eq 1 ] && [ "$2" -le 15 ]' _ "$code" "$((SECONDS - started))"
+    bash -c '[ "$1" -eq 1 ] && [ "$2" -le 45 ]' _ "$code" "$((SECONDS - started))"
   check "and the installer says that it did not answer, instead of assuming main" \
     contains "$out" "branch     NOT KNOWN: origin/HEAD is not set and the remote did not answer within 1 s"
   check "and git no longer runs" bash -c 'while read -r pid; do ! kill -0 "$pid" 2>/dev/null || exit 1; done < "$1"' _ "$lab/hung-git.pid"

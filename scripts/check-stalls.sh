@@ -387,7 +387,8 @@ rm -f "$state"
 started=$SECONDS
 GH_FAIL=prs-hang SQUAD_GH_TIMEOUT=1 run 0 "${everyone_idle[@]}"
 took=$((SECONDS - started))
-if [ "$code" -eq 1 ] && [ -z "$out" ] && [ ! -e "$state" ] && [ "$took" -le 4 ] \
+# Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
+if [ "$code" -eq 1 ] && [ -z "$out" ] && [ ! -e "$state" ] && [ "$took" -le 30 ] \
   && [ "$err" = "squad-stalls: GitHub did not answer within 1 s"$'\n'"squad-stalls: cannot read the open pull requests; nothing was checked" ] \
   && ! kill -0 "$(cat "$lab/gh/hung.pid")" 2>/dev/null; then
   pass "a call that GitHub never answers is stopped after its bound: exit 1, saying so, and nothing left running"

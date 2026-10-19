@@ -379,7 +379,8 @@ for call in STUB_AUTH STUB_REPO STUB_TAGLIST STUB_CONTENTS; do
   run --tag v16 "$project"
   unset "$call" SQUAD_GH_TIMEOUT
   took=$((SECONDS - started))
-  if [ "$code" -eq 2 ] && [ "$took" -le 5 ] && [ ! -e "$lab/installer-args" ] && tmp_clean \
+  # Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
+  if [ "$code" -eq 2 ] && [ "$took" -le 30 ] && [ ! -e "$lab/installer-args" ] && tmp_clean \
     && [ "$err" = "install.sh: GitHub did not answer within 1 s, so nothing was installed; run this again" ] \
     && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
     pass "a call that never answers ($call=hang) stops after its bound, exit 2, saying so, leaving nothing"
