@@ -25,10 +25,11 @@
   broken pipe from git then means the connection closed while they ran, and that the push should
   be made again. With the keepalive, a push came through an 8-minute hook; without it, it died at
   482 s.
-- **Upgrading from v65:** a project with release branches lists them in
-  `.agent-squad-release-branches` and commits it to `main` through a PR, protects them on GitHub
-  as `main` is (`BOOTSTRAP.md`, row 6), and records them in `AGENTS.md`. Then restart the three
-  sessions, since §2.3, §2.4, §3, §4 and §5 change.
+- **Upgrading from v65:** the installer sets the keepalive itself, and says so. A project with
+  release branches lists them in `.agent-squad-release-branches` and commits the file to `main`
+  through a PR. It also protects them on GitHub as it protects `main` (`BOOTSTRAP.md`, row 6), and
+  records them in `AGENTS.md`. A project without release branches has nothing to do by hand. Then
+  restart the three sessions, since §2.3, §2.4, §3, §4, §5 and §6 change.
 
 ## v65 — 2026-10-18
 - **A GitHub call that never answers ends, and the stall watch goes on** (#430, #437, and #439,
