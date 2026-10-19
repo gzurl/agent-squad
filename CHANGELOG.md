@@ -29,7 +29,7 @@
   release branches lists them in `.agent-squad-release-branches` and commits the file to `main`
   through a PR. It also protects them on GitHub as it protects `main` (`BOOTSTRAP.md`, row 6), and
   records them in `AGENTS.md`. A project without release branches has nothing to do by hand. Then
-  restart the three sessions, since §2.3, §2.4, §3, §4, §5 and §6 change.
+  restart the three sessions, since §1, §2.3, §2.4, §3, §4, §5 and §6 change.
 
 ## v65 — 2026-10-18
 - **A GitHub call that never answers ends, and the stall watch goes on** (#430, #437, and #439,
