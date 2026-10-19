@@ -310,7 +310,8 @@ SHIM
 # remote before the pre-push gate runs the checks, and GitHub closes one that has been idle for
 # some minutes, so a push whose checks took that long died of SIGPIPE, though they passed. It is set
 # as core.sshCommand in the project's own .git/config, unless core.sshCommand is set already, by
-# the project or by the machine, which is then left as it is.
+# the project or by the machine, which is then left as it is, or GIT_SSH names a program of this
+# machine's own, which core.sshCommand would override (QA's finding on PR #452).
 ssh_keepalive="ssh -o ServerAliveInterval=30"
 
 # --check: one status line per item of the installation (agent-squad #36); it changes nothing in the
@@ -685,11 +686,12 @@ check_installation() {
   verdict "the worktrees' copies of the project's instructions are left out of every session" "$why"
 
   # 15. A push keeps its ssh connection while its checks run (agent-squad #438): core.sshCommand is
-  #     the squad's keepalive, or one the project or the machine set.
+  #     the squad's keepalive, or one the project or the machine set, or GIT_SSH names the machine's
+  #     own program.
   why=""
-  [ -n "$(git -C "$project" config --get core.sshCommand 2>/dev/null)" ] \
+  [ -n "$(git -C "$project" config --get core.sshCommand 2>/dev/null)" ] || [ -n "${GIT_SSH:-}" ] \
     || why="core.sshCommand is not set, so a push whose checks take minutes can lose its connection; install again, which sets it"
-  verdict "core.sshCommand keeps a push's ssh connection alive, or is the project's own" "$why"
+  verdict "core.sshCommand keeps a push's ssh connection alive, or the project's own ssh is used" "$why"
 
   [ "$failed_items" -eq 0 ]
 }
@@ -1065,6 +1067,8 @@ if [ "$ssh_command" = "$ssh_keepalive" ]; then
   say ssh "core.sshCommand already keeps a push's ssh connection alive"
 elif [ -n "$ssh_command" ]; then
   say ssh "core.sshCommand is the project's or this machine's own ($ssh_command), so it is left as it is"
+elif [ -n "${GIT_SSH:-}" ]; then
+  say ssh "GIT_SSH names this machine's own program ($GIT_SSH), which core.sshCommand would override, so none is set"
 elif git -C "$project" config --local core.sshCommand "$ssh_keepalive" 2>/dev/null; then
   say ssh "set core.sshCommand to '$ssh_keepalive' in .git/config, so that a push keeps its connection while its checks run"
 else

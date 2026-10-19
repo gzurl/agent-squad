@@ -1243,10 +1243,11 @@ cases_ssh_keepalive() {
   # 16c. A push keeps its ssh connection while its checks run (agent-squad #438): the installer sets
   #      core.sshCommand to a keepalive in the project's .git/config, and says so; a second run
   #      finds it there; --check fails without it. A core.sshCommand that the project or the
-  #      machine set is left as it is, and passes --check. The uninstaller removes the squad's
-  #      keepalive, and leaves the project's own.
+  #      machine set is left as it is, and passes --check, and so is a GIT_SSH, which
+  #      core.sshCommand would override (QA's finding on PR #452). The uninstaller removes the
+  #      squad's keepalive, and leaves the project's own.
   local keepalive="ssh -o ServerAliveInterval=30" target out code item
-  item="core.sshCommand keeps a push's ssh connection alive, or is the project's own"
+  item="core.sshCommand keeps a push's ssh connection alive, or the project's own ssh is used"
   target="$(new_project keepalive)" || exit 2
   out="$("$install" "$target" "$tag_a" 2>&1)"
   check "an install sets core.sshCommand to a keepalive in the project's .git/config, and says so" \
@@ -1278,6 +1279,14 @@ cases_ssh_keepalive() {
   out="$(GIT_CONFIG_GLOBAL="$lab/machine-ssh.gitconfig" "$install" "$target" "$tag_a" 2>&1)"
   check "this machine's core.sshCommand is left as it is, and none is set in .git/config" \
     bash -c '! git -C "$1" config --local --get core.sshCommand >/dev/null && grep -qF "this machine'\''s own (ssh -o ServerAliveInterval=60)" <<<"$2"' _ "$target" "$out"
+
+  target="$(new_project own-git-ssh)" || exit 2
+  out="$(GIT_SSH=/usr/local/bin/plink "$install" "$target" "$tag_a" 2>&1)"
+  check "with GIT_SSH set, no core.sshCommand is set, which would override it, saying so" \
+    bash -c '! git -C "$1" config --get core.sshCommand >/dev/null \
+      && grep -qF "GIT_SSH names this machine'\''s own program (/usr/local/bin/plink), which core.sshCommand would override, so none is set" <<<"$2"' _ "$target" "$out"
+  out="$(GIT_SSH=/usr/local/bin/plink "$install" --check "$target" 2>&1)"
+  check "and --check passes with it" contains "$out" "check: ok      $item"
 
   target="$(new_project locked-config)" || exit 2
   : > "$target/.git/config.lock"
