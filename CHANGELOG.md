@@ -12,8 +12,7 @@
   its tag.
 - **A push of a commit that a remote tag holds runs no check** (#482). The gate now lists the
   remote's tags as well as its branches, and asks git once whether any of them holds the pushed
-  commit: on this repository, 0.06 s where a test per tag took 1.99 s (QA's finding in its review
-  of PR #484).
+  commit, so the tags add no measurable time (QA's finding in its review of PR #484).
 - **Upgrading from v67:** nothing to do by hand. Restart the three sessions, since §2.3 changes.
 
 ## v67 — 2026-10-20
