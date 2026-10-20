@@ -556,7 +556,11 @@ you what it needs to know.
 `release/1.2`, while `main` carries the next release. List the pattern of your release branches in
 `.agent-squad-release-branches`, at the project's root, and the squad holds those branches as it
 holds `main`: only a PR that QA reviews changes them, and the pre-push gate refuses a direct push.
-The fix goes to `main` first, and a backport carries it to the release branch.
+The fix goes to `main` first, and a backport carries it to the release branch. To cut a release
+branch from its tag, check the tag out and push it as the new branch,
+`git push origin HEAD:refs/heads/release/1.2`: a push that creates a release branch at a commit
+that the remote's default branch, a release branch or a tag already holds needs no exception and
+runs no check. A commit that only a feature branch holds needs a PR first.
 
 **Can the checks before a push run side by side?** Yes, when they keep out of each other's way: no
 port, database or fixed file that two of them use. Add the line `# squad-checks: side by side` to

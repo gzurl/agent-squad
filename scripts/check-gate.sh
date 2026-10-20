@@ -434,7 +434,7 @@ code=$?
 took=$((SECONDS - started))
 # Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
 if [ "$code" -eq 1 ] && [ "$took" -le 30 ] \
-  && grep -qxF "pre-push: origin did not list its branches within 1 s, so every ref pushed counts as new code" <<<"$errors" \
+  && grep -qxF "pre-push: origin did not list its branches and tags within 1 s, so every ref pushed counts as new code" <<<"$errors" \
   && grep -qF "refs/tags/v1 is not the checked-out commit" <<<"$errors" && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a remote that never lists its branches is stopped after the bound, saying so, and every ref counts as new code"
 else
@@ -785,5 +785,72 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   # shellcheck disable=SC2046 # the same
   kill -KILL $(cat "$lab/started") 2>/dev/null
 done
+
+
+# 17. A release branch is cut with no exception at a commit that the remote's default branch, a
+#     held branch or a tag already holds, by a push that creates it (agent-squad #482): it runs no
+#     check, since it pushes no code. One cut from a tag whose branch was merged and deleted goes
+#     through too, as trivial-tape's release/0.15 was, and so does one from a lightweight tag. A
+#     commit that only a feature branch holds, which no PR has reviewed, is no such commit (QA's
+#     finding on PR #484). A push that moves a release branch that exists, or creates one at a
+#     commit the remote lacks, is refused as before. The worktree's committed list comes
+#     back first, and main declares release/*. `cut <case> <commit> <branch>` pushes that commit to
+#     the new branch, and passes when it went through with no check run and the remote has it.
+git -C "$wt" checkout -q -- .agent-squad-checks
+declare_on_main 'release/*\n' || exit 2
+cut() {
+  runs_before="$(runs)"
+  errors="$(git -C "$wt" push -q origin "$2:refs/heads/$3" 2>&1)"
+  code=$?
+  if [ "$code" -eq 0 ] && [ "$(runs)" = "$runs_before" ] \
+    && [ "$(git -C "$lab/remote.git" rev-parse -q --verify "refs/heads/$3")" = "$(git -C "$wt" rev-parse "$2^{commit}")" ]; then
+    pass "$1"
+  else
+    fail "$1: exit $code, said: $errors"
+  fi
+}
+cut "a release branch cut at main's tip goes through, with no exception and no check run" HEAD release/0.30
+#     A commit that only a tag holds: pushed to a branch that is then deleted, as a merged release
+#     branch is, with its tag left behind.
+echo "the release's last fix" >> "$wt/pushed.txt"
+commit "$wt" "the last fix of 0.31" >/dev/null
+fixed="$(git -C "$wt" rev-parse HEAD)"
+git -C "$wt" push -q origin HEAD:refs/heads/topic/0.31 2>/dev/null && git -C "$wt" tag -a v31 -m "0.31" "$fixed" \
+  && git -C "$wt" push -q origin refs/tags/v31 2>/dev/null && git -C "$wt" push -q origin :refs/heads/topic/0.31 2>/dev/null || exit 2
+if [ -z "$(git -C "$lab/remote.git" branch --contains "$fixed")" ]; then
+  cut "and so does one cut from a tag whose branch was merged and deleted" "v31^{commit}" release/0.31
+else
+  fail "the tag's commit is still on a branch of the remote, so the case proves nothing"
+fi
+#     A commit that only a lightweight tag holds, pushed the same way.
+echo "the last fix of 0.34" >> "$wt/pushed.txt"
+commit "$wt" "the last fix of 0.34" >/dev/null
+git -C "$wt" push -q origin HEAD:refs/heads/topic/0.34 2>/dev/null && git -C "$wt" tag v34 \
+  && git -C "$wt" push -q origin refs/tags/v34 2>/dev/null && git -C "$wt" push -q origin :refs/heads/topic/0.34 2>/dev/null || exit 2
+cut "and so does one cut from a lightweight tag" v34 release/0.34
+#     A commit that only a feature branch holds.
+echo "a feature no PR has reviewed" >> "$wt/pushed.txt"
+commit "$wt" "an unreviewed feature" >/dev/null
+git -C "$wt" push -q origin HEAD:refs/heads/feature/x 2>/dev/null || exit 2
+runs_before="$(runs)"
+errors="$(git -C "$wt" push -q origin HEAD:refs/heads/release/0.33 2>&1)"
+code=$?
+held_refused "a release branch cut at a commit only a feature branch holds is refused" release/0.33
+runs_before="$(runs)"
+errors="$(git -C "$wt" push -q origin "$fixed:refs/heads/release/0.30" 2>&1)"
+code=$?
+held_refused "a push that moves a release branch that exists, to a commit the remote holds, is refused" release/0.30
+runs_before="$(runs)"
+push_to HEAD:refs/heads/release/0.32
+code=$?
+held_refused "and so is one that creates a release branch at a commit the remote lacks" release/0.32
+#     The remote's default branch, here trunk, which it does not have yet, takes an exception even
+#     at a commit the remote holds.
+git -C "$work" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+runs_before="$(runs)"
+errors="$(git -C "$wt" push -q origin "$fixed:refs/heads/trunk" 2>&1)"
+code=$?
+held_refused "and so is one that creates the default branch, at a commit the remote holds" trunk
+git -C "$work" symbolic-ref --delete refs/remotes/origin/HEAD
 
 exit "$status"
