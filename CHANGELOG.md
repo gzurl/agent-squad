@@ -30,7 +30,8 @@
   until the next daily check. `/squad-update` and `/squad-upgrade` now refresh it.
 - **A dry run of the uninstaller copies nothing** (#473). The uninstaller runs from a temporary
   copy of itself, and it made that copy even for a dry run, a refusal or bad usage. It now makes
-  it only when it removes something. That also ends a race that left CI's coverage report short.
+  it only when it removes something. With CI's kcov now writing its reports at the end, that ends
+  a race that left the coverage report short.
 - **The README shows the plan as GitHub renders it** (#466, the CEO's idea). The features list
   names the squad's work on GitHub, and a screenshot of a plan issue follows it.
 - **Upgrading from v66:** nothing to do by hand. A project that wants its checks side by side adds
