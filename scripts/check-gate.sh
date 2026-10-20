@@ -584,14 +584,21 @@ held_refused "and main is held" main
 # 15. The machine does not idle-sleep while the checks run (agent-squad #458): squad-checks.sh, as
 #     the gate runs it from the worktree, holds caffeinate on itself, and where there is none, runs
 #     its checks as before. Its check here leaves $lab/waiting as it starts, waits for
-#     $lab/release, then exits with the status that file holds. `checks_in_background
-#     [<VAR=value>...]` starts the run with those variables, in a process group of its own, as a
-#     terminal's Ctrl-C finds it, with its PID in $checker and its errors in $lab/checks.err.
-#     `within <tenths> <command>...` passes once the command does, tried every tenth of a second, for
-#     at most that many tenths.
-# shellcheck disable=SC2016 # the command substitution is the check's own, run when it runs
-printf '#!/usr/bin/env bash\ntouch %q\nuntil [ -e %q ]; do sleep 0.1; done\nexit "$(cat %q)"\n' \
-  "$lab/waiting" "$lab/release" "$lab/release" > "$lab/waits.sh"
+#     $lab/release, then exits with the status that file holds. It is one perl process, which starts
+#     no command: a bash loop of `sleep` outlives a SIGINT that lands as one of them ends normally,
+#     since bash then takes the signal as handled, and a loaded machine widens that moment enough
+#     to hold the run (agent-squad #490). `checks_in_background [<VAR=value>...]` starts the run
+#     with those variables, in a process group of its own, as a terminal's Ctrl-C finds it, with
+#     its PID in $checker and its errors in $lab/checks.err. `within <tenths> <command>...` passes
+#     once the command does, tried every tenth of a second, for at most that many tenths.
+cat > "$lab/waits.sh" <<WAITS
+#!/usr/bin/env perl
+open(my \$mark, '>', q{$lab/waiting}) or die "waits.sh: \$!\\n";
+close \$mark;
+select(undef, undef, undef, 0.1) until -e q{$lab/release};
+open(my \$release, '<', q{$lab/release}) or die "waits.sh: \$!\\n";
+exit((<\$release> // 0) + 0);
+WAITS
 chmod +x "$lab/waits.sh"
 list "$wt" "$(printf %q "$lab/waits.sh")"
 checks_in_background() {
