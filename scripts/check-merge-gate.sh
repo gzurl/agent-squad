@@ -438,7 +438,7 @@ linked() {
   fi
 }
 stray_reason() {
-  echo "PR names a plan issue, and GitHub links it to $1, which its description does not close with \"Closes #N\": the merge would close it. Reword the description so that GitHub links it to no such issue, then run the gate again"
+  echo "PR names a plan issue, and GitHub links it to $1, which its description does not close with \"Closes #N\": the merge would close it. Write \"Closes #N\" for an issue the PR means to close, reword the rest so that GitHub links it to none of them, then run the gate again"
 }
 version_pr="**👷🏼‍♂️[CTO]:** v65's version and CHANGELOG entry. Part of #431."
 export PR_BODY="$version_pr"
@@ -451,6 +451,10 @@ export PR_BODY="**👨🏼‍💻[DEV]:** Closes #7. Part of #431."
 linked "a task PR that names the plan, linked only to the issue it closes" "" '[7]'
 linked "a task PR that names the plan, linked also to #428" "It follows #428, now closed: #428." '[7, 428]' \
   "$(stray_reason "#428")"
+#     A task PR that closes its own issue in other words than "Closes #N" is told to write them: it
+#     would close its issue, which it means to (agent-squad #475).
+export PR_BODY="**👨🏼‍💻[DEV]:** Fixes #7. Part of #431."
+linked "a task PR that closes its issue as \"Fixes #7\" is told to write \"Closes #N\"" "" '[7]' "$(stray_reason "#7")"
 export PR_BODY="**👨🏼‍💻[DEV]:** Closes #7."$'\n\n'"$pr_text"
 linked "a PR that names no plan issue, whatever GitHub links it to" "It fixes #428 too." '[7, 428]'
 export PR_BODY="$version_pr"

@@ -107,7 +107,7 @@ stray="$(jq -r -L "$(dirname "$0")" 'include "squad-steps"; .data.repository.pul
     | if .body // "" | test("(?i)\\bpart of #[0-9]+") then stray_links | map("#\(.)") | join(", ") else "" end' \
   <<<"$links" 2>/dev/null)" || fail "cannot read the issues that GitHub links PR #$pr to"
 [ -z "$stray" ] \
-  || fail "PR names a plan issue, and GitHub links it to $stray, which its description does not close with \"Closes #N\": the merge would close it. Reword the description so that GitHub links it to no such issue, then run the gate again"
+  || fail "PR names a plan issue, and GitHub links it to $stray, which its description does not close with \"Closes #N\": the merge would close it. Write \"Closes #N\" for an issue the PR means to close, reword the rest so that GitHub links it to none of them, then run the gate again"
 
 # 4. The PR carries the approved status label, and no other of the three state labels: with two, a
 #    reader cannot tell which is current (agent-squad #99). It carries no needs-ceo either: that

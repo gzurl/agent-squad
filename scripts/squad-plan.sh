@@ -202,12 +202,13 @@ table() {
           + " (`\(.headRefOid[0:7])`), \(ci)"),
          next: (if $step.owner == "requested" then $step.short else "\($step.owner): \($step.short)" end)};
     # The version PR: as any open PR, and with each issue that GitHub links it to, which its merge
-    # would close, named, and its author'"'"'s next step to unlink it (agent-squad #461).
+    # would close, named, and its author'"'"'s next step: to close on purpose, as "Closes #N", what it
+    # means to close, and to unlink the rest (agent-squad #461, #475).
     def version_cells:
       pr_cells as $cells | (stray_links | map("#\(.)") | join(", ")) as $stray
       | if $stray == "" then $cells
         else {state: "\($cells.state), ⚠️ GitHub links it to \($stray), which its merge would close",
-              next: "\(author // "CTO"): unlink \($stray)"} end;
+              next: "\(author // "CTO"): Closes #N if meant, else unlink \($stray)"} end;
     # An issue: where it stands, and its next step and whose it is. Its open PR, the latest that
     # closes it, stands for it.
     def row:

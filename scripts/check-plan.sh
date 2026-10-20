@@ -478,20 +478,21 @@ expect_version "a draft version PR while an issue is still open: the row shows t
 check "whose reviews are not read" bash -c '! grep -q "pulls/20/reviews" "$1"' _ "$CALLS"
 
 # 5a. A version PR that GitHub links to an issue all the same, through words other than "Closes #N",
-#     is shown, not dropped, its row naming each such issue and its author's step to unlink it
-#     (agent-squad #461); one with an issue it closes on purpose stays that issue's PR.
+#     is shown, not dropped (agent-squad #461), its row naming each such issue and its author's step:
+#     to close it as "Closes #N" if meant, or else unlink it (agent-squad #475). One with an issue it
+#     closes on purpose stays that issue's PR.
 world && upstream 54 && plan_issue 10
 issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
 open_pr 20 "**👷🏼‍♂️[CTO]:** Part of #10. The milestone's issues are all closed: #1." 1 aaaaaaa1111 pass
 expect_version "a version PR that GitHub links to #1, through \"closed: #1\": shown, naming #1" \
-  "| 2 | Version PR | CTO | 👀 PR #20 in review (\`aaaaaaa\`), CI ✅, ⚠️ GitHub links it to #1, which its merge would close | CTO: unlink #1 |"
+  "| 2 | Version PR | CTO | 👀 PR #20 in review (\`aaaaaaa\`), CI ✅, ⚠️ GitHub links it to #1, which its merge would close | CTO: Closes #N if meant, else unlink #1 |"
 open_pr 21 "**👷🏼‍♂️[CTO]:** Part of #10. It also covers #1 and #2, now closed: #1, #2." "" bbbbbbb2222 pass
 jq '(.[] | select(.number == 21) | .closingIssuesReferences) = [{number: 1}, {number: 2}]' "$W/prs.json" > "$W/new" && mv "$W/new" "$W/prs.json"
 expect_version "linked to two issues, the highest-numbered version PR names both" \
-  "| 2 | Version PR | CTO | 👀 PR #21 in review (\`bbbbbbb\`), CI ✅, ⚠️ GitHub links it to #1, #2, which its merge would close | CTO: unlink #1, #2 |"
+  "| 2 | Version PR | CTO | 👀 PR #21 in review (\`bbbbbbb\`), CI ✅, ⚠️ GitHub links it to #1, #2, which its merge would close | CTO: Closes #N if meant, else unlink #1, #2 |"
 open_pr 22 "**👨🏼‍💻[DEV]:** Closes #1. Part of #10." 1 ccccccc3333 pass
 expect_version "a PR that closes #1 on purpose and names the plan is not the version PR" \
-  "| 2 | Version PR | CTO | 👀 PR #21 in review (\`bbbbbbb\`), CI ✅, ⚠️ GitHub links it to #1, #2, which its merge would close | CTO: unlink #1, #2 |"
+  "| 2 | Version PR | CTO | 👀 PR #21 in review (\`bbbbbbb\`), CI ✅, ⚠️ GitHub links it to #1, #2, which its merge would close | CTO: Closes #N if meant, else unlink #1, #2 |"
 
 # 5b. A PR on a release branch, which GitHub does not link to the issue it closes, shows on that
 #     issue's row as any other, from the "Closes #N" of its description (agent-squad #446).
