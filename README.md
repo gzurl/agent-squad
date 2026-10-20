@@ -366,7 +366,8 @@ is each session's record in `.agent-squad/sessions/`, the release that session l
 `/squad-resume` reads. The latest release, which the
 board's notice names, is checked by the squad's hooks and scripts instead. A session start always
 asks GitHub, however recent the last check: a new session, a resumed one, a `/restart` or a
-`/clear`, though not a compaction. Otherwise they check once a day in a session that stays open,
+`/clear`, though not a compaction. So do `/squad-update` and `/squad-upgrade`, so that the notice
+names the release they report. Otherwise they check once a day in a session that stays open,
 and when the CTO runs `/squad-resume` or `/squad-watch`, never twice within a day, nor more than
 once an hour while GitHub cannot be reached.
 After an upgrade, restart the three sessions, with `/restart` in each, to load the new board;
@@ -556,6 +557,13 @@ you what it needs to know.
 `.agent-squad-release-branches`, at the project's root, and the squad holds those branches as it
 holds `main`: only a PR that QA reviews changes them, and the pre-push gate refuses a direct push.
 The fix goes to `main` first, and a backport carries it to the release branch.
+
+**Can the checks before a push run side by side?** Yes, when they keep out of each other's way: no
+port, database or fixed file that two of them use. Add the line `# squad-checks: side by side` to
+`.agent-squad-checks`, and the pre-push gate starts them all at once. Each still gets its status
+line, the output of one that fails is shown once it ends, and the push is refused when any fails.
+A check run so must not read the terminal, which would stop it. Without that line they run one
+after another, and so they do under a release that does not know it, which reads it as a comment.
 
 **Does it collect anything about me?** No. Nothing in **agent-squad** calls home, and nothing
 about you or your project is sent anywhere. Each release is published as a GitHub Release with

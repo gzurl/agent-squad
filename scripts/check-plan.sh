@@ -368,6 +368,19 @@ expect_steps "installed here: every step done" \
 "| 2 | Version PR | CTO | ✅ done | — |
 | 3 | README read | CEO | ✅ done | — |
 | 4 | Tag, Release, install here | CTO | ✅ done | — |"
+#    A later release's install brings this one in, and the row names it (agent-squad #462).
+printf '2026-10-14 09:00 v55 -> v56\n' >> "$project/.agent-squad/install.log"
+expect_steps "installed by a later release, v56: done, naming it" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ✅ done | — |
+| 4 | Tag, Release, install here | CTO | ✅ done, installed by v56 | — |"
+echo '[{"tag_name": "v54"}]' > "$W/releases.json"
+expect_steps "and with its Release not published, the install is still done, by v56" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ✅ done | — |
+| 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ✅ by v56 | CTO: publish the Release |"
+echo '[{"tag_name": "v54"}, {"tag_name": "v55"}]' > "$W/releases.json"
+printf '2026-10-14 09:00 v55 -> v56\n' > "$project/.agent-squad/install.log"
 check "with the header counting the issues closed, the plan issue left out" \
   bash -c '[[ "$(head -1 <<<"$1")" == *" · 1 of 1 issues closed · "* ]]' _ "$out"
 
@@ -416,19 +429,71 @@ expect_steps "after the markers too, its pipe escaped" \
 | 3 | README read | CEO | ➖ not taken: a fix \\| no rule | — |
 | 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
 
+# 4c. A README read that the CEO gives another role (agent-squad #462): a line of the plan issue's
+#     description, outside its markers, that starts with "README read by:", names the role, then
+#     gives the reason. The row is that role's, with the reason, while it waits for the version PR,
+#     then while the role reads it, then once the release is tagged; in a project, while issues are
+#     open, then once they are closed. Until the tag, it waits for that role's OK (QA's finding on
+#     PR #476). A line with no role, no reason, or no blank or ,:; after the role is no such line,
+#     and a release that takes no read says so whatever names a reader.
+world && upstream 54
+issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
+plan_issue 10
+plan_body $'The plan of v55.\n\nREADME read by: QA, as the CEO asked on 2026-10-19'
+expect_steps "given to QA, the version PR not merged: QA's row waits for it, with the reason" \
+"| 2 | Version PR | CTO | ⚪ not started | CTO: open it |
+| 3 | README read | QA | ⚪ waits for the version PR; QA reads it: as the CEO asked on 2026-10-19 | — |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for QA's OK | CTO: tag it, on QA's OK |"
+upstream 55
+expect_steps "the version PR merged: QA reads it" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | QA | ⏳ QA reads it: as the CEO asked on 2026-10-19 | QA: read it |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for QA's OK | CTO: tag it, on QA's OK |"
+echo '[{"ref": "refs/tags/v55"}]' > "$W/refs.json"
+expect_steps "tagged: done by QA" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | QA | ✅ done by QA: as the CEO asked on 2026-10-19 | — |
+| 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ⚪ | CTO: publish the Release |"
+echo '[]' > "$W/refs.json"
+plan_body 'README read by: CEO, as planned'
+expect_steps "a line that names the CEO keeps the tag waiting for the CEO's OK" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ⏳ CEO reads it: as planned | CEO: read it |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+for text in 'README read by: someone, as the CEO asked' 'README read by: QA' 'Note: README read by: QA, as the CEO asked' \
+  "README read by: QA's review of the version PR, as the CEO asked"; do
+  plan_body "$text"
+  expect_steps "'$text' is no such line: the CEO's row" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+done
+plan_body $'No README read: it only fixes things\nREADME read by: QA, as the CEO asked'
+expect_steps "a release that takes no read says so, whoever is named to read it" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
+| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
+world
+issue 1 open "Open" "👨🏼‍💻 owner:dev"
+plan_issue 10 && plan_body 'README read by: CTO: the CEO is away'
+expect_steps "a project, an issue open: the CTO's row waits for it, with the reason" \
+  "| 2 | README read | CTO | ⚪ waits for #1; CTO reads it: the CEO is away | — |"
+set_issue 1 '.state = "closed"'
+expect_steps "and every issue closed: the CTO reads it" "| 2 | README read | CTO | ⏳ CTO reads it: the CEO is away | CTO: read it |"
+
 # 5. The release's version PR (agent-squad #384), upstream: the open PR whose description names the
 #    plan issue ("Part of #10") and that closes no issue. None of these is it, each numbered above
 #    it so that the highest-numbered would be one of them: a PR that names the plan issue and closes
-#    an issue of the milestone, which is that issue's PR; one that names it and that GitHub links to
-#    an issue outside the milestone, which its description does not name; one that names #100; and
-#    one that names another issue. Then the version PR in review, with changes requested, approved,
-#    and a second one above it, whose description says "part of"; once SQUAD.md has the milestone's
-#    version, done while one is still open; and a draft while an issue is still open.
+#    an issue of the milestone, which is that issue's PR; one that names it and says it fixes an
+#    issue, which GitHub does not link; one that names #100; and one that names another issue. Then
+#    the version PR in review, with changes requested, approved, and a second one above it, whose
+#    description says "part of"; once SQUAD.md has the milestone's version, done while one is still
+#    open; and a draft while an issue is still open.
 world && upstream 54 && plan_issue 10
 issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
 issue 2 open "Second" "👨🏼‍💻 owner:dev" "👀 status:in-review"
 open_pr 30 "**👨🏼‍💻[DEV]:** Closes #2, part of #10." 2 bbbbbbb2222 pass
-open_pr 31 "**👨🏼‍💻[DEV]:** Part of #10." 99 ccccccc3333 pass
+open_pr 31 "**👨🏼‍💻[DEV]:** Part of #10. It fixes #99." "" ccccccc3333 pass
 open_pr 32 "**👷🏼‍♂️[CTO]:** Part of #100." "" ddddddd4444 pass
 open_pr 33 "**👷🏼‍♂️[CTO]:** Part of #2." "" eeeeeee5555 pass
 run
@@ -476,6 +541,22 @@ open_pr 20 "**👷🏼‍♂️[CTO]:** Part of #10." "" aaaaaaa1111 none draft
 expect_version "a draft version PR while an issue is still open: the row shows the draft" \
   "| 2 | Version PR | CTO | 👀 PR #20 draft (\`aaaaaaa\`), no CI | CTO: finish the draft |"
 check "whose reviews are not read" bash -c '! grep -q "pulls/20/reviews" "$1"' _ "$CALLS"
+
+# 5a. A version PR that GitHub links to an issue all the same, through words other than "Closes #N",
+#     is shown, not dropped, its row naming each such issue and its author's step to unlink it
+#     (agent-squad #461); one with an issue it closes on purpose stays that issue's PR.
+world && upstream 54 && plan_issue 10
+issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
+open_pr 20 "**👷🏼‍♂️[CTO]:** Part of #10. The milestone's issues are all closed: #1." 1 aaaaaaa1111 pass
+expect_version "a version PR that GitHub links to #1, through \"closed: #1\": shown, naming #1" \
+  "| 2 | Version PR | CTO | 👀 PR #20 in review (\`aaaaaaa\`), CI ✅, ⚠️ GitHub links it to #1, which its merge would close | CTO: unlink #1 |"
+open_pr 21 "**👷🏼‍♂️[CTO]:** Part of #10. It also covers #1 and #2, now closed: #1, #2." "" bbbbbbb2222 pass
+jq '(.[] | select(.number == 21) | .closingIssuesReferences) = [{number: 1}, {number: 2}]' "$W/prs.json" > "$W/new" && mv "$W/new" "$W/prs.json"
+expect_version "linked to two issues, the highest-numbered version PR names both" \
+  "| 2 | Version PR | CTO | 👀 PR #21 in review (\`bbbbbbb\`), CI ✅, ⚠️ GitHub links it to #1, #2, which its merge would close | CTO: unlink #1, #2 |"
+open_pr 22 "**👨🏼‍💻[DEV]:** Closes #1. Part of #10." 1 ccccccc3333 pass
+expect_version "a PR that closes #1 on purpose and names the plan is not the version PR" \
+  "| 2 | Version PR | CTO | 👀 PR #21 in review (\`bbbbbbb\`), CI ✅, ⚠️ GitHub links it to #1, #2, which its merge would close | CTO: unlink #1, #2 |"
 
 # 5b. A PR on a release branch, which GitHub does not link to the issue it closes, shows on that
 #     issue's row as any other, from the "Closes #N" of its description (agent-squad #446).

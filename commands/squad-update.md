@@ -18,8 +18,10 @@ and send DEV and QA nothing.
    `.agent-squad/install.log` and the first line of
    `.agent-squad/playbook/scripts/squad-install.sh --check .`. Then read the latest release, the
    highest `vN` tag upstream, compared as numbers:
-   `gh api repos/<upstream>/git/matching-refs/tags/v --jq '.[].ref'`. If the project already runs
-   it, tell the CEO so in one line and stop.
+   `gh api repos/<upstream>/git/matching-refs/tags/v --jq '.[].ref'`. Run
+   `.agent-squad/playbook/scripts/squad-latest.sh --now .` too, so that the squad board's notice
+   names the same release (agent-squad #477). If the project already runs it, tell the CEO so in
+   one line and stop.
 2. **What the upgrade would change.** Read the latest release's `CHANGELOG.md`
    (`gh api -H 'Accept: application/vnd.github.raw' 'repos/<upstream>/contents/CHANGELOG.md?ref=<tag>'`),
    every entry above the version the project runs. Summarise it for the CEO, in the CEO's
