@@ -1043,12 +1043,12 @@ cases_check_gate() {
   # interrupted at a state, not after a delay: as soon as the sandbox's directory exists, and once it
   # holds its repositories. Two wrappers make both states last: a mktemp that waits between creating a
   # directory and printing its name (the window in which a cleanup that learns the name from mktemp
-  # has nothing to remove, or removes TMPDIR itself), and a git whose push waits. Each waits half a
-  # minute, which the interruption cuts short, so that a loaded machine finds the state in time
-  # (agent-squad #498).
+  # has nothing to remove, or removes TMPDIR itself), and a git whose push waits half a minute, which
+  # the interruption cuts short, so that a loaded machine finds the state in time (agent-squad #498).
+  # The mktemp waits a second only: it holds every directory the run makes so, before the sandbox.
   real_mktemp="$(command -v mktemp)" real_git="$(command -v git)"
   mkdir -p "$lab/slow"
-  printf '#!/usr/bin/env bash\ndir="$(%q "$@")" || exit\nsleep 30\necho "$dir"\n' "$real_mktemp" > "$lab/slow/mktemp"
+  printf '#!/usr/bin/env bash\ndir="$(%q "$@")" || exit\nsleep 1\necho "$dir"\n' "$real_mktemp" > "$lab/slow/mktemp"
   printf '#!/usr/bin/env bash\n[ "${3:-}" = push ] && sleep 30\nexec %q "$@"\n' "$real_git" > "$lab/slow/git"
   chmod +x "$lab/slow/mktemp" "$lab/slow/git"
   # `sandboxes` lists the gate's sandboxes in the test's TMPDIR.
