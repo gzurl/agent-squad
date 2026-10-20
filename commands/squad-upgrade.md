@@ -20,7 +20,8 @@ Work from the main checkout. The upstream repository is the one named on the `up
    `.agent-squad/install.log` and the first line of
    `.agent-squad/playbook/scripts/squad-install.sh --check .`. Then read the release tags upstream,
    the `vN` tags compared as numbers: `gh api repos/<upstream>/git/matching-refs/tags/v --jq '.[].ref'`.
-   With nothing after the command, the release to install is the latest. A release the CEO named
+   Run `.agent-squad/playbook/scripts/squad-latest.sh --now .` too, so that the squad board's
+   notice names the latest release (agent-squad #477). With nothing after the command, the release to install is the latest. A release the CEO named
    must be `v` followed by digits, and one of those tags; anything else, tell the CEO so in one line
    and stop. If the project already runs the release to install, tell the CEO so in one line and
    stop. A named release older than the one the project runs is installed too, since the CEO named
