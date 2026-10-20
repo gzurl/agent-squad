@@ -158,12 +158,24 @@ fi
 #    tests take `test` from their world.ts, which gives each one LIMIT_MS, and none from the kit,
 #    whose five seconds a loaded machine outlasts. A copy of the board whose tests are that
 #    world.ts, its limit cut to a second, and one test that never ends, shows that the time holds.
+#    The test files are those the kit runs: every *.test.ts and *.test.tsx under the board's
+#    folder. Each is read with its lines joined, so that an import over several lines is read
+#    whole, and takes `test` from the kit when it imports the kit's namespace, or names `test` in
+#    the braces of an import from it, with either quotes and any spacing (QA's finding on PR #492).
 board="$root/mods/squad-board/tests"
-kit="$(cd "$board" && grep -lE "^import \{([^}]*[ ,])?test[ ,][^}]*\} from 'claude-code/testing'" ./*.test.ts | tr '\n' ' ')"
-if [ -z "$kit" ]; then
-  pass "every board test takes test from world.ts, which gives it its time limit"
-else
+files="$(cd "$root/mods/squad-board" && find . -type f \( -name '*.test.ts' -o -name '*.test.tsx' \) | sort)"
+from_kit="[[:space:]]*from[[:space:]]*['\"]claude-code/testing['\"]"
+kit="$(while IFS= read -r file; do
+  [ -z "$file" ] || tr '\n' ' ' <"$root/mods/squad-board/$file" \
+    | grep -qE "import[[:space:]]*(\*[[:space:]]*as[[:space:]]+[[:alnum:]_\$]+|\{([^}]*[{,[:space:]])?test([[:space:],][^}]*)?\})$from_kit" \
+    && echo "$file"
+done <<<"$files" | tr '\n' ' ')"
+if [ -z "$files" ]; then
+  fail "the board has no test file, so none could be checked for its time limit"
+elif [ -n "$kit" ]; then
   fail "board tests that take test from the kit, with its five seconds, not from world.ts: $kit"
+else
+  pass "every board test file ($(wc -l <<<"$files" | tr -d ' ')) takes test from world.ts, which gives it its time limit"
 fi
 cp -R "$root/mods/squad-board" "$lab/endless" && rm -rf "$lab/endless/tests" && mkdir "$lab/endless/tests" \
   && sed -E 's/^export const LIMIT_MS = [0-9_]+$/export const LIMIT_MS = 1_000/' "$board/world.ts" > "$lab/endless/tests/world.ts" \
