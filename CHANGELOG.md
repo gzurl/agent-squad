@@ -19,7 +19,8 @@
 - **A version PR that GitHub links to an issue is pointed out** (#461). On v65, "are all closed:
   #428" in a version PR's evidence made GitHub link it to #428, and the plan's *Version PR* row
   dropped it without a word. The row now shows such a PR and names each stray link, and the merge
-  gate stops a PR that names a plan issue and has one.
+  gate stops a PR that names a plan issue and has one. Both say to write `Closes #N` for an issue
+  the PR means to close, and to reword the rest (#475, found by QA in its review of PR #474).
 - **The plan's table shows an install by a later release, and a delegated README read** (#462).
   A release that a later one brought in shows its install as done, naming that release. §3: a
   line of the plan issue's description that starts with `README read by:`, and names the role and
@@ -27,6 +28,9 @@
 - **The squad board names the release `/squad-update` reported** (#477, found by the CEO). The
   command read the latest release from GitHub, but left the board's notice offering an older one
   until the next daily check. `/squad-update` and `/squad-upgrade` now refresh it.
+- **A dry run of the uninstaller copies nothing** (#473). The uninstaller runs from a temporary
+  copy of itself, and it made that copy even for a dry run, a refusal or bad usage. It now makes
+  it only when it removes something. That also ends a race that left CI's coverage report short.
 - **The README shows the plan as GitHub renders it** (#466, the CEO's idea). The features list
   names the squad's work on GitHub, and a screenshot of a plan issue follows it.
 - **Upgrading from v66:** nothing to do by hand. A project that wants its checks side by side adds
