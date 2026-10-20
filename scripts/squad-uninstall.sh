@@ -16,9 +16,10 @@
 # remote branch holds, it refuses, names them, and removes nothing. What a worktree holds that git
 # ignores, such as a .env or a run's output, is moved aside into .agent-squad/kept/<worktree>/, a
 # rename on the same disk, and kept like the records (agent-squad #263, QA's review of PR #288). It never touches a tracked
-# file: it lists, for the CTO to remove through a PR, the tracked files the squad added. It runs
-# from a copy of itself, so that removing the playbook it lives in does not cut it short, and a
-# second run finds nothing left to remove.
+# file: it lists, for the CTO to remove through a PR, the tracked files the squad added. Once its
+# checks pass, a run that removes things goes on from a copy of itself, so that removing the
+# playbook it lives in does not cut it short; a dry run, a refusal and bad usage make no copy, since
+# they remove nothing. A second run finds nothing left to remove.
 #
 # Usage: squad-uninstall.sh [--dry-run] [--records] <project main checkout>
 #   --dry-run says what it would do, and changes nothing. --records removes the records too.
@@ -34,16 +35,11 @@ jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 usage() { sed -n 's/^# Usage: /usage: /p' "$0" >&2; exit 2; }
 die() { echo "squad-uninstall: $*" >&2; exit 2; }
 
-# 0. Run from a copy, named as this script is, in a directory of its own, removed at the end.
-if [ -z "${SQUAD_UNINSTALL_COPY:-}" ]; then
-  copy_dir="${TMPDIR:-/tmp}"
-  copy_dir="$(mktemp -d "${copy_dir%/}/squad-uninstall.XXXXXX")" || die "cannot copy itself to a temporary directory"
-  cp "$0" "$copy_dir/squad-uninstall.sh" || { rm -rf "$copy_dir"; die "cannot copy itself to a temporary directory"; }
-  SQUAD_UNINSTALL_COPY="$copy_dir" exec bash "$copy_dir/squad-uninstall.sh" "$@"
-fi
-trap 'rm -rf "$SQUAD_UNINSTALL_COPY"' EXIT
+# The copy that a run goes on from removes itself at the end (step 1c).
+[ -z "${SQUAD_UNINSTALL_COPY:-}" ] || trap 'rm -rf "$SQUAD_UNINSTALL_COPY"' EXIT
 
 dry_run=false records=false
+arguments=("$@")
 while [ $# -gt 1 ]; do
   case "$1" in
     --dry-run) dry_run=true ;;
@@ -106,6 +102,17 @@ if [ "${#in_the_way[@]}" -gt 0 ]; then
   for reason in "${in_the_way[@]}"; do say refused "$reason"; done
   echo "squad-uninstall: nothing was removed; commit and push that work, or set it aside, then run again" >&2
   exit 1
+fi
+
+# 1c. A run that removes things goes on from a copy, named as this script is, in a directory of
+#     its own, which removes itself at the end; it repeats the checks above, which change nothing.
+#     A dry run, a refusal and bad usage make none: a copy that lives a moment is also one kcov,
+#     reading the traces of CI's coverage, can find gone as it opens it (agent-squad #473).
+if ! $dry_run && [ -z "${SQUAD_UNINSTALL_COPY:-}" ]; then
+  copy_dir="${TMPDIR:-/tmp}"
+  copy_dir="$(mktemp -d "${copy_dir%/}/squad-uninstall.XXXXXX")" || die "cannot copy itself to a temporary directory"
+  cp "$0" "$copy_dir/squad-uninstall.sh" || { rm -rf "$copy_dir"; die "cannot copy itself to a temporary directory"; }
+  SQUAD_UNINSTALL_COPY="$copy_dir" exec bash "$copy_dir/squad-uninstall.sh" "${arguments[@]}"
 fi
 
 # 1b. What each worktree holds that git ignores, as git status collapses it (a wholly ignored

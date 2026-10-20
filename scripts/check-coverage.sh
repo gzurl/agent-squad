@@ -111,12 +111,16 @@ EOF
 # statement, on 11 and on the here-string, with 13 unrun; and squad-latest.sh, every line run but
 # those kcov never records, the excluded one and the last.
 # KCOV_RECORDS=none makes it record nothing, and KCOV_RECORDS=broken writes check-gate.sh's record
-# cut short; --merge writes an index.
+# cut short; --merge writes an index. Each call's arguments go to $lab/kcov.calls, and options are
+# skipped to find the output directory and the test.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/kcov" <<'KCOV'
 #!/usr/bin/env bash
 if [ "$1" = --merge ]; then mkdir -p "$2" && touch "$2/index.html"; exit 0; fi
-out="$2" test="$3" root="$(git rev-parse --show-toplevel)"
+echo "$*" >> "$(dirname "$0")/../kcov.calls"
+args=()
+for arg; do case "$arg" in --*) ;; *) args+=("$arg") ;; esac; done
+out="${args[0]}" test="${args[1]}" root="$(git rev-parse --show-toplevel)"
 [ "${KCOV_RECORDS:-}" != none ] || exit 0
 dir="$out/$(basename "$test").0123456789abcdef"
 mkdir -p "$dir"
@@ -166,6 +170,17 @@ if [ "$code" -eq 0 ] && [ -f "$lab/out/report/index.html" ] && [ "$out" = "$(cat
   pass "it exits 0, prints the summary it writes, and merges kcov's reports"
 else
   fail "a run: exit $code, printed: $out"
+fi
+# kcov writes its reports at the end alone, so that it reads the traces while the tests run: a
+# script that removes itself as it ends, as the uninstaller's copy does, is read before it goes
+# (agent-squad #473). The repository's checks are each a run.
+runs="$(grep -c . "$lab/kcov.calls" 2>/dev/null)"
+with="$(grep -c -- '^--output-interval=0 ' "$lab/kcov.calls" 2>/dev/null)"
+tests="$(cd "$repo" && find scripts -name 'check-*.sh' | grep -c .)"
+if [ "$runs" -gt 0 ] && [ "$runs" = "$tests" ] && [ "$with" = "$runs" ]; then
+  pass "each test runs under kcov with --output-interval=0"
+else
+  fail "of $runs kcov runs, for $tests tests, $with have --output-interval=0: $(cat "$lab/kcov.calls" 2>/dev/null)"
 fi
 summary_of "a copy with the same lines counts, a different script of that name does not, and a line one test ran stays run" \
   '| `scripts/squad-checks.sh` (and 1 copy) | 4 | 4 | 100 % |'
