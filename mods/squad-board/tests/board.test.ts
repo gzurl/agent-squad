@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { asks, says, START, start, stops, turnEnd, turnStart, world } from './world'
+import { asks, says, START, start, stops, test, turnEnd, turnStart, world } from './world'
 
 // The board in the CTO's session (agent-squad #205, #212, #217, #222, #235, #240, #244, #247): one
 // line above the prompt, between two blue rules: each agent of its own project in the order CTO,
