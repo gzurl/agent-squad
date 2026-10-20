@@ -106,7 +106,7 @@ for shell in "${shells[@]}"; do
     for _ in $(seq 100); do "$shell" "$timeout" 5 true 2>>"$lab/loops-err" || echo "$?" >> "$lab/not-0"; done &
   done
   wait
-  measured="$(cat "$lab/not-0" 2>/dev/null | wc -l | tr -d ' ') runs did not exit 0, and the error output has $(wc -l <"$lab/loops-err" | tr -d ' ') lines"
+  measured="$([ -e "$lab/not-0" ] && wc -l <"$lab/not-0" | tr -d ' ' || echo 0) runs did not exit 0, and the error output has $(wc -l <"$lab/loops-err" | tr -d ' ') lines"
   check "on bash $version, 400 runs of a command that ends at once, four loops at once, all exit 0, saying nothing" \
     bash -c '[ ! -e "$1" ] && [ ! -s "$2" ]' _ "$lab/not-0" "$lab/loops-err"
   rm -f "$lab/loops-err"
