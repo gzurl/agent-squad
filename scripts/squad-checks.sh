@@ -109,6 +109,14 @@ watch() {
   done
 }
 kept() { if [ -e "$work/$1.terminal" ]; then echo terminal; else echo "$2"; fi; }
+# `watching <pid>...` starts the watch on those checks, its PID in $watcher, out of bash's table of
+# jobs: ended with a signal once they have ended, it is then not reported, as bash on Linux reports
+# a job killed so ("Terminated").
+watching() {
+  watch "$@" </dev/null >/dev/null 2>&1 &
+  watcher=$!
+  disown "$watcher"
+}
 
 codes=()
 if [ "$side_by_side" = no ]; then
@@ -119,8 +127,7 @@ if [ "$side_by_side" = no ]; then
     bash -c "${commands[$i]}" </dev/null &
     pids=("$!")
     set +m
-    watch "${pids[0]}" </dev/null >/dev/null 2>&1 &
-    watcher=$!
+    watching "${pids[0]}"
     wait "${pids[0]}"
     codes+=("$(kept "${pids[0]}" "$?")")
     kill "$watcher" 2>/dev/null
@@ -135,8 +142,7 @@ else
     pids+=("$!")
   done
   set +m
-  watch "${pids[@]}" </dev/null >/dev/null 2>&1 &
-  watcher=$!
+  watching "${pids[@]}"
   for i in "${!commands[@]}"; do
     wait "${pids[$i]}"
     codes+=("$(kept "${pids[$i]}" "$?")")
