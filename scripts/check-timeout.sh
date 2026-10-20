@@ -119,30 +119,45 @@ done
 
 # 2. A command that never ends is stopped past its bound, and the script says so. The cases that
 #    stop one allow 30 s at most: well under the 60 s it sleeps, and over what CI's kcov takes
-#    (agent-squad #447). Their bound, 3 s, leaves what they stop the time to start, which git's
-#    transport, the slowest, took in half a second at most with every check running side by side
-#    (agent-squad #487): a process that starts as its bound passes can be stopped before it wrote
-#    its PID, or after the stop listed what the command had started.
-run 3 "${endless[@]}"
+#    (agent-squad #447). Their bound, 3 s, leaves what they stop the time to start: git's
+#    transport, the slowest, started in 0.02 to 0.68 s in most runs, and once in a while past 3 s
+#    on a machine loaded by other work (agent-squad #487, #491). A process that starts as its bound
+#    passes can be stopped before it wrote its PID, or after the stop listed what the command had
+#    started. `again <pid file> <seconds> <command...>` runs squad-timeout.sh as `run` does, and
+#    when the process whose PID the file is to hold never started within that bound, once more with
+#    15 s: a stop that came before it started tested nothing of squad-timeout.sh. It leaves the
+#    bound of the run kept in $bound, and what both runs measured in $measured.
+again() {
+  local pid_file="$1" first first_bound="$2"
+  shift 2
+  bound="$first_bound"
+  run "$bound" "$@"
+  [ "$(state "$pid_file")" = "never started" ] || return 0
+  first="$measured"
+  bound=15
+  run "$bound" "$@"
+  measured="with $first_bound s, $first, it started nothing; again with $bound s, $measured"
+}
+again "$lab/pid" 3 "${endless[@]}"
 check "a command that never ends is stopped after its bound: exit 124, saying so" \
-  bash -c '[ "$1" -eq 124 ] && [ "$2" = "squad-timeout: bash did not end within 3 s, so it was stopped" ] && [ "$3" -ge 3 ] && [ "$3" -le 30 ]' \
-  _ "$code" "$err" "$took"
+  bash -c '[ "$1" -eq 124 ] && [ "$2" = "squad-timeout: bash did not end within $4 s, so it was stopped" ] && [ "$3" -ge "$4" ] && [ "$3" -le 30 ]' \
+  _ "$code" "$err" "$took" "$bound"
 check "and it no longer runs" gone
 #    The SIGKILL's two seconds are timed against the plain stop just above, which kcov slows as much
-#    (QA's finding on PR #453).
-stopped_in=$took
-run 3 "${deaf[@]}"
-measured+=", where the plain stop took $stopped_in s"
+#    (QA's finding on PR #453), with the bounds' difference taken off when either ran again.
+stopped_in=$took stopped_bound=$bound
+again "$lab/pid" 3 "${deaf[@]}"
+measured+=", where the plain stop took $stopped_in s with $stopped_bound s"
 check "one that ignores SIGTERM gets SIGKILL two seconds later: exit 124" \
-  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 30 ] && [ $(($2 - $3)) -ge 1 ] && [ $(($2 - $3)) -le 4 ]' \
-  _ "$code" "$took" "$stopped_in"
+  bash -c 'late=$(($2 - $3 - $4 + $5)); [ "$1" -eq 124 ] && [ "$2" -le 30 ] && [ "$late" -ge 1 ] && [ "$late" -le 4 ]' \
+  _ "$code" "$took" "$stopped_in" "$bound" "$stopped_bound"
 check "and it no longer runs" gone
 
 #    What the command started is stopped with it (agent-squad #439): a process it started, and the
 #    transport that git starts for a remote, here an ssh that never answers, are gone after the run.
 #    The command stays in this script's process group, so that a terminal it reads stays its own.
 #    The process the command starts holds none of its output, which would keep this run waiting.
-run 3 bash -c 'bash -c "echo \$\$ > \"\$1\"; exec sleep 60" _ "$1" >/dev/null 2>&1 & wait' _ "$lab/pid"
+again "$lab/pid" 3 bash -c 'bash -c "echo \$\$ > \"\$1\"; exec sleep 60" _ "$1" >/dev/null 2>&1 & wait' _ "$lab/pid"
 became="$(state "$lab/pid")"
 measured+=", and its child $became"
 check "a process the command started is stopped with it: exit 124 within seconds, and it no longer runs" \
@@ -150,7 +165,7 @@ check "a process the command started is stopped with it: exit 124 within seconds
 printf '#!/bin/sh\necho "$$" > %q\nexec sleep 60\n' "$lab/pid" > "$lab/ssh"
 chmod +x "$lab/ssh"
 rm -f "$lab/pid"
-GIT_SSH_COMMAND="$lab/ssh" run 3 git ls-remote ssh://example.invalid/repo
+GIT_SSH_COMMAND="$lab/ssh" again "$lab/pid" 3 git ls-remote ssh://example.invalid/repo
 became="$(state "$lab/pid")"
 measured+=", and its transport $became"
 check "a git whose ssh transport never answers is stopped with its transport: exit 124 within seconds, and neither runs" \
