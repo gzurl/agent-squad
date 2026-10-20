@@ -1,6 +1,12 @@
 # Changelog
 
 ## v67 — 2026-10-20
+- **The pre-push checks can run side by side** (#459). A project opts in with the line
+  `# squad-checks: side by side` in `.agent-squad-checks`, and its checks then all start at once.
+  Each keeps its status line, the output of one that fails is shown, and the push is refused when
+  any fails. Interrupted, the run stops every check and what each started. Without the line,
+  nothing changes. The README says when two checks could clash, as over a port or a database.
+  This repository opts in: its checks take 94 to 108 s instead of 261 to 273 s.
 - **The pre-push checks keep the Mac awake while they run** (#458). On 2026-10-18 a push failed
   because the Mac idle-slept during its checks: Claude Code keeps the machine awake only five
   minutes at a time, which seems not to be renewed during one long command. `squad-checks.sh` now
@@ -10,9 +16,22 @@
   reference written as `owner/repo#N`, or as its link, to the other repository's page, where
   neither an edit nor a deletion removes it. So it needs the CEO's authorisation, as any post
   outside does.
+- **A version PR that GitHub links to an issue is pointed out** (#461). On v65, "are all closed:
+  #428" in a version PR's evidence made GitHub link it to #428, and the plan's *Version PR* row
+  dropped it without a word. The row now shows such a PR and names each stray link, and the merge
+  gate stops a PR that names a plan issue and has one.
+- **The plan's table shows an install by a later release, and a delegated README read** (#462).
+  A release that a later one brought in shows its install as done, naming that release. §3: a
+  line of the plan issue's description that starts with `README read by:`, and names the role and
+  the reason, puts the read on that role's row.
+- **The squad board names the release `/squad-update` reported** (#477, found by the CEO). The
+  command read the latest release from GitHub, but left the board's notice offering an older one
+  until the next daily check. `/squad-update` and `/squad-upgrade` now refresh it.
 - **The README shows the plan as GitHub renders it** (#466, the CEO's idea). The features list
   names the squad's work on GitHub, and a screenshot of a plan issue follows it.
-- **Upgrading from v66:** nothing to do by hand. Restart the three sessions, since §6 changes.
+- **Upgrading from v66:** nothing to do by hand. A project that wants its checks side by side adds
+  the line to `.agent-squad-checks` once it knows they do not clash. Restart the three sessions,
+  since §3 and §6 change.
 
 ## v66 — 2026-10-19
 - **A release branch is held as `main` is** (#441, reported by trivial-tape's CTO from its QA's
