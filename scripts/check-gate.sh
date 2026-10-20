@@ -583,14 +583,22 @@ held_refused "and main is held" main
 
 # 15. The machine does not idle-sleep while the checks run (agent-squad #458): squad-checks.sh, as
 #     the gate runs it from the worktree, holds caffeinate on itself, and where there is none, runs
-#     its checks as before. Its check here waits for $lab/release, then exits with the status that
-#     file holds. `checks_in_background [<VAR=value>...]` starts the run with those variables, in a
-#     process group of its own, as a terminal's Ctrl-C finds it, with its PID in $checker and its
-#     errors in $lab/checks.err. `within <tenths> <command>...` passes once the command does, tried every
-#     tenth of a second, for at most that many tenths.
-# shellcheck disable=SC2016 # the command substitution is the check's own, run when it runs
-printf '#!/usr/bin/env bash\nuntil [ -e %q ]; do sleep 0.1; done\nexit "$(cat %q)"\n' \
-  "$lab/release" "$lab/release" > "$lab/waits.sh"
+#     its checks as before. Its check here leaves $lab/waiting as it starts, waits for
+#     $lab/release, then exits with the status that file holds. It is one perl process, which starts
+#     no command: a bash loop of `sleep` outlives a SIGINT that lands as one of them ends normally,
+#     since bash then takes the signal as handled, and a loaded machine widens that moment enough
+#     to hold the run (agent-squad #490). `checks_in_background [<VAR=value>...]` starts the run
+#     with those variables, in a process group of its own, as a terminal's Ctrl-C finds it, with
+#     its PID in $checker and its errors in $lab/checks.err. `within <tenths> <command>...` passes
+#     once the command does, tried every tenth of a second, for at most that many tenths.
+cat > "$lab/waits.sh" <<WAITS
+#!/usr/bin/env perl
+open(my \$mark, '>', q{$lab/waiting}) or die "waits.sh: \$!\\n";
+close \$mark;
+select(undef, undef, undef, 0.1) until -e q{$lab/release};
+open(my \$release, '<', q{$lab/release}) or die "waits.sh: \$!\\n";
+exit((<\$release> // 0) + 0);
+WAITS
 chmod +x "$lab/waits.sh"
 list "$wt" "$(printf %q "$lab/waits.sh")"
 checks_in_background() {
@@ -608,6 +616,22 @@ within() {
     sleep 0.1
   done
 }
+#     `finished` waits for that run to end, which `over` tells, for half a minute at most, and leaves
+#     its exit status in $code. A run still going then is killed, with its process group, and $code
+#     says so: a run that did not stop fails its case, instead of holding the checks for good
+#     (agent-squad #490).
+# shellcheck disable=SC2317,SC2329 # run through within
+over() { ! kill -0 "$checker" 2>/dev/null; }
+finished() {
+  if within 300 over; then
+    wait "$checker"
+    code=$?
+  else
+    kill -KILL -- "-$checker" 2>/dev/null
+    wait "$checker" 2>/dev/null
+    code="none: it still ran after 30 s, so it was killed"
+  fi
+}
 #     On every platform, a caffeinate ahead on PATH records how it was called: on the run itself,
 #     for as long as it runs.
 mkdir -p "$lab/stub"
@@ -615,9 +639,8 @@ printf '#!/usr/bin/env bash\necho "$*" > %q\n' "$lab/caffeinated" > "$lab/stub/c
 chmod +x "$lab/stub/caffeinate"
 echo 0 > "$lab/release"
 checks_in_background PATH="$lab/stub:$PATH"
-wait "$checker"
-code=$?
-if [ "$code" -eq 0 ] && within 50 test -s "$lab/caffeinated" && [ "$(cat "$lab/caffeinated")" = "-i -w $checker" ]; then
+finished
+if [ "$code" = 0 ] && within 50 test -s "$lab/caffeinated" && [ "$(cat "$lab/caffeinated")" = "-i -w $checker" ]; then
   pass "the checks hold caffeinate -i -w on their own run"
 else
   fail "the checks with caffeinate on PATH: exit $code, caffeinate called with '$(cat "$lab/caffeinated" 2>/dev/null)', not '-i -w $checker'"
@@ -641,9 +664,9 @@ else
 fi
 list "$wt" "$(printf %q "$lab/waits.sh")"
 #     On macOS, pmset lists a PreventUserIdleSystemSleep that caffeinate holds on behalf of the run
-#     while it runs, and none once it has ended: passed, failed or interrupted. `held_for <pid>`
-#     passes while pmset lists it for that process, and `released <pid>` once neither the assertion
-#     nor its caffeinate is left.
+#     while it runs, and none once it has ended: passed, failed or interrupted, the interruption
+#     coming once its check runs. `held_for <pid>` passes while pmset lists it for that process, and
+#     `released <pid>` once neither the assertion nor its caffeinate is left.
 held_for() {
   pmset -g assertions | awk -v pid="$1" '
     /PreventUserIdleSystemSleep/ { idle = 1; next }
@@ -654,19 +677,19 @@ held_for() {
 released() { ! held_for "$1" && ! pgrep -fx "caffeinate -i -w $1" >/dev/null; }
 if command -v caffeinate >/dev/null && command -v pmset >/dev/null; then
   for outcome in passed:0 failed:1 "been interrupted:130"; do
-    rm -f "$lab/release"
+    rm -f "$lab/release" "$lab/waiting"
     checks_in_background
     if within 50 held_for "$checker"; then held=yes; else held=no; fi
+    if within 50 test -e "$lab/waiting"; then waiting=yes; else waiting=no; fi
     case "$outcome" in
       "been interrupted":*) kill -INT -- "-$checker" ;;
       *) echo "${outcome#*:}" > "$lab/release" ;;
     esac
-    wait "$checker"
-    code=$?
-    if [ "$held" = yes ] && [ "$code" -eq "${outcome#*:}" ] && within 30 released "$checker"; then
+    finished
+    if [ "$held" = yes ] && [ "$waiting" = yes ] && [ "$code" = "${outcome#*:}" ] && within 30 released "$checker"; then
       pass "pmset lists the run's PreventUserIdleSystemSleep while its checks run, and none once they have ${outcome%:*}"
     else
-      fail "once the checks have ${outcome%:*}: held while they ran: $held, exit $code, released: $(released "$checker" && echo yes || echo no)"
+      fail "once the checks have ${outcome%:*}: held while they ran: $held, its check started: $waiting, exit $code, released: $(released "$checker" && echo yes || echo no)"
     fi
   done
 else
@@ -774,10 +797,9 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   checks_in_background TMPDIR="$lab/tmp"
   if within 50 started_all; then started=yes; else started=no; fi
   kill "-${signal%%:*}" -- "-$checker"
-  wait "$checker"
-  code=$?
+  finished
   expected="${signal#*:}" how="${signal##*:}"
-  if [ "$started" = yes ] && [ "$code" -eq "${expected%%:*}" ] && within 30 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
+  if [ "$started" = yes ] && [ "$code" = "${expected%%:*}" ] && within 30 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
     pass "$how, the run stops every check, with what each started, and leaves nothing in TMPDIR"
   else
     fail "$how: all started: $started, exit $code, still running: $(if stopped; then echo none; else cat "$lab/started"; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
