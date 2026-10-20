@@ -1,5 +1,23 @@
 # Changelog
 
+## v69 — 2026-10-21
+- **A Ctrl-C stops the checks run one after another** (#494, found by DEV on PR #493). With the
+  checks one after another, the default, a SIGINT did not stop the pre-push checks when the check
+  running ended normally on it, as a check that handles SIGINT and exits does: the run went on to
+  the next check, and to every one after it. A SIGINT now ends the run with exit 130, a SIGHUP with
+  129 and a SIGTERM with 143, in both modes, and the run stops each check with what it started.
+- **A check that uses the terminal fails, saying so, instead of holding the push** (#494, found by
+  QA in its review of PR #497). Each check now runs apart from the terminal, one after another too,
+  as side by side since v67. A check that reads the terminal, or writes to it once `stty tostop` is
+  set, as git's pager can, is stopped by it: the run now fails that check within about a second,
+  saying `stopped: it read the terminal`, and goes on. Side by side, such a check held the run for
+  good. The README's FAQ states the rule for both modes.
+- **This repository's own tests hold on a loaded machine** (#485, #487, #490, #491, #498). Several
+  failed pushes here when the Mac was loaded, or could hold the checks for good; each time limit in
+  them now only guards against a hang. They do not ship, so nothing changes for a project.
+- **Upgrading from v68:** nothing to do by hand, unless one of the project's checks uses the
+  terminal, which now fails it. No session needs a restart: no rule of the charter changes.
+
 ## v68 — 2026-10-20
 - **A release branch can be cut from a tag without an exception** (#482, reported by
   trivial-tape's CTO). Since v66 the pre-push gate refused every push to a declared release branch,
