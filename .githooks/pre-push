@@ -2,12 +2,12 @@
 # Pre-push gate of SQUAD.md §4.2: no commit reaches the remote before the project's checks pass on
 # it, and none reaches main except through a PR (§2.3) or as an exception the CEO approved on an
 # issue. A ref whose commit the remote's branches or tags already contain, such as a tag of a past
-# release, carries no new code and goes through without checks, and a release branch is cut from
-# such a commit with no exception (agent-squad #482). Run by the pre-push shim that
-# squad-install.sh writes into the common git directory (hooks/pre-push); `--no-verify` skips it,
-# and whoever uses it says so in the PR body. It finds squad-checks.sh through its own location, so
-# the same file works at the root of a repository (.githooks/ next to scripts/) and inside an
-# installed playbook.
+# release, carries no new code and goes through without checks, and a release branch is cut with no
+# exception from such a commit that a tag or a held branch holds (agent-squad #482). Run by the
+# pre-push shim that squad-install.sh writes into the common git directory (hooks/pre-push);
+# `--no-verify` skips it, and whoever uses it says so in the PR body. It finds squad-checks.sh
+# through its own location, so the same file works at the root of a repository (.githooks/ next to
+# scripts/) and inside an installed playbook.
 set -u
 
 # The runner of the checks sits in ../scripts/ from this script, as an executable file. A gate that
@@ -62,38 +62,67 @@ held() {
   return 1
 }
 
-# `on_remote <commit>` passes when one of the remote's branches or tags already contains the
-# commit, as the remote lists them now: a ref pointing there carries no new code, such as a tag of a
-# past release (agent-squad #143), or a release branch cut from one whose branch was merged and
-# deleted (agent-squad #482). The list is asked for once; a head or tag whose commit is not here, or
-# a remote that cannot be listed, counts for nothing, so the gate can only refuse more. Local
-# remote-tracking refs are not trusted: one can outlive the branch it names. The list goes through
-# squad-timeout.sh, beside squad-checks.sh, which stops it after SQUAD_GH_TIMEOUT seconds of
-# wall-clock time (120 when unset, or not a whole number above 0), and the gate says so
-# (agent-squad #435).
-remote_heads=""
+# The remote's branches and tags, as the remote lists them now, each a line "<object> <ref>", asked
+# for once: an annotated tag comes twice, as its tag object and as the commit it names (its ^{} line,
+# here under the tag's own name), and only commits count (`contained`). Local remote-tracking refs
+# are not trusted: one can outlive the branch it names. The list goes through squad-timeout.sh,
+# beside squad-checks.sh, which stops it after SQUAD_GH_TIMEOUT seconds of wall-clock time (120
+# when unset, or not a whole number above 0), and the gate says so (agent-squad #435); a remote
+# that cannot be listed lists nothing, so the gate can only refuse more.
+remote_tips=""
 remote_listed=0
 list_seconds="${SQUAD_GH_TIMEOUT:-120}"
 [[ "$list_seconds" =~ ^[1-9][0-9]*$ ]] || list_seconds=120
+list_remote() {
+  local listing
+  [ "$remote_listed" -eq 0 ] || return 0
+  listing="$("$(dirname "$checks")/squad-timeout.sh" "$list_seconds" git ls-remote --heads --tags "$remote" 2>/dev/null)"
+  [ $? -ne 124 ] || echo "pre-push: $remote did not list its branches and tags within $list_seconds s, so every ref pushed counts as new code" >&2
+  remote_tips="$(awk -F '\t' '{ sub(/\^\{\}$/, "", $2); print $1, $2 }' <<<"$listing")"
+  remote_listed=1
+}
+
+# `contained <commit> <tip>...` passes when one of the tips that this repository has contains the
+# commit: one rev-list for them all, which lists nothing then (QA's finding on PR #484). A tip that
+# is no commit here counts for nothing.
+contained() {
+  local commit="$1" known found
+  shift
+  known="$(printf '%s\n' "$@" | git cat-file --batch-check='%(objectname) %(objecttype)' 2>/dev/null | awk '$2 == "commit" { print $1 }')"
+  [ -n "$known" ] || return 1
+  # shellcheck disable=SC2086 # the tips are split on purpose, one argument each
+  found="$(git rev-list -n 1 "$commit" --not $known 2>/dev/null)" || return 1
+  [ -z "$found" ]
+}
+
+# `on_remote <commit>` passes when one of the remote's branches or tags already contains the
+# commit: a ref pointing there carries no new code, such as a tag of a past release (agent-squad
+# #143). `cut_from <commit>` passes when the remote's default branch, one of its held branches or a
+# tag does, which reviewed it: the commits a release branch may be cut from (agent-squad #482). A
+# feature branch's commit, which no PR has reviewed, is none of them (QA's finding on PR #484).
 on_remote() {
-  local sha listing
-  if [ "$remote_listed" -eq 0 ]; then
-    listing="$("$(dirname "$checks")/squad-timeout.sh" "$list_seconds" git ls-remote --heads --tags "$remote" 2>/dev/null)"
-    [ $? -ne 124 ] || echo "pre-push: $remote did not list its branches and tags within $list_seconds s, so every ref pushed counts as new code" >&2
-    remote_heads="$(cut -f1 <<<"$listing")"
-    remote_listed=1
-  fi
-  for sha in $remote_heads; do
-    git merge-base --is-ancestor "$1" "$sha" 2>/dev/null && return 0
-  done
-  return 1
+  list_remote
+  # shellcheck disable=SC2046 # the commits are split on purpose, one argument each
+  contained "$1" $(cut -d' ' -f1 <<<"$remote_tips")
+}
+cut_from() {
+  local tip ref tips=()
+  list_remote
+  while read -r tip ref; do
+    case "$ref" in
+      refs/tags/*) tips+=("$tip") ;;
+      refs/heads/*) ! held "${ref#refs/heads/}" || tips+=("$tip") ;;
+    esac
+  done <<<"$remote_tips"
+  [ "${#tips[@]}" -gt 0 ] && contained "$1" "${tips[@]}"
 }
 
 # The checks test the working tree, so every new commit being pushed must be the one checked out.
 # A ref whose commit is already on the remote, like a deletion, pushes no code. A push that creates
-# a release branch, which the remote does not have yet, at a commit the remote already holds, as a
-# release branch is cut from a tag, changes nothing a PR would review, and needs no exception
-# (agent-squad #482); the default branch, a branch that exists, and new code still do.
+# a release branch, which the remote does not have yet, at a commit that the default branch, a held
+# branch or a tag holds, as a release branch is cut from a tag, puts there nothing a PR has not
+# reviewed, and needs no exception (agent-squad #482); the default branch, a branch that exists,
+# and any other commit still do.
 pushes_code=0
 held_pushed=""
 while read -r local_ref local_sha remote_ref remote_sha _; do
@@ -103,7 +132,7 @@ while read -r local_ref local_sha remote_ref remote_sha _; do
     refs/heads/*)
       branch="${remote_ref#refs/heads/}"
       if held "$branch"; then
-        [ "$remote_sha" = "$zero" ] && [ "$branch" != "$protected" ] && on_remote "$commit" && continue
+        [ "$remote_sha" = "$zero" ] && [ "$branch" != "$protected" ] && cut_from "$commit" && continue
         held_pushed="${held_pushed:+$held_pushed, }$branch"
       fi
       ;;

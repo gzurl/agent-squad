@@ -787,11 +787,13 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
 done
 
 
-# 17. A release branch is cut with no exception at a commit the remote already holds, on a branch
-#     or behind a tag, by a push that creates it (agent-squad #482): it runs no check, since it
-#     pushes no code. One cut from a tag whose branch was merged and deleted goes through too, as
-#     trivial-tape's release/0.15 was. A push that moves a release branch that exists, or creates
-#     one at a commit the remote lacks, is refused as before. The worktree's committed list comes
+# 17. A release branch is cut with no exception at a commit that the remote's default branch, a
+#     held branch or a tag already holds, by a push that creates it (agent-squad #482): it runs no
+#     check, since it pushes no code. One cut from a tag whose branch was merged and deleted goes
+#     through too, as trivial-tape's release/0.15 was, and so does one from a lightweight tag. A
+#     commit that only a feature branch holds, which no PR has reviewed, is no such commit (QA's
+#     finding on PR #484). A push that moves a release branch that exists, or creates one at a
+#     commit the remote lacks, is refused as before. The worktree's committed list comes
 #     back first, and main declares release/*. `cut <case> <commit> <branch>` pushes that commit to
 #     the new branch, and passes when it went through with no check run and the remote has it.
 git -C "$wt" checkout -q -- .agent-squad-checks
@@ -820,6 +822,20 @@ if [ -z "$(git -C "$lab/remote.git" branch --contains "$fixed")" ]; then
 else
   fail "the tag's commit is still on a branch of the remote, so the case proves nothing"
 fi
+#     A commit that only a lightweight tag holds, pushed the same way.
+echo "the last fix of 0.34" >> "$wt/pushed.txt"
+commit "$wt" "the last fix of 0.34" >/dev/null
+git -C "$wt" push -q origin HEAD:refs/heads/topic/0.34 2>/dev/null && git -C "$wt" tag v34 \
+  && git -C "$wt" push -q origin refs/tags/v34 2>/dev/null && git -C "$wt" push -q origin :refs/heads/topic/0.34 2>/dev/null || exit 2
+cut "and so does one cut from a lightweight tag" v34 release/0.34
+#     A commit that only a feature branch holds.
+echo "a feature no PR has reviewed" >> "$wt/pushed.txt"
+commit "$wt" "an unreviewed feature" >/dev/null
+git -C "$wt" push -q origin HEAD:refs/heads/feature/x 2>/dev/null || exit 2
+runs_before="$(runs)"
+errors="$(git -C "$wt" push -q origin HEAD:refs/heads/release/0.33 2>&1)"
+code=$?
+held_refused "a release branch cut at a commit only a feature branch holds is refused" release/0.33
 runs_before="$(runs)"
 errors="$(git -C "$wt" push -q origin "$fixed:refs/heads/release/0.30" 2>&1)"
 code=$?
