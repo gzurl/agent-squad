@@ -648,7 +648,7 @@ fi
 #     Without caffeinate on PATH, the checks run as before, and say nothing more: each its line, and
 #     the exit status of one that failed. PATH holds only what the run needs.
 mkdir -p "$lab/bare"
-for tool in bash git; do ln -s "$(type -P "$tool")" "$lab/bare/$tool"; done
+for tool in bash git mktemp rm ps sleep; do ln -s "$(type -P "$tool")" "$lab/bare/$tool"; done
 list "$wt" 'true
 false'
 errors="$(cd "$wt" && PATH="$lab/bare" "$runner" </dev/null 2>&1)"
@@ -839,6 +839,29 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
     fail "$how one after another: its check started: $handling, exit $code, a later check started: $([ -e "$lab/later" ] && echo yes || echo no)"
   fi
   kill -KILL "$(cat "$lab/handling" 2>/dev/null)" 2>/dev/null
+done
+#     A check that the terminal stops, as one that reads it does from a process group of its own,
+#     fails, and the run goes on, in both modes (QA's finding on PR #497): here the check marks its
+#     PID in $lab/stopping, then stops itself, as SIGTTIN would stop it, and the next check marks
+#     that it ran in $lab/later. `stopped_gone` passes once the stopped check no longer runs.
+printf '#!/usr/bin/env bash\necho "$$" > %q\nkill -STOP "$$"\n' "$lab/stopping" > "$lab/stops.sh"
+chmod +x "$lab/stops.sh"
+stops="$(printf %q "$lab/stops.sh")"
+# shellcheck disable=SC2317,SC2329 # run through within
+stopped_gone() { ! kill -0 "$(cat "$lab/stopping")" 2>/dev/null; }
+for mode in "one after another:" "side by side:# squad-checks: side by side"; do
+  rm -f "$lab/stopping" "$lab/later"
+  printf '%s\n%s\ntouch %q\n' "${mode#*:}" "$stops" "$lab/later" > "$wt/.agent-squad-checks"
+  checks_in_background
+  finished
+  said="$(cat "$lab/checks.err")"
+  if [ "$code" = 1 ] && grep -qxF "  FAILED  $stops (stopped: it read the terminal, or wrote to it under stty tostop)" <<<"$said" \
+    && [ -e "$lab/later" ] && within 30 stopped_gone; then
+    pass "${mode%%:*}, a check that the terminal stops fails, saying so, and the run goes on"
+  else
+    fail "${mode%%:*}, a check that the terminal stops: exit $code, a later check ran: $([ -e "$lab/later" ] && echo yes || echo no), said: $said"
+  fi
+  kill -KILL "$(cat "$lab/stopping" 2>/dev/null)" 2>/dev/null
 done
 
 
