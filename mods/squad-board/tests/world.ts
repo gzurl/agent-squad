@@ -1,12 +1,25 @@
 import type { On } from 'claude-code'
-import { mock } from 'claude-code/testing'
-import type { Engine, MockClock } from 'claude-code/testing'
+import { mock, test as kitTest } from 'claude-code/testing'
+import type { Engine, MockClock, TestRest } from 'claude-code/testing'
 
 // The engine beneath the squad board in a test: it answers every call the board makes and every
 // event a test raises, and it records what the board asked of it.
 
 // The time a test starts at, in milliseconds.
 export const START = 1_000_000
+
+// How long each test may run, in milliseconds: half a minute, where the kit gives five seconds.
+// Under CI's kcov, with every check running side by side, the board's tests took 79 s where they
+// take 3 s alone, and one that takes 0.07 s alone stalled past five seconds (agent-squad #485). A
+// test that never ends still fails, once its time is up; check-mods.sh proves it.
+export const LIMIT_MS = 30_000
+
+// `test`, as the kit's, with that time, unless the test gives its own `timeoutMs`. Every test of
+// the board is written with it.
+export function test(name: string, ...rest: TestRest): void {
+  const [options, body] = rest.length === 1 ? [{}, rest[0]] : rest
+  kitTest(name, { timeoutMs: LIMIT_MS, ...options }, body)
+}
 
 export type World = {
   clock: MockClock

@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect } from 'claude-code/testing'
 
-import { asks, runs, says, START, start, stops, turnEnd, turnStart, world } from './world'
+import { asks, runs, says, START, start, stops, test, turnEnd, turnStart, world } from './world'
 
 // What every squad session publishes (agent-squad #205, #222): its own key, `<project>/<role>`,
 // with its state, its pause, the issue or PR its gh calls put in focus, its context use, its session

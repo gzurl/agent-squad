@@ -7,7 +7,8 @@
 # agent-squad #222 the board reads nothing from GitHub); none hooks tool.check, whose ask auto mode
 # settles with no dialog (agent-squad #199). A test that fails is named, with the error under it,
 # since the output's last lines may hold only passes: a copy of the first plugin, with one test that
-# fails on purpose, proves it (agent-squad #373).
+# fails on purpose, proves it (agent-squad #373). Each board test gets the time limit of its
+# world.ts, and one that never ends still fails, once it is up (agent-squad #485).
 # Claude Code runs with a home of its own, so this check touches neither the user's settings nor
 # ~/.claude.json, and with its non-essential traffic off. It needs Claude Code 2.1.287 or later,
 # the first with mods.
@@ -118,8 +119,11 @@ while IFS= read -r source; do
   out="$(claude_run plugin test "$root/$plugin")"
   code=$?
   ran="$(grep -oE '^Ran [0-9]+ test' <<<"$out" | grep -oE '[0-9]+')"
+  # The slowest test's time, so that a run shows how far its tests stay from their time limit
+  # (agent-squad #485).
+  slowest="$(grep -oE '^\(pass\) .*\[[0-9.]+ms\]$' <<<"$out" | grep -oE '[0-9.]+ms\]$' | tr -d 'ms]' | sort -n | tail -n 1)"
   if [ "$code" -eq 0 ] && [ "${ran:-0}" -gt 0 ] && grep -qE '^ 0 fail$' <<<"$out"; then
-    pass "$plugin passes its $ran tests"
+    pass "$plugin passes its $ran tests${slowest:+, the slowest in $slowest ms}"
   else
     named="$(failures "$out")"
     fail "$plugin: claude plugin test exited $code. ${named:+The tests that failed:
@@ -148,6 +152,37 @@ if [[ "$(head -n 1 <<<"$named")" == "(fail) a test that fails on purpose, for ch
   pass "a test that fails is named, with its error, and no other"
 else
   fail "a test that fails on purpose in a copy of $first is not named with its error: ${named:-nothing named}"
+fi
+
+# 4. A board test that never ends still fails, once its time is up (agent-squad #485). The board's
+#    tests take `test` from their world.ts, which gives each one LIMIT_MS, and none from the kit,
+#    whose five seconds a loaded machine outlasts. A copy of the board whose tests are that
+#    world.ts, its limit cut to a second, and one test that never ends, shows that the time holds.
+board="$root/mods/squad-board/tests"
+kit="$(cd "$board" && grep -lE "^import \{([^}]*[ ,])?test[ ,][^}]*\} from 'claude-code/testing'" ./*.test.ts | tr '\n' ' ')"
+if [ -z "$kit" ]; then
+  pass "every board test takes test from world.ts, which gives it its time limit"
+else
+  fail "board tests that take test from the kit, with its five seconds, not from world.ts: $kit"
+fi
+cp -R "$root/mods/squad-board" "$lab/endless" && rm -rf "$lab/endless/tests" && mkdir "$lab/endless/tests" \
+  && sed -E 's/^export const LIMIT_MS = [0-9_]+$/export const LIMIT_MS = 1_000/' "$board/world.ts" > "$lab/endless/tests/world.ts" \
+  && cat > "$lab/endless/tests/never-ends.test.ts" <<'TEST'
+import { test } from './world'
+
+test('a test that never ends, for check-mods.sh', () => new Promise(() => {}))
+TEST
+if ! grep -qx 'export const LIMIT_MS = 1_000' "$lab/endless/tests/world.ts"; then
+  fail "the board's world.ts has no LIMIT_MS line to cut, so a test that never ends could not be tried"
+else
+  out="$(claude_run plugin test "$lab/endless")"
+  named="$(failures "$out")"
+  if [[ "$(head -n 1 <<<"$named")" == "(fail) a test that never ends, for check-mods.sh ["* ]] \
+    && grep -qF 'timed out after 1000 ms' <<<"$named" && [ "$(grep -c '^(fail) ' <<<"$named")" -eq 1 ]; then
+    pass "a board test that never ends fails once world.ts's time limit is up, and is named"
+  else
+    fail "a board test that never ends, its limit cut to a second, is not named as timed out: ${named:-nothing named}"
+  fi
 fi
 
 exit "$status"
