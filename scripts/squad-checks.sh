@@ -52,7 +52,9 @@ caffeinate -i -w "$$" </dev/null >/dev/null 2>&1 &
 # so would every test of an interruption that the check runs. $pids holds the checks started, and
 # $work what the run keeps while it runs: the output of each check side by side, and a mark for
 # each check that the terminal stopped.
-work="$(mktemp -d "${TMPDIR:-/tmp}/squad-checks.XXXXXX")" || exit 2
+# A TMPDIR that names no directory falls back to /tmp: one after another, the checks needed none
+# before this (QA's finding on PR #497).
+work="$(mktemp -d "${TMPDIR:-/tmp}/squad-checks.XXXXXX" 2>/dev/null || mktemp -d /tmp/squad-checks.XXXXXX)" || exit 2
 trap 'rm -rf "$work"' EXIT
 pids=()
 # `stop [<pid>...]` ends those checks, or the checks started when none is named, with every process
@@ -96,15 +98,18 @@ trap 'stop; exit 143' TERM
 # writes to one set with `stty tostop`, is stopped by it until it is continued, which would hold
 # the run for good (QA's finding on PR #497). `watch <pid>...`, in the background, looks at those
 # checks twice a second with ps, stops any that is stopped, `T`, and leaves $work/<pid>.terminal
-# for it; it ends once none of them runs, or the run itself has ended. `kept <pid> <status>`
-# prints that check's status, `terminal` when the watch stopped it.
+# for it; it ends once none of them runs, or the run itself has ended. It acts only on a process
+# whose parent is this run: once a check has ended, its PID can name another process (QA's finding
+# on PR #497). `kept <pid> <status>` prints that check's status, `terminal` when the watch stopped
+# it.
 # shellcheck disable=SC2317,SC2329 # run in the background below
 watch() {
-  local pid state
+  local pid parent state
   while kill -0 "$@" 2>/dev/null && kill -0 "$$" 2>/dev/null; do
-    while read -r pid state; do
+    while read -r pid parent state; do
+      [ "$parent" = "$$" ] || continue
       case "$state" in T*) : >"$work/$pid.terminal"; stop "$pid" ;; esac
-    done <<<"$(ps -o pid=,stat= -p "$(IFS=,; echo "$*")" 2>/dev/null)"
+    done <<<"$(ps -o pid=,ppid=,stat= -p "$(IFS=,; echo "$*")" 2>/dev/null)"
     sleep 0.5 || return
   done
 }

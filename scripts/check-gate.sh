@@ -863,6 +863,16 @@ for mode in "one after another:" "side by side:# squad-checks: side by side"; do
   fi
   kill -KILL "$(cat "$lab/stopping" 2>/dev/null)" 2>/dev/null
 done
+#     A TMPDIR that names no directory falls back to /tmp, so that one after another the checks
+#     still need none (QA's finding on PR #497).
+printf 'true\n' > "$wt/.agent-squad-checks"
+errors="$(cd "$wt" && TMPDIR="$lab/no-such-directory" "$runner" </dev/null 2>&1)"
+code=$?
+if [ "$code" -eq 0 ] && grep -qxF "  ok      true" <<<"$errors"; then
+  pass "with a TMPDIR that names no directory, the checks run all the same"
+else
+  fail "with a TMPDIR that names no directory: exit $code, said: $errors"
+fi
 
 
 # 17. A release branch is cut with no exception at a commit that the remote's default branch, a
