@@ -51,6 +51,10 @@ measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
 #    that --summary-only can work from them elsewhere. The tests run side by side (agent-squad
 #    #245), under job control: without it, a command started in the background ignores SIGINT,
 #    and so would every command of its test, such as the --check that check-install.sh interrupts.
+#    kcov reads the traces and writes its reports in turn, on one thread, every 5 s by default:
+#    while it writes, the traces wait, and a script that removes itself as it ends, as the
+#    uninstaller's temporary copy does, can be gone before kcov reads it, which fails its test
+#    (agent-squad #473). With --output-interval=0, kcov writes them once, at the end.
 if ! $summary_only; then
   patterns="$(printf '/%s,' "${measured[@]##*/}")"
   printf '%s\n' "$root" > "$out/runs/root"
@@ -58,7 +62,7 @@ if ! $summary_only; then
   for test in scripts/check-*.sh; do
     name="$(basename "$test" .sh)"
     (
-      kcov --include-pattern="${patterns%,}" "$out/runs/$name" "$test" >"$out/runs/$name.log" 2>&1 </dev/null
+      kcov --output-interval=0 --include-pattern="${patterns%,}" "$out/runs/$name" "$test" >"$out/runs/$name.log" 2>&1 </dev/null
       echo "$?" > "$out/runs/$name.status"
     ) &
   done
