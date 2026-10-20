@@ -92,4 +92,16 @@ else
   fail "it found no command that relays a step-away message"
 fi
 
+# The commands that read the latest release upstream refresh the squad board's record of it, so
+# that the board's notice names the release they report (agent-squad #477).
+refresh="squad-latest.sh --now ."
+for name in squad-update squad-upgrade; do
+  text="$(tr -s '[:space:]' ' ' <"$root/commands/$name.md")"
+  if [[ "$text" == *"$refresh"* ]]; then
+    pass "/$name refreshes the squad board's record of the latest release"
+  else
+    fail "/$name reads the latest release, but does not run \"$refresh\" for the squad board"
+  fi
+done
+
 exit "$status"
