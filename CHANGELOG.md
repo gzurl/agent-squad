@@ -1,5 +1,20 @@
 # Changelog
 
+## v68 — 2026-10-20
+- **A release branch can be cut from a tag without an exception** (#482, reported by
+  trivial-tape's CTO). Since v66 the pre-push gate refused every push to a declared release branch,
+  even one that only created it at a released commit, so each patch release needed an exception
+  from the CEO. §2.3: a push that creates a release branch at a commit that the remote's default
+  branch, one of its release branches or one of its tags already holds now goes through with no
+  exception and runs no check, which covers a tag whose release branch was merged and deleted. One
+  that moves a release branch, or creates it at a commit that only a feature branch holds, is
+  refused as before (found by QA in its review of PR #484). The README says how to cut one from
+  its tag.
+- **A push of a commit that a remote tag holds runs no check** (#482). The gate now lists the
+  remote's tags as well as its branches, and asks git once whether any of them holds the pushed
+  commit, so the tags add no measurable time (QA's finding in its review of PR #484).
+- **Upgrading from v67:** nothing to do by hand. Restart the three sessions, since §2.3 changes.
+
 ## v67 — 2026-10-20
 - **The pre-push checks can run side by side** (#459). A project opts in with the line
   `# squad-checks: side by side` in `.agent-squad-checks`, and its checks then all start at once.
