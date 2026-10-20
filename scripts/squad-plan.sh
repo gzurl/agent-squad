@@ -241,10 +241,11 @@ table() {
     | {step: "README read", who: "CEO", state: "➖ not taken: \($no_read // "" | short)", next: "—"} as $not_taken
     # A read that the CEO gives another role (agent-squad #462): a line of the description, outside
     # its markers, that starts with "README read by:", names the role, then gives the reason, as
-    # "README read by: QA, as the CEO asked on 2026-10-19". The row is that role'"'"'s, with the reason:
-    # `read_by($waiting; $done)` gives it while it waits for that step, then once it is done.
+    # "README read by: QA, as the CEO asked on 2026-10-19", a blank or one of ,:; after the role. The
+    # row is that role'"'"'s, with the reason, and the tag waits for its OK (QA'"'"'s finding on PR #476):
+    # `read_by($waiting; $done)` gives the row while it waits for that step, then once it is done.
     | ($plan.body | plan_parts | .before + .after
-       | [splits("\n") | capture("^README read by:\\s*(?<who>CEO|CTO|DEV|QA)\\b[\\s,:;]*(?<why>\\S.*?)\\s*$")] | first) as $by
+       | [splits("\n") | capture("^README read by:\\s*(?<who>CEO|CTO|DEV|QA)(?:\\s*[,:;]\\s*|\\s+)(?<why>\\S.*?)\\s*$")] | first) as $by
     | def read_by($waiting; $done):
         {step: "README read", who: $by.who,
          state: (if $done then "✅ done by \($by.who): \($by.why | short)"
@@ -278,14 +279,15 @@ table() {
             # With no read, the tag waits for the version PR alone, and the CTO tags it (§3). An install
             # by a later release names it.
             (if $release.installed and $release.installed_by > $release.version then " by v\($release.installed_by)" else "" end) as $by_later
+            | (if $by and $by.who != "CEO" then $by.who else "the CEO" end) as $ok
             | {step: "Tag, Release, install here", who: "CTO",
              state: (if $release.tagged and $release.published and $release.installed then "✅ done\(if $by_later == "" then "" else ", installed\($by_later)" end)"
                      elif ($release.tagged | not) and $no_read then (if $versioned then "⚪ not tagged yet" else "⚪ waits for the version PR" end)
-                     elif $release.tagged | not then "⚪ waits for the CEO'"'"'s OK"
+                     elif $release.tagged | not then "⚪ waits for \($ok)'"'"'s OK"
                      else "⏳ tag ✅, Release \(if $release.published then "✅" else "⚪" end), install \(if $release.installed then "✅\($by_later)" else "⚪" end)" end),
              next: (if $release.tagged and $release.published and $release.installed then "—"
                     elif ($release.tagged | not) and $no_read then (if $versioned then "CTO: tag it" else "—" end)
-                    elif $release.tagged | not then "CTO: tag it, on the CEO'"'"'s OK"
+                    elif $release.tagged | not then "CTO: tag it, on \($ok)'"'"'s OK"
                     elif $release.published | not then "CTO: publish the Release" else "CTO: install it here" end)}]
        end) as $steps
     | ($items | sort_by(priority, .number) | map(row)) + $steps

@@ -433,8 +433,9 @@ expect_steps "after the markers too, its pipe escaped" \
 #     description, outside its markers, that starts with "README read by:", names the role, then
 #     gives the reason. The row is that role's, with the reason, while it waits for the version PR,
 #     then while the role reads it, then once the release is tagged; in a project, while issues are
-#     open, then once they are closed. A line with no role or no reason is no such line, and a
-#     release that takes no read says so whatever names a reader.
+#     open, then once they are closed. Until the tag, it waits for that role's OK (QA's finding on
+#     PR #476). A line with no role, no reason, or no blank or ,:; after the role is no such line,
+#     and a release that takes no read says so whatever names a reader.
 world && upstream 54
 issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
 plan_issue 10
@@ -442,19 +443,25 @@ plan_body $'The plan of v55.\n\nREADME read by: QA, as the CEO asked on 2026-10-
 expect_steps "given to QA, the version PR not merged: QA's row waits for it, with the reason" \
 "| 2 | Version PR | CTO | ⚪ not started | CTO: open it |
 | 3 | README read | QA | ⚪ waits for the version PR; QA reads it: as the CEO asked on 2026-10-19 | — |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+| 4 | Tag, Release, install here | CTO | ⚪ waits for QA's OK | CTO: tag it, on QA's OK |"
 upstream 55
 expect_steps "the version PR merged: QA reads it" \
 "| 2 | Version PR | CTO | ✅ done | — |
 | 3 | README read | QA | ⏳ QA reads it: as the CEO asked on 2026-10-19 | QA: read it |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+| 4 | Tag, Release, install here | CTO | ⚪ waits for QA's OK | CTO: tag it, on QA's OK |"
 echo '[{"ref": "refs/tags/v55"}]' > "$W/refs.json"
 expect_steps "tagged: done by QA" \
 "| 2 | Version PR | CTO | ✅ done | — |
 | 3 | README read | QA | ✅ done by QA: as the CEO asked on 2026-10-19 | — |
 | 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ⚪ | CTO: publish the Release |"
 echo '[]' > "$W/refs.json"
-for text in 'README read by: someone, as the CEO asked' 'README read by: QA' 'Note: README read by: QA, as the CEO asked'; do
+plan_body 'README read by: CEO, as planned'
+expect_steps "a line that names the CEO keeps the tag waiting for the CEO's OK" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | README read | CEO | ⏳ CEO reads it: as planned | CEO: read it |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+for text in 'README read by: someone, as the CEO asked' 'README read by: QA' 'Note: README read by: QA, as the CEO asked' \
+  "README read by: QA's review of the version PR, as the CEO asked"; do
   plan_body "$text"
   expect_steps "'$text' is no such line: the CEO's row" \
 "| 2 | Version PR | CTO | ✅ done | — |
