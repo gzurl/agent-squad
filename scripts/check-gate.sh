@@ -807,6 +807,39 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   # shellcheck disable=SC2046 # the same
   kill -KILL $(cat "$lab/started") 2>/dev/null
 done
+#     One after another, the same signals end the run as side by side, whatever its check does
+#     with them (agent-squad #494). The first check here marks its start with its PID in
+#     $lab/handling, then ends normally, with 0, on SIGINT, SIGHUP or SIGTERM: a run that waited for
+#     it in the foreground would take a SIGINT as handled, and start the second check, which marks
+#     that it ran in $lab/later.
+cat > "$lab/handles.sh" <<HANDLES
+#!/usr/bin/env perl
+\$SIG{\$_} = sub { exit 0 } for qw(INT HUP TERM);
+open(my \$mark, '>', q{$lab/handling}) or die "handles.sh: \$!\\n";
+print \$mark "\$\$\\n";
+close \$mark;
+sleep 60;
+exit 1;
+HANDLES
+chmod +x "$lab/handles.sh"
+printf '%s\ntouch %q\n' "$(printf %q "$lab/handles.sh")" "$lab/later" > "$wt/.agent-squad-checks"
+# shellcheck disable=SC2317,SC2329 # run through within
+handler_gone() { ! kill -0 "$(cat "$lab/handling")" 2>/dev/null; }
+for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
+  rm -f "$lab/handling" "$lab/later"
+  checks_in_background
+  if within 50 test -s "$lab/handling"; then handling=yes; else handling=no; fi
+  kill "-${signal%%:*}" -- "-$checker"
+  finished
+  expected="${signal#*:}" how="${signal##*:}"
+  if [ "$handling" = yes ] && [ "$code" = "${expected%%:*}" ] && [ ! -e "$lab/later" ] \
+    && within 30 handler_gone; then
+    pass "$how one after another, the run stops a check that ends normally on the signal, and starts no later one"
+  else
+    fail "$how one after another: its check started: $handling, exit $code, a later check started: $([ -e "$lab/later" ] && echo yes || echo no)"
+  fi
+  kill -KILL "$(cat "$lab/handling" 2>/dev/null)" 2>/dev/null
+done
 
 
 # 17. A release branch is cut with no exception at a commit that the remote's default branch, a

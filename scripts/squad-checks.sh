@@ -46,23 +46,62 @@ fi
 # is no caffeinate, as off macOS, the attempt fails without a word and the checks run all the same.
 caffeinate -i -w "$$" </dev/null >/dev/null 2>&1 &
 
-# Each check runs on its own, so that one failing never hides behind another or behind a pipe.
+# Each check runs on its own, so that one failing never hides behind another or behind a pipe, and
+# as a job: job control gives it a process group of its own, which a stop reaches whole, and keeps
+# SIGINT as a terminal leaves it, which a command started in the background without it ignores, and
+# so would every test of an interruption that the check runs. $pids holds the checks running.
+pids=()
+# `stop` ends the checks running, with every process each started, as pgrep finds them under it or
+# in its process group: SIGTERM, then SIGKILL to those still running two seconds later. kill passes
+# while any of them is there to signal. The last job started counts too, should a signal come
+# before its PID is in $pids.
+# shellcheck disable=SC2317,SC2329 # run by the traps below
+family() {
+  local child
+  for child in $(pgrep -P "$1"); do family "$child"; done
+  echo "$1"
+}
+# shellcheck disable=SC2317,SC2329 # the same
+stop() {
+  local stopping pid tenths=20 running=("${pids[@]}" "$!")
+  stopping="$(for pid in "${running[@]}"; do family "$pid"; done)"
+  # shellcheck disable=SC2086 # the PIDs are split on purpose, one argument each
+  kill -TERM -- $stopping "${running[@]/#/-}" 2>/dev/null
+  # shellcheck disable=SC2086 # the same
+  while [ "$tenths" -gt 0 ] && kill -0 -- $stopping "${running[@]/#/-}" 2>/dev/null; do
+    sleep 0.1
+    tenths=$((tenths - 1))
+  done
+  # shellcheck disable=SC2086 # the same
+  kill -KILL -- $stopping "${running[@]/#/-}" 2>/dev/null
+}
+# Interrupted, hung up, as a closed terminal does, or terminated, the run stops its checks first: in
+# groups of their own, the checks get none of these signals themselves (QA's finding on PR #472).
+# The script waits for its checks as jobs, so a signal reaches these traps at once, whatever a check
+# does with it: waiting for a check in the foreground, bash would take a SIGINT that the check ends
+# normally on as handled, and go on to the next check (agent-squad #494). SIGKILL, which no trap
+# catches, leaves them running.
+trap 'stop; exit 130' INT
+trap 'stop; exit 129' HUP
+trap 'stop; exit 143' TERM
+
 codes=()
 if [ "$side_by_side" = no ]; then
+  # One after another, each check's output goes straight to the terminal.
   for command in "${commands[@]}"; do
     echo "checks: running: $command" >&2
-    bash -c "$command" </dev/null
+    set -m
+    bash -c "$command" </dev/null &
+    pids=("$!")
+    set +m
+    wait "${pids[0]}"
     codes+=("$?")
   done
 else
   # Side by side, each check writes to a file of its own, shown once it has ended if it failed:
-  # interleaved, the output of several checks would not read. Job control gives each check a
-  # process group of its own, which a stop reaches whole, and keeps SIGINT as a terminal leaves it,
-  # which a command started in the background without it ignores, and so would every test of an
-  # interruption that the check runs.
+  # interleaved, the output of several checks would not read.
   outputs="$(mktemp -d "${TMPDIR:-/tmp}/squad-checks.XXXXXX")" || exit 2
   trap 'rm -rf "$outputs"' EXIT
-  pids=()
   set -m
   for i in "${!commands[@]}"; do
     echo "checks: running: ${commands[$i]}" >&2
@@ -70,35 +109,6 @@ else
     pids+=("$!")
   done
   set +m
-  # `stop` ends every check, with every process it started, as pgrep finds them under it or in its
-  # process group: SIGTERM, then SIGKILL to those still running two seconds later. kill passes while
-  # any of them is there to signal.
-  # shellcheck disable=SC2317,SC2329 # run by the traps below
-  family() {
-    local child
-    for child in $(pgrep -P "$1"); do family "$child"; done
-    echo "$1"
-  }
-  # shellcheck disable=SC2317,SC2329 # the same
-  stop() {
-    local stopping pid tenths=20
-    stopping="$(for pid in "${pids[@]}"; do family "$pid"; done)"
-    # shellcheck disable=SC2086 # the PIDs are split on purpose, one argument each
-    kill -TERM -- $stopping "${pids[@]/#/-}" 2>/dev/null
-    # shellcheck disable=SC2086 # the same
-    while [ "$tenths" -gt 0 ] && kill -0 -- $stopping "${pids[@]/#/-}" 2>/dev/null; do
-      sleep 0.1
-      tenths=$((tenths - 1))
-    done
-    # shellcheck disable=SC2086 # the same
-    kill -KILL -- $stopping "${pids[@]/#/-}" 2>/dev/null
-  }
-  # Interrupted, hung up, as a closed terminal does, or terminated, the run stops every check first:
-  # in groups of their own, the checks get none of these signals themselves (QA's finding on PR
-  # #472). SIGKILL, which no trap catches, leaves them running.
-  trap 'stop; exit 130' INT
-  trap 'stop; exit 129' HUP
-  trap 'stop; exit 143' TERM
   for i in "${!commands[@]}"; do
     wait "${pids[$i]}"
     codes+=("$?")
