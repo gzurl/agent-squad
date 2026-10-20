@@ -366,7 +366,8 @@ is each session's record in `.agent-squad/sessions/`, the release that session l
 `/squad-resume` reads. The latest release, which the
 board's notice names, is checked by the squad's hooks and scripts instead. A session start always
 asks GitHub, however recent the last check: a new session, a resumed one, a `/restart` or a
-`/clear`, though not a compaction. Otherwise they check once a day in a session that stays open,
+`/clear`, though not a compaction. So do `/squad-update` and `/squad-upgrade`, so that the notice
+names the release they report. Otherwise they check once a day in a session that stays open,
 and when the CTO runs `/squad-resume` or `/squad-watch`, never twice within a day, nor more than
 once an hour while GitHub cannot be reached.
 After an upgrade, restart the three sessions, with `/restart` in each, to load the new board;
