@@ -40,8 +40,9 @@ check() {
 # A command that never ends: it writes its PID to $lab/pid, then sleeps for a minute.
 endless=(bash -c 'echo "$$" > "$1"; exec sleep 60' _ "$lab/pid")
 deaf=(bash -c 'trap "" TERM; echo "$$" > "$1"; exec sleep 60' _ "$lab/pid")
-# One whose SIGTERM handler takes a second, then writes $lab/stopped and ends.
-graceful=(bash -c 'trap "sleep 1; echo stopped > \"\$2\"; exit 0" TERM; echo "$$" > "$1"; while :; do sleep 0.1; done' \
+# One whose SIGTERM handler takes a second, then writes $lab/stopped and ends. Left alone, it ends
+# after a minute too, so that a run that stops nothing fails instead of holding this check for good.
+graceful=(bash -c 'trap "sleep 1; echo stopped > \"\$2\"; exit 0" TERM; echo "$$" > "$1"; while [ "$SECONDS" -lt 60 ]; do sleep 0.1; done' \
   _ "$lab/pid" "$lab/stopped")
 # `state <pid file>` says what became of the process whose PID the file holds: "never started" while
 # the file is empty, "ended" once no process has that PID, or only one that has ended and that its
@@ -143,7 +144,7 @@ check "and it no longer runs" gone
 #    The process the command starts holds none of its output, which would keep this run waiting.
 run 3 bash -c 'bash -c "echo \$\$ > \"\$1\"; exec sleep 60" _ "$1" >/dev/null 2>&1 & wait' _ "$lab/pid"
 became="$(state "$lab/pid")"
-measured+=", and what it started $became"
+measured+=", and its child $became"
 check "a process the command started is stopped with it: exit 124 within seconds, and it no longer runs" \
   bash -c '[ "$1" -eq 124 ] && [ "$2" -le 30 ] && [ "$3" = ended ]' _ "$code" "$took" "$became"
 printf '#!/bin/sh\necho "$$" > %q\nexec sleep 60\n' "$lab/pid" > "$lab/ssh"
