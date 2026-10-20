@@ -1936,6 +1936,13 @@ cases_uninstall() {
   check "a dry run exits 0, says what it would remove, and changes nothing" \
     bash -c '[ "$1" -eq 0 ] && grep -qF "uninstall: squad      would remove .agent-squad/ but for the records" <<<"$2" && [ "$3" = "$4" ]' \
     _ "$code" "$out" "$state" "$(uninstall_state)"
+  #   It makes no copy of itself, which it would only need to remove the playbook (agent-squad
+  #   #473): with a TMPDIR that does not exist, where no copy can go, it runs all the same.
+  dry_out="$out"
+  out="$(TMPDIR="$lab/no-such-tmp" "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" --dry-run "$target" 2>&1)"
+  code=$?
+  check "and makes no copy of itself: with a TMPDIR that does not exist, it says the same" \
+    bash -c '[ "$1" -eq 0 ] && [ "$2" = "$3" ]' _ "$code" "$out" "$dry_out"
   out="$(TMPDIR="$lab/tmp-u" "$target/.agent-squad/playbook/scripts/squad-uninstall.sh" "$target" 2>&1)"
   code=$?
   check "an uninstall run from the playbook it removes exits 0" [ "$code" -eq 0 ]
@@ -2016,6 +2023,17 @@ cases_uninstall_refusals() {
   check "a worktree with changes not committed stops the uninstall, exit 1, naming them, and nothing is removed" \
     bash -c '[ "$1" -eq 1 ] && grep -qF "uninstall: refused    worktrees/dev has changes that are not committed: notes.txt" <<<"$2" && [ "$3" = "$4" ]' \
     _ "$code" "$out" "$before" "$(state)"
+  #   A refusal and bad usage make no copy either (agent-squad #473): with a TMPDIR that does not
+  #   exist, they say the same.
+  refused_out="$out"
+  out="$(TMPDIR="$lab/no-such-tmp" "$uninstall" "$target" 2>&1)"
+  code=$?
+  check "and makes no copy of itself: with a TMPDIR that does not exist, it refuses the same way" \
+    bash -c '[ "$1" -eq 1 ] && [ "$2" = "$3" ]' _ "$code" "$out" "$refused_out"
+  out="$(TMPDIR="$lab/no-such-tmp" "$uninstall" --bogus "$target" 2>&1)"
+  code=$?
+  check "and bad usage, which prints its usage, with exit 2" \
+    bash -c '[ "$1" -eq 2 ] && [[ "$2" == "usage: squad-uninstall.sh "* ]]' _ "$code" "$out"
   rm "$target/.agent-squad/worktrees/dev/notes.txt"
   git -C "$target/.agent-squad/worktrees/qa" commit -q --allow-empty -m "a commit no remote holds"
   before="$(state)"
