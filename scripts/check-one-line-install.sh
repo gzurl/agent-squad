@@ -52,7 +52,7 @@ case "$1 ${2:-}" in
   "api -H")
     [ "${STUB_CONTENTS:-}" != fail ] || exit 1
     [ "${STUB_CONTENTS:-}" != empty ] || exit 0
-    [ "${STUB_CONTENTS:-}" != slow ] || sleep 5
+    [ "${STUB_CONTENTS:-}" != slow ] || sleep 30
     if [ "${STUB_CONTENTS:-}" = hang ]; then echo "$$" > "$STUB_LAB/hung.pid"; exec sleep 60; fi
     cat <<'INSTALLER'
 #!/usr/bin/env bash
@@ -289,9 +289,11 @@ else
   fail "TMPDIR holds: $(left_in_tmp)"
 fi
 # `interrupted_while <what> <state file> <pattern>` runs install.sh, waits until the state file
-# matches the pattern, interrupts it, and passes when it exited 130 and left TMPDIR clean.
+# matches the pattern, interrupts it, and passes when it exited 130 and left TMPDIR clean. The state
+# is awaited for 30 s at most, where it comes within a second on an idle machine, and the stubs that
+# hold it wait half a minute, which the interruption cuts short (agent-squad #498).
 interrupted_while() {
-  local what="$1" state="$2" pattern="$3" pid tries=0
+  local what="$1" state="$2" pattern="$3" pid started=$SECONDS
   rm -f "$lab/calls" "$lab/installer-args"
   set -m
   (cd "$project" && PATH="$lab/bin:$PATH" TMPDIR="$lab/tmp" "$script" --tag v16 "$project" \
@@ -299,10 +301,9 @@ interrupted_while() {
   pid=$!
   set +m
   until grep -qF -- "$pattern" "$state" 2>/dev/null; do
-    tries=$((tries + 1))
-    if [ "$tries" -ge 1000 ] || ! kill -0 "$pid" 2>/dev/null; then
+    if [ $((SECONDS - started)) -ge 30 ] || ! kill -0 "$pid" 2>/dev/null; then
       kill -KILL -- "-$pid" 2>/dev/null
-      fail "interrupted while $what: that state was never reached"
+      fail "interrupted while $what: that state was not reached within 30 s, or the run ended first"
       return
     fi
     sleep 0.01
@@ -319,7 +320,7 @@ interrupted_while() {
 export STUB_CONTENTS=slow
 interrupted_while "the installer downloads" "$lab/calls" "contents"
 unset STUB_CONTENTS
-export STUB_INSTALLER_SLEEP=5
+export STUB_INSTALLER_SLEEP=30
 interrupted_while "the installer runs" "$lab/installer-args" "$project"
 unset STUB_INSTALLER_SLEEP
 #    A mkdir that makes the directory but cannot set a mode, as on NTFS under Git Bash, where

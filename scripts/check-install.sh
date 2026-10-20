@@ -1043,19 +1043,22 @@ cases_check_gate() {
   # interrupted at a state, not after a delay: as soon as the sandbox's directory exists, and once it
   # holds its repositories. Two wrappers make both states last: a mktemp that waits between creating a
   # directory and printing its name (the window in which a cleanup that learns the name from mktemp
-  # has nothing to remove, or removes TMPDIR itself), and a git whose push waits.
+  # has nothing to remove, or removes TMPDIR itself), and a git whose push waits. Each waits half a
+  # minute, which the interruption cuts short, so that a loaded machine finds the state in time
+  # (agent-squad #498).
   real_mktemp="$(command -v mktemp)" real_git="$(command -v git)"
   mkdir -p "$lab/slow"
-  printf '#!/usr/bin/env bash\ndir="$(%q "$@")" || exit\nsleep 1\necho "$dir"\n' "$real_mktemp" > "$lab/slow/mktemp"
-  printf '#!/usr/bin/env bash\n[ "${3:-}" = push ] && sleep 1\nexec %q "$@"\n' "$real_git" > "$lab/slow/git"
+  printf '#!/usr/bin/env bash\ndir="$(%q "$@")" || exit\nsleep 30\necho "$dir"\n' "$real_mktemp" > "$lab/slow/mktemp"
+  printf '#!/usr/bin/env bash\n[ "${3:-}" = push ] && sleep 30\nexec %q "$@"\n' "$real_git" > "$lab/slow/git"
   chmod +x "$lab/slow/mktemp" "$lab/slow/git"
   # `sandboxes` lists the gate's sandboxes in the test's TMPDIR.
   sandboxes() { find "$lab/tmp" -maxdepth 1 -name 'squad-check.*' 2>/dev/null; }
   # `interrupted_at <created|populated>` runs --check, interrupts it at that state, and passes when the
   # run was really interrupted (exit 130), no sandbox is left, and the file that is not the
-  # installer's is still there.
+  # installer's is still there. The state is awaited for 30 s at most, and the cleanup too, where
+  # each takes well under a second on an idle machine; a case that fails says what it found.
   interrupted_at() {
-    local pid code sandbox tries=0
+    local pid code sandbox started=$SECONDS
     rm -rf "$lab/tmp" && mkdir -p "$lab/tmp" && echo "not the installer's" > "$lab/tmp/keep-me"
     set -m
     PATH="$lab/slow:$PATH" TMPDIR="$lab/tmp" "$install" --check "$project" >/dev/null 2>&1 &
@@ -1063,9 +1066,9 @@ cases_check_gate() {
     set +m
     until sandbox="$(sandboxes | head -1)" && [ -n "$sandbox" ] \
       && { [ "$1" = created ] || [ -d "$sandbox/remote.git" ]; }; do
-      tries=$((tries + 1))
-      if [ "$tries" -ge 2000 ] || ! kill -0 "$pid" 2>/dev/null; then
+      if [ $((SECONDS - started)) -ge 30 ] || ! kill -0 "$pid" 2>/dev/null; then
         kill -INT -- "-$pid" 2>/dev/null
+        echo "          its sandbox was not $1 within 30 s, or the run ended first" >&2
         return 1
       fi
       sleep 0.005
@@ -1074,9 +1077,11 @@ cases_check_gate() {
     wait "$pid" 2>/dev/null
     code=$?
     # What is left of the run gets a moment to finish its cleanup.
-    tries=0
-    while [ -n "$(sandboxes)" ] && [ "$tries" -lt 100 ]; do sleep 0.05; tries=$((tries + 1)); done
-    [ "$code" -eq 130 ] && [ -z "$(sandboxes)" ] && [ -f "$lab/tmp/keep-me" ]
+    started=$SECONDS
+    while [ -n "$(sandboxes)" ] && [ $((SECONDS - started)) -lt 30 ]; do sleep 0.05; done
+    [ "$code" -eq 130 ] && [ -z "$(sandboxes)" ] && [ -f "$lab/tmp/keep-me" ] && return 0
+    echo "          exit $code, a sandbox left 30 s later: $([ -n "$(sandboxes)" ] && echo yes || echo no), the other file kept: $([ -f "$lab/tmp/keep-me" ] && echo yes || echo no)" >&2
+    return 1
   }
   check "an --check interrupted as soon as its sandbox exists leaves none, and nothing else goes" \
     interrupted_at created

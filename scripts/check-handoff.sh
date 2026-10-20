@@ -151,25 +151,28 @@ else
 fi
 
 # 6. Run by hand, with a terminal as stdin and no payload, restore does not wait for input.
-# `on_a_terminal <out> <last line> <command...>` runs the command with a pseudo-terminal as stdin
-# that stays open for five seconds, its output in <out>, and passes when the command's last line is
-# out within three seconds. It does not wait for script(1) itself, which may outlive the command
-# until its own stdin closes. script(1) comes in a util-linux form and a BSD one (macOS).
+# `on_a_terminal <out> <last line> <command...>` runs the command with a pseudo-terminal as stdin,
+# its output in <out>, and passes when the command's last line is out within 30 s. Its stdin is a
+# pipe from a sleep that writes its PID in <out>.pid, and that this script ends with the case: a
+# command that waits for input never prints that line, and a loaded machine has half a minute for
+# one that does not, where it takes under a second on an idle one (agent-squad #498). macOS's
+# script(1) takes no fifo as stdin. It does not wait for script(1) itself, which may outlive the
+# command until its own stdin closes. script(1) comes in a util-linux form and a BSD one (macOS).
 on_a_terminal() {
   local out="$1" last="$2" pid tries=0
   shift 2
   command -v script >/dev/null 2>&1 || return 1
   if script -q -c true /dev/null </dev/null >/dev/null 2>&1; then
-    script -q -c "$(printf '%q ' "$@")" /dev/null > "$out" 2>&1 < <(sleep 5) &
+    sh -c 'echo "$$" > "$1"; exec sleep 600' _ "$out.pid" | script -q -c "$(printf '%q ' "$@")" /dev/null > "$out" 2>&1 &
   else
-    script -q /dev/null "$@" > "$out" 2>&1 < <(sleep 5) &
+    sh -c 'echo "$$" > "$1"; exec sleep 600' _ "$out.pid" | script -q /dev/null "$@" > "$out" 2>&1 &
   fi
   pid=$!
-  while ! grep -qF -- "$last" "$out" 2>/dev/null && [ "$tries" -lt 60 ]; do
-    sleep 0.05
+  while ! grep -qF -- "$last" "$out" 2>/dev/null && [ "$tries" -lt 300 ]; do
+    sleep 0.1
     tries=$((tries + 1))
   done
-  kill "$pid" 2>/dev/null
+  kill "$pid" "$(cat "$out.pid" 2>/dev/null)" 2>/dev/null
   wait "$pid" 2>/dev/null
   grep -qF -- "$last" "$out"
 }
@@ -178,7 +181,7 @@ last_line="(no handoff file was saved for this session; rely on GitHub and the r
 if (cd "$beside" && on_a_terminal "$lab/tty.out" "$last_line" "$handoff" restore); then
   pass "restore run by hand on a terminal does not wait for input"
 else
-  fail "restore run by hand on a terminal waited for input, or did not run"
+  fail "restore run by hand on a terminal waited for input, or did not run: its last line was not out within 30 s"
 fi
 
 # 7. The snapshot's listings ask gh for an explicit limit, and say so on a line of their own when a
