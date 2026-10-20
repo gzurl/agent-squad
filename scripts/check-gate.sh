@@ -648,7 +648,7 @@ fi
 #     Without caffeinate on PATH, the checks run as before, and say nothing more: each its line, and
 #     the exit status of one that failed. PATH holds only what the run needs.
 mkdir -p "$lab/bare"
-for tool in bash git; do ln -s "$(type -P "$tool")" "$lab/bare/$tool"; done
+for tool in bash git mktemp rm ps sleep; do ln -s "$(type -P "$tool")" "$lab/bare/$tool"; done
 list "$wt" 'true
 false'
 errors="$(cd "$wt" && PATH="$lab/bare" "$runner" </dev/null 2>&1)"
@@ -807,6 +807,72 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   # shellcheck disable=SC2046 # the same
   kill -KILL $(cat "$lab/started") 2>/dev/null
 done
+#     One after another, the same signals end the run as side by side, whatever its check does
+#     with them (agent-squad #494). The first check here marks its start with its PID in
+#     $lab/handling, then ends normally, with 0, on SIGINT, SIGHUP or SIGTERM: a run that waited for
+#     it in the foreground would take a SIGINT as handled, and start the second check, which marks
+#     that it ran in $lab/later.
+cat > "$lab/handles.sh" <<HANDLES
+#!/usr/bin/env perl
+\$SIG{\$_} = sub { exit 0 } for qw(INT HUP TERM);
+open(my \$mark, '>', q{$lab/handling}) or die "handles.sh: \$!\\n";
+print \$mark "\$\$\\n";
+close \$mark;
+sleep 60;
+exit 1;
+HANDLES
+chmod +x "$lab/handles.sh"
+printf '%s\ntouch %q\n' "$(printf %q "$lab/handles.sh")" "$lab/later" > "$wt/.agent-squad-checks"
+# shellcheck disable=SC2317,SC2329 # run through within
+handler_gone() { ! kill -0 "$(cat "$lab/handling")" 2>/dev/null; }
+for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
+  rm -f "$lab/handling" "$lab/later"
+  checks_in_background
+  if within 50 test -s "$lab/handling"; then handling=yes; else handling=no; fi
+  kill "-${signal%%:*}" -- "-$checker"
+  finished
+  expected="${signal#*:}" how="${signal##*:}"
+  if [ "$handling" = yes ] && [ "$code" = "${expected%%:*}" ] && [ ! -e "$lab/later" ] \
+    && within 30 handler_gone; then
+    pass "$how one after another, the run stops a check that ends normally on the signal, and starts no later one"
+  else
+    fail "$how one after another: its check started: $handling, exit $code, a later check started: $([ -e "$lab/later" ] && echo yes || echo no)"
+  fi
+  kill -KILL "$(cat "$lab/handling" 2>/dev/null)" 2>/dev/null
+done
+#     A check that the terminal stops, as one that reads it does from a process group of its own,
+#     fails, and the run goes on, in both modes (QA's finding on PR #497): here the check marks its
+#     PID in $lab/stopping, then stops itself, as SIGTTIN would stop it, and the next check marks
+#     that it ran in $lab/later. `stopped_gone` passes once the stopped check no longer runs.
+printf '#!/usr/bin/env bash\necho "$$" > %q\nkill -STOP "$$"\n' "$lab/stopping" > "$lab/stops.sh"
+chmod +x "$lab/stops.sh"
+stops="$(printf %q "$lab/stops.sh")"
+# shellcheck disable=SC2317,SC2329 # run through within
+stopped_gone() { ! kill -0 "$(cat "$lab/stopping")" 2>/dev/null; }
+for mode in "one after another:" "side by side:# squad-checks: side by side"; do
+  rm -f "$lab/stopping" "$lab/later"
+  printf '%s\n%s\ntouch %q\n' "${mode#*:}" "$stops" "$lab/later" > "$wt/.agent-squad-checks"
+  checks_in_background
+  finished
+  said="$(cat "$lab/checks.err")"
+  if [ "$code" = 1 ] && grep -qxF "  FAILED  $stops (stopped: it read the terminal, or wrote to it under stty tostop)" <<<"$said" \
+    && [ -e "$lab/later" ] && within 30 stopped_gone; then
+    pass "${mode%%:*}, a check that the terminal stops fails, saying so, and the run goes on"
+  else
+    fail "${mode%%:*}, a check that the terminal stops: exit $code, a later check ran: $([ -e "$lab/later" ] && echo yes || echo no), said: $said"
+  fi
+  kill -KILL "$(cat "$lab/stopping" 2>/dev/null)" 2>/dev/null
+done
+#     A TMPDIR that names no directory falls back to /tmp, so that one after another the checks
+#     still need none (QA's finding on PR #497).
+printf 'true\n' > "$wt/.agent-squad-checks"
+errors="$(cd "$wt" && TMPDIR="$lab/no-such-directory" "$runner" </dev/null 2>&1)"
+code=$?
+if [ "$code" -eq 0 ] && grep -qxF "  ok      true" <<<"$errors"; then
+  pass "with a TMPDIR that names no directory, the checks run all the same"
+else
+  fail "with a TMPDIR that names no directory: exit $code, said: $errors"
+fi
 
 
 # 17. A release branch is cut with no exception at a commit that the remote's default branch, a

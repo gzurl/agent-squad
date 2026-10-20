@@ -566,8 +566,10 @@ runs no check. A commit that only a feature branch holds needs a PR first.
 port, database or fixed file that two of them use. Add the line `# squad-checks: side by side` to
 `.agent-squad-checks`, and the pre-push gate starts them all at once. Each still gets its status
 line, the output of one that fails is shown once it ends, and the push is refused when any fails.
-A check run so must not read the terminal, which would stop it. Without that line they run one
-after another, and so they do under a release that does not know it, which reads it as a comment.
+Without that line they run one after another, and so they do under a release that does not know
+it, which reads it as a comment. Either way, a check must not read the terminal, nor write to it
+once `stty tostop` is set: each check runs apart from the terminal, which stops it then, and the
+run fails that check, saying so.
 
 **Does it collect anything about me?** No. Nothing in **agent-squad** calls home, and nothing
 about you or your project is sent anywhere. Each release is published as a GitHub Release with

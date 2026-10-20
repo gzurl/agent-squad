@@ -46,75 +46,128 @@ fi
 # is no caffeinate, as off macOS, the attempt fails without a word and the checks run all the same.
 caffeinate -i -w "$$" </dev/null >/dev/null 2>&1 &
 
-# Each check runs on its own, so that one failing never hides behind another or behind a pipe.
+# Each check runs on its own, so that one failing never hides behind another or behind a pipe, and
+# as a job: job control gives it a process group of its own, which a stop reaches whole, and keeps
+# SIGINT as a terminal leaves it, which a command started in the background without it ignores, and
+# so would every test of an interruption that the check runs. $pids holds the checks started, and
+# $work what the run keeps while it runs: the output of each check side by side, and a mark for
+# each check that the terminal stopped.
+# A TMPDIR that names no directory falls back to /tmp: one after another, the checks needed none
+# before this (QA's finding on PR #497).
+work="$(mktemp -d "${TMPDIR:-/tmp}/squad-checks.XXXXXX" 2>/dev/null || mktemp -d /tmp/squad-checks.XXXXXX)" || exit 2
+trap 'rm -rf "$work"' EXIT
+pids=()
+# `stop [<pid>...]` ends those checks, or the checks started when none is named, with every process
+# each started, as pgrep finds them under it or in its process group: SIGTERM, with SIGCONT for one
+# that is stopped, so that it takes the SIGTERM, then SIGKILL to those still running two seconds
+# later. kill passes while any of them is there to signal. The last job started counts too, should
+# a signal come before its PID is in $pids.
+# shellcheck disable=SC2317,SC2329 # run by the traps and the watch below
+family() {
+  local child
+  for child in $(pgrep -P "$1"); do family "$child"; done
+  echo "$1"
+}
+# shellcheck disable=SC2317,SC2329 # the same
+stop() {
+  local stopping pid tenths=20 running=("$@")
+  [ "$#" -gt 0 ] || running=("${pids[@]}" "$!")
+  stopping="$(for pid in "${running[@]}"; do family "$pid"; done)"
+  # shellcheck disable=SC2086 # the PIDs are split on purpose, one argument each
+  kill -TERM -- $stopping "${running[@]/#/-}" 2>/dev/null
+  # shellcheck disable=SC2086 # the same
+  kill -CONT -- $stopping "${running[@]/#/-}" 2>/dev/null
+  # shellcheck disable=SC2086 # the same
+  while [ "$tenths" -gt 0 ] && kill -0 -- $stopping "${running[@]/#/-}" 2>/dev/null; do
+    sleep 0.1
+    tenths=$((tenths - 1))
+  done
+  # shellcheck disable=SC2086 # the same
+  kill -KILL -- $stopping "${running[@]/#/-}" 2>/dev/null
+}
+# Interrupted, hung up, as a closed terminal does, or terminated, the run stops its checks first: in
+# groups of their own, the checks get none of these signals themselves (QA's finding on PR #472).
+# The script waits for its checks as jobs, so a signal reaches these traps at once, whatever a check
+# does with it: waiting for a check in the foreground, bash would take a SIGINT that the check ends
+# normally on as handled, and go on to the next check (agent-squad #494). SIGKILL, which no trap
+# catches, leaves them running.
+trap 'stop; exit 130' INT
+trap 'stop; exit 129' HUP
+trap 'stop; exit 143' TERM
+# A check apart from the terminal's process group that reads the terminal, as a pager does, or
+# writes to one set with `stty tostop`, is stopped by it until it is continued, which would hold
+# the run for good (QA's finding on PR #497). `watch <pid>...`, in the background, looks at those
+# checks twice a second with ps, stops any that is stopped, `T`, and leaves $work/<pid>.terminal
+# for it; it ends once none of them runs, or the run itself has ended. It acts only on a process
+# whose parent is this run: once a check has ended, its PID can name another process (QA's finding
+# on PR #497). `kept <pid> <status>` prints that check's status, `terminal` when the watch stopped
+# it.
+# shellcheck disable=SC2317,SC2329 # run in the background below
+watch() {
+  local pid parent state
+  while kill -0 "$@" 2>/dev/null && kill -0 "$$" 2>/dev/null; do
+    while read -r pid parent state; do
+      [ "$parent" = "$$" ] || continue
+      case "$state" in T*) : >"$work/$pid.terminal"; stop "$pid" ;; esac
+    done <<<"$(ps -o pid=,ppid=,stat= -p "$(IFS=,; echo "$*")" 2>/dev/null)"
+    sleep 0.5 || return
+  done
+}
+kept() { if [ -e "$work/$1.terminal" ]; then echo terminal; else echo "$2"; fi; }
+# `watching <pid>...` starts the watch on those checks, its PID in $watcher, out of bash's table of
+# jobs: ended with a signal once they have ended, it is then not reported, as bash on Linux reports
+# a job killed so ("Terminated").
+watching() {
+  watch "$@" </dev/null >/dev/null 2>&1 &
+  watcher=$!
+  disown "$watcher"
+}
+
 codes=()
 if [ "$side_by_side" = no ]; then
-  for command in "${commands[@]}"; do
-    echo "checks: running: $command" >&2
-    bash -c "$command" </dev/null
-    codes+=("$?")
+  # One after another, each check's output goes straight to the terminal.
+  for i in "${!commands[@]}"; do
+    echo "checks: running: ${commands[$i]}" >&2
+    set -m
+    bash -c "${commands[$i]}" </dev/null &
+    pids=("$!")
+    set +m
+    watching "${pids[0]}"
+    wait "${pids[0]}"
+    codes+=("$(kept "${pids[0]}" "$?")")
+    kill "$watcher" 2>/dev/null
   done
 else
   # Side by side, each check writes to a file of its own, shown once it has ended if it failed:
-  # interleaved, the output of several checks would not read. Job control gives each check a
-  # process group of its own, which a stop reaches whole, and keeps SIGINT as a terminal leaves it,
-  # which a command started in the background without it ignores, and so would every test of an
-  # interruption that the check runs.
-  outputs="$(mktemp -d "${TMPDIR:-/tmp}/squad-checks.XXXXXX")" || exit 2
-  trap 'rm -rf "$outputs"' EXIT
-  pids=()
+  # interleaved, the output of several checks would not read.
   set -m
   for i in "${!commands[@]}"; do
     echo "checks: running: ${commands[$i]}" >&2
-    bash -c "${commands[$i]}" </dev/null >"$outputs/$i" 2>&1 &
+    bash -c "${commands[$i]}" </dev/null >"$work/$i" 2>&1 &
     pids+=("$!")
   done
   set +m
-  # `stop` ends every check, with every process it started, as pgrep finds them under it or in its
-  # process group: SIGTERM, then SIGKILL to those still running two seconds later. kill passes while
-  # any of them is there to signal.
-  # shellcheck disable=SC2317,SC2329 # run by the traps below
-  family() {
-    local child
-    for child in $(pgrep -P "$1"); do family "$child"; done
-    echo "$1"
-  }
-  # shellcheck disable=SC2317,SC2329 # the same
-  stop() {
-    local stopping pid tenths=20
-    stopping="$(for pid in "${pids[@]}"; do family "$pid"; done)"
-    # shellcheck disable=SC2086 # the PIDs are split on purpose, one argument each
-    kill -TERM -- $stopping "${pids[@]/#/-}" 2>/dev/null
-    # shellcheck disable=SC2086 # the same
-    while [ "$tenths" -gt 0 ] && kill -0 -- $stopping "${pids[@]/#/-}" 2>/dev/null; do
-      sleep 0.1
-      tenths=$((tenths - 1))
-    done
-    # shellcheck disable=SC2086 # the same
-    kill -KILL -- $stopping "${pids[@]/#/-}" 2>/dev/null
-  }
-  # Interrupted, hung up, as a closed terminal does, or terminated, the run stops every check first:
-  # in groups of their own, the checks get none of these signals themselves (QA's finding on PR
-  # #472). SIGKILL, which no trap catches, leaves them running.
-  trap 'stop; exit 130' INT
-  trap 'stop; exit 129' HUP
-  trap 'stop; exit 143' TERM
+  watching "${pids[@]}"
   for i in "${!commands[@]}"; do
     wait "${pids[$i]}"
-    codes+=("$?")
-    if [ "${codes[$i]}" -ne 0 ]; then
+    codes+=("$(kept "${pids[$i]}" "$?")")
+    if [ "${codes[$i]}" != 0 ]; then
       echo "checks: output of ${commands[$i]}:" >&2
-      cat "$outputs/$i" >&2
+      cat "$work/$i" >&2
     fi
   done
+  kill "$watcher" 2>/dev/null
 fi
 
 # One line per check, so that a failure is read and not only counted.
 failed=0
 echo "checks: summary" >&2
 for i in "${!commands[@]}"; do
-  if [ "${codes[$i]}" -eq 0 ]; then
+  if [ "${codes[$i]}" = 0 ]; then
     echo "  ok      ${commands[$i]}" >&2
+  elif [ "${codes[$i]}" = terminal ]; then
+    echo "  FAILED  ${commands[$i]} (stopped: it read the terminal, or wrote to it under stty tostop)" >&2
+    failed=1
   else
     echo "  FAILED  ${commands[$i]} (exit ${codes[$i]})" >&2
     failed=1
