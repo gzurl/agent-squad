@@ -6,12 +6,12 @@ Numbered claims about what the change does, each a sentence a reviewer can prove
 2. Claim 2
 
 ## How to verify
-For each claim, the command or the steps that check it:
+For each claim, the command or the steps that check it; for a PR that a comparison proves, that comparison and its command (SQUAD.md §5):
 1. Check for claim 1
 2. Check for claim 2
 
 <details><summary>Evidence</summary>
 
-Figures, searches, inventories and tables, given once (SQUAD.md §6).
+Figures, searches, inventories and tables, given once (SQUAD.md §6), and every place in the repository that mentions what the diff changes, each with why it still holds (SQUAD.md §4.2).
 
 </details>
