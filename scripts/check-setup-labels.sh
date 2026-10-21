@@ -169,7 +169,7 @@ check "a failed read: exit 1, with gh's message, and nothing more" \
 started=$SECONDS
 STUB_LIST=hang SQUAD_GH_TIMEOUT=1 run
 # Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
-check "a read that never answers: exit 1 after the bound, saying so, and nothing left running" \
+check "a read that never answers: exit 1 after the bound, within 30 s, saying so, and nothing left running" \
   bash -c '[ "$1" -eq 1 ] && [ "$2" -le 30 ] && [ "$3" = "squad-timeout: gh did not end within 1 s, so it was stopped"$'\''\n'\''"labels: cannot read the repository'\''s labels, as gh says above" ] \
     && ! kill -0 "$(cat "$4")" 2>/dev/null' _ "$code" "$((SECONDS - started))" "$out" "$LABELS.pid"
 

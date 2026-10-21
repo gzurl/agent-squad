@@ -194,7 +194,7 @@ if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 30 ] \
   && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a call that never answers stops the gate after its bound, exit 1, saying so, and is not left running"
 else
-  fail "a call that never answers: exit $code after $took s, printed '$out', said '$err'"
+  fail "a call that never answers: exit $code after $took s, 30 s at most, printed '$out', said '$err'"
 fi
 
 # 1b. The state labels (#99): to be merged, a PR carries exactly one of the three, ✅ status:approved.
