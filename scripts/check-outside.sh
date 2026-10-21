@@ -240,7 +240,7 @@ if [ "$code" -eq 1 ] && [ -z "$out" ] && [ "$took" -le 30 ] \
   && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a call that GitHub never answers is stopped after its bound: exit 1, saying so, and nothing left running"
 else
-  fail "a call that GitHub never answers: exit $code after $took s, printed '$out', said '$err'"
+  fail "a call that GitHub never answers: exit $code after $took s, 30 s at most, printed '$out', said '$err'"
 fi
 #    A SQUAD_GH_TIMEOUT that is not a whole number above 0 is 120 s: the run reads GitHub as without
 #    one (QA's finding on PR #432).

@@ -181,7 +181,7 @@ if [ "$took" -le 30 ] && [ "$out" = "latest release: GitHub did not answer withi
   && [ "$code" -eq 0 ]; then
   pass "a gh that takes too long is stopped after the timeout, and counts as a failure, saying so"
 else
-  fail "a gh that takes too long: exit $code after $took s, said: $out"
+  fail "a gh that takes too long: exit $code after $took s, 30 s at most, said: $out"
 fi
 check "and keeps the tag" holds '.tag == "v50" and (now - .attemptedAt) < $recent and (now - .checkedAt) > 86400'
 check "and is not left running" bash -c '! kill -0 "$(cat "$1")" 2>/dev/null' _ "$lab/gh.pid"

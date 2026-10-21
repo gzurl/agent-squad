@@ -438,7 +438,7 @@ if [ "$code" -eq 1 ] && [ "$took" -le 30 ] \
   && grep -qF "refs/tags/v1 is not the checked-out commit" <<<"$errors" && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a remote that never lists its branches is stopped after the bound, saying so, and every ref counts as new code"
 else
-  fail "a remote that never lists its branches: exit $code after $took s, said: $errors"
+  fail "a remote that never lists its branches: exit $code after $took s, 30 s at most, said: $errors"
 fi
 
 # 12. The release branches that .agent-squad-release-branches declares take a PR too (agent-squad

@@ -1325,7 +1325,7 @@ cases_unanswered() {
   out="$(GH_HANG=tarball SQUAD_GH_TIMEOUT=1 "$install" "$target" "$tag_a" 2>&1)"
   code=$?
   # Within 30 s: well under its stub's 60 s, and over what CI's kcov takes (agent-squad #447).
-  check "a download that never answers is stopped after the bound: exit 2, within seconds" \
+  check "a download that never answers is stopped after the bound: exit 2, within 30 s" \
     bash -c '[ "$1" -eq 2 ] && [ "$2" -le 30 ]' _ "$code" "$((SECONDS - started))"
   check "saying so, and that nothing was installed" \
     bash -c 'grep -qxF "squad-timeout: gh did not end within 1 s, so it was stopped" <<<"$1" \
@@ -1348,7 +1348,7 @@ exec %q "$@"
   out="$(PATH="$lab/git-hang:$PATH" SQUAD_GH_TIMEOUT=1 "$install" "$target" "$tag_a" 2>&1)"
   code=$?
   # Within 45 s: well under the two stubs' 60 s, and over what CI's kcov takes (#447).
-  check "a remote that never says its default branch is stopped after the bound: exit 1, within seconds" \
+  check "a remote that never says its default branch is stopped after the bound: exit 1, within 45 s" \
     bash -c '[ "$1" -eq 1 ] && [ "$2" -le 45 ]' _ "$code" "$((SECONDS - started))"
   check "and the installer says that it did not answer, instead of assuming main" \
     contains "$out" "branch     NOT KNOWN: origin/HEAD is not set and the remote did not answer within 1 s"

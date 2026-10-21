@@ -309,7 +309,7 @@ if [ "$(grep -cxF "(GitHub did not answer within 1 s)" <<<"$snapshot")" -eq 2 ] 
   && grep -q '^## Default branch' <<<"$snapshot"; then
   pass "a GitHub that never answers leaves the snapshot saying so, for PRs and issues, within seconds"
 else
-  fail "a GitHub that never answers: after $took s, the snapshot was: $snapshot"
+  fail "a GitHub that never answers: after $took s, 30 s at most, the snapshot was: $snapshot"
 fi
 snapshot="$(hung_snapshot "$lab/bin-hang-reviews")"
 if grep -qxF "  verdict GitHub did not answer within 1 s; unresolved threads GitHub did not answer within 1 s" <<<"$snapshot" \
@@ -484,7 +484,7 @@ if [ "${1:-}" = --due ]; then [ -f "$here/due" ]; exit; fi
 # A check ends once its case creates go-<case>, and gives up after 30 seconds without it.
 waited=0
 while [ ! -e "$here/go-${LATEST_CASE:-none}" ]; do
-  if [ "$waited" -ge 300 ]; then echo "gave up" >> "$log"; exit 1; fi
+  if [ "$waited" -ge 300 ]; then echo "gave up after 30 s" >> "$log"; exit 1; fi
   sleep 0.1
   waited=$((waited + 1))
 done
@@ -526,7 +526,7 @@ checks() {
   elif [ "$(case_log)" = "$5" ]; then
     pass "$1"
   else
-    fail "$1: the stand-in logged '$(case_log)', not '$5'"
+    fail "$1: the stand-in logged '$(case_log)' within 30 s, not '$5'"
   fi
 }
 checks "the turn's end starts a check that is due, for the main checkout, in the background" \

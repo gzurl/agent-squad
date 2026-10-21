@@ -75,6 +75,7 @@ gone() {
 started() {
   local tenths=300
   until [ -s "$lab/pid" ] || [ "$tenths" -eq 0 ]; do sleep 0.1; tenths=$((tenths - 1)); done
+  [ -s "$lab/pid" ] || echo "          (the command had not written its PID 30 s later)" >&2
 }
 # `run <seconds> <command...>` runs squad-timeout.sh, keeping its output, error output, exit status
 # and how many seconds it took, which it also leaves in $measured.
@@ -85,7 +86,7 @@ run() {
   code=$?
   took=$((SECONDS - start))
   err="$(cat "$lab/err")"
-  measured="exit $code after $took s"
+  measured="exit $code after $took s${err:+, saying \"${err%%$'\n'*}\"}"
 }
 
 # 1. A command that ends in time: its input, output, error output and exit status are its own.
@@ -136,7 +137,7 @@ for shell in "${shells[@]}"; do
     for _ in $(seq 100); do "$shell" "$timeout" 5 true 2>>"$lab/loops-err" || echo "$?" >> "$lab/not-0"; done &
   done
   wait
-  measured="$([ -e "$lab/not-0" ] && wc -l <"$lab/not-0" | tr -d ' ' || echo 0) runs did not exit 0, and the error output has $(wc -l <"$lab/loops-err" | tr -d ' ') lines"
+  measured="$([ -e "$lab/not-0" ] && wc -l <"$lab/not-0" | tr -d ' ' || echo 0) runs did not exit 0, and the error output has $(wc -l <"$lab/loops-err" | tr -d ' ') lines, the first: \"$(head -n 1 "$lab/loops-err")\""
   check "on bash $version, 400 runs of a command that ends at once, four loops at once, all exit 0, saying nothing" \
     bash -c '[ ! -e "$1" ] && [ ! -s "$2" ]' _ "$lab/not-0" "$lab/loops-err"
   rm -f "$lab/loops-err"

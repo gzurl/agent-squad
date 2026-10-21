@@ -386,7 +386,7 @@ for call in STUB_AUTH STUB_REPO STUB_TAGLIST STUB_CONTENTS; do
     && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
     pass "a call that never answers ($call=hang) stops after its bound, exit 2, saying so, leaving nothing"
   else
-    fail "a call that never answers ($call=hang): exit $code after $took s, stderr: $err, left: $(left_in_tmp)"
+    fail "a call that never answers ($call=hang): exit $code after $took s, 30 s at most, stderr: $err, left: $(left_in_tmp)"
   fi
 done
 
