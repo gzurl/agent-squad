@@ -39,10 +39,18 @@ check() {
 }
 # A command that never ends: it writes its PID to $lab/pid, then sleeps for a minute.
 endless=(bash -c 'echo "$$" > "$1"; exec sleep 60' _ "$lab/pid")
-deaf=(bash -c 'trap "" TERM; echo "$$" > "$1"; exec sleep 60' _ "$lab/pid")
-# One whose SIGTERM handler takes a second, then writes $lab/stopped and ends. Left alone, it ends
-# after a minute too, so that a run that stops nothing fails instead of holding this check for good.
-graceful=(bash -c 'trap "sleep 1; echo stopped > \"\$2\"; exit 0" TERM; echo "$$" > "$1"; while [ "$SECONDS" -lt 60 ]; do sleep 0.1; done' \
+# One that ignores SIGTERM: it writes the time it got it, to the millisecond, in $lab/termed, and
+# goes on, for a minute at most. `now` prints the time so (agent-squad #498).
+deaf=(perl -MTime::HiRes=time -e '
+  $SIG{TERM} = sub { open(my $f, ">", $ARGV[1]); printf $f "%.3f\n", time; close $f };
+  open(my $p, ">", $ARGV[0]); print $p "$$\n"; close $p;
+  my $end = time + 60; sleep 1 while time < $end;' "$lab/pid" "$lab/termed")
+now() { perl -MTime::HiRes=time -e 'printf "%.3f\n", time'; }
+# One whose SIGTERM handler takes a fifth of a second, then writes $lab/stopped and ends: well inside
+# the two seconds it is given, on a loaded machine too, and far over the tenth a SIGKILL at once
+# leaves it (agent-squad #498). Left alone, it ends after a minute too, so that a run that stops
+# nothing fails instead of holding this check for good.
+graceful=(bash -c 'trap "sleep 0.2; echo stopped > \"\$2\"; exit 0" TERM; echo "$$" > "$1"; while [ "$SECONDS" -lt 60 ]; do sleep 0.1; done' \
   _ "$lab/pid" "$lab/stopped")
 # `state <pid file>` says what became of the process whose PID the file holds: "never started" while
 # the file is empty, "ended" once no process has that PID, or only one that has ended and that its
@@ -67,6 +75,7 @@ gone() {
 started() {
   local tenths=300
   until [ -s "$lab/pid" ] || [ "$tenths" -eq 0 ]; do sleep 0.1; tenths=$((tenths - 1)); done
+  [ -s "$lab/pid" ] || echo "          (the command had not written its PID 30 s later)" >&2
 }
 # `run <seconds> <command...>` runs squad-timeout.sh, keeping its output, error output, exit status
 # and how many seconds it took, which it also leaves in $measured.
@@ -77,7 +86,7 @@ run() {
   code=$?
   took=$((SECONDS - start))
   err="$(cat "$lab/err")"
-  measured="exit $code after $took s"
+  measured="exit $code after $took s${err:+, saying \"${err%%$'\n'*}\"}"
 }
 
 # 1. A command that ends in time: its input, output, error output and exit status are its own.
@@ -86,12 +95,34 @@ check "a command that ends in time keeps its input, output and exit status" \
   bash -c '[ "$1" -eq 3 ] && [ "$2" = "the caller'\''s input" ] && [ "$3" = "to stderr" ]' _ "$code" "$out" "$err"
 
 #    A command that ends at once returns at once, with no wait of the script's own (agent-squad
-#    #437): fifty of them take three seconds at most, where a tenth of a second each would take six.
-start=$SECONDS
-for _ in $(seq 50); do "$timeout" 5 true || break; done
-took=$((SECONDS - start))
-measured="$took s"
-check "a command that ends at once returns at once: 50 runs within 3 s" bash -c '[ "$1" -le 3 ]' _ "$took"
+#    #437): fifty runs take less than a tenth of a second each more than fifty runs of $lab/same,
+#    which starts the command and a watcher of its own as squad-timeout.sh does, and waits for the
+#    command alone. The runs alternate, so that a loaded machine slows both alike, where a fixed
+#    time for the fifty failed a push at a load average near 60 (agent-squad #496, #498). A wait of
+#    a tenth of a second after each command, as before #437, takes five seconds more.
+cat > "$lab/same" <<'SAME'
+#!/usr/bin/env bash
+"$@" &
+pid=$!
+(while :; do sleep 0.1; done) </dev/null >/dev/null &
+watcher=$!
+wait "$pid"
+status=$?
+kill -KILL "$watcher"
+exit "$status"
+SAME
+chmod +x "$lab/same"
+# shellcheck disable=SC2016 # the perl program's variables are its own
+read -r with without <<<"$(perl -MTime::HiRes=time -e '
+  my ($with, $without) = (0, 0);
+  for (1 .. 50) {
+    my $t = time; system($ARGV[0], 5, "true") == 0 or exit 1; $with += time - $t;
+    $t = time; system($ARGV[1], "true") == 0 or exit 1; $without += time - $t;
+  }
+  printf "%.2f %.2f\n", $with, $without;' "$timeout" "$lab/same")"
+measured="50 runs took ${with:-?} s, and 50 of the same work with no wait ${without:-?} s"
+check "a command that ends at once returns at once: 50 runs take under 2.5 s more than the same work with no wait" \
+  perl -e 'exit !(length $ARGV[0] && length $ARGV[1] && $ARGV[0] - $ARGV[1] < 2.5)' "${with:-}" "${without:-}"
 #    On every bash at hand, this one and /bin/bash when it is another, as macOS's 3.2 is: a command
 #    that ends at once is never taken for one stopped, even four loops of 100 at once, which its exit
 #    status says, whatever the time they take under a slow tracer such as CI's kcov; and one that a
@@ -106,7 +137,7 @@ for shell in "${shells[@]}"; do
     for _ in $(seq 100); do "$shell" "$timeout" 5 true 2>>"$lab/loops-err" || echo "$?" >> "$lab/not-0"; done &
   done
   wait
-  measured="$([ -e "$lab/not-0" ] && wc -l <"$lab/not-0" | tr -d ' ' || echo 0) runs did not exit 0, and the error output has $(wc -l <"$lab/loops-err" | tr -d ' ') lines"
+  measured="$([ -e "$lab/not-0" ] && wc -l <"$lab/not-0" | tr -d ' ' || echo 0) runs did not exit 0, and the error output has $(wc -l <"$lab/loops-err" | tr -d ' ') lines, the first: \"$(head -n 1 "$lab/loops-err")\""
   check "on bash $version, 400 runs of a command that ends at once, four loops at once, all exit 0, saying nothing" \
     bash -c '[ ! -e "$1" ] && [ ! -s "$2" ]' _ "$lab/not-0" "$lab/loops-err"
   rm -f "$lab/loops-err"
@@ -118,15 +149,17 @@ for shell in "${shells[@]}"; do
 done
 
 # 2. A command that never ends is stopped past its bound, and the script says so. The cases that
-#    stop one allow 30 s at most: well under the 60 s it sleeps, and over what CI's kcov takes
-#    (agent-squad #447). Their bound, 3 s, leaves what they stop the time to start: git's
-#    transport, the slowest, started in 0.02 to 0.68 s in most runs, and once in a while past 3 s
-#    on a machine loaded by other work (agent-squad #487, #491). A process that starts as its bound
-#    passes can be stopped before it wrote its PID, or after the stop listed what the command had
-#    started. `again <pid file> <seconds> <command...>` runs squad-timeout.sh as `run` does, and
-#    when the process whose PID the file is to hold never started within that bound, once more with
-#    15 s: a stop that came before it started tested nothing of squad-timeout.sh. It leaves the
-#    bound of the run kept in $bound, and what both runs measured in $measured.
+#    stop one allow 30 s past their bound: a stop takes a second or two after the bound, more under
+#    CI's kcov (agent-squad #447), and a command that is not stopped ends by itself after 60 s,
+#    past every bound plus 30 (agent-squad #498). Their bound, 3 s, leaves what they stop the time
+#    to start: git's transport, the slowest, started in 0.02 to 0.68 s in most runs, and once in a
+#    while past 3 s on a machine loaded by other work (agent-squad #487, #491). A process that
+#    starts as its bound passes can be stopped before it wrote its PID, or after the stop listed
+#    what the command had started. `again <pid file> <seconds> <command...>` runs squad-timeout.sh
+#    as `run` does, and when the process whose PID the file is to hold never started within that
+#    bound, once more with 15 s: a stop that came before it started tested nothing of
+#    squad-timeout.sh. It leaves the bound of the run kept in $bound, and what both runs measured in
+#    $measured.
 again() {
   local pid_file="$1" first first_bound="$2"
   shift 2
@@ -140,17 +173,21 @@ again() {
 }
 again "$lab/pid" 3 "${endless[@]}"
 check "a command that never ends is stopped after its bound: exit 124, saying so" \
-  bash -c '[ "$1" -eq 124 ] && [ "$2" = "squad-timeout: bash did not end within $4 s, so it was stopped" ] && [ "$3" -ge "$4" ] && [ "$3" -le 30 ]' \
+  bash -c '[ "$1" -eq 124 ] && [ "$2" = "squad-timeout: bash did not end within $4 s, so it was stopped" ] && [ "$3" -ge "$4" ] && [ "$3" -le $(($4 + 30)) ]' \
   _ "$code" "$err" "$took" "$bound"
 check "and it no longer runs" gone
-#    The SIGKILL's two seconds are timed against the plain stop just above, which kcov slows as much
-#    (QA's finding on PR #453), with the bounds' difference taken off when either ran again.
-stopped_in=$took stopped_bound=$bound
+#    The SIGKILL's two seconds are timed from the SIGTERM the command got to the end of the run, to
+#    the millisecond, which a loaded machine only lengthens: one and a half seconds at least, where
+#    a SIGKILL at once takes a tenth, and 30 at most, where a command never killed ends after its 60
+#    (QA's finding on PR #453; agent-squad #498).
+rm -f "$lab/termed"
 again "$lab/pid" 3 "${deaf[@]}"
-measured+=", where the plain stop took $stopped_in s with $stopped_bound s"
+ended="$(now)"
+killed_after="$(perl -e 'printf "%.1f", $ARGV[0] - $ARGV[1] if length $ARGV[1]' "$ended" "$(cat "$lab/termed" 2>/dev/null)")"
+measured+=", killed ${killed_after:-?} s after its SIGTERM"
 check "one that ignores SIGTERM gets SIGKILL two seconds later: exit 124" \
-  bash -c 'late=$(($2 - $3 - $4 + $5)); [ "$1" -eq 124 ] && [ "$2" -le 30 ] && [ "$late" -ge 1 ] && [ "$late" -le 4 ]' \
-  _ "$code" "$took" "$stopped_in" "$bound" "$stopped_bound"
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le $(($3 + 30)) ] && perl -e '\''exit !(length $ARGV[0] && $ARGV[0] >= 1.5 && $ARGV[0] <= 30)'\'' "$4"' \
+  _ "$code" "$took" "$bound" "$killed_after"
 check "and it no longer runs" gone
 
 #    What the command started is stopped with it (agent-squad #439): a process it started, and the
@@ -161,7 +198,7 @@ again "$lab/pid" 3 bash -c 'bash -c "echo \$\$ > \"\$1\"; exec sleep 60" _ "$1" 
 became="$(state "$lab/pid")"
 measured+=", and its child $became"
 check "a process the command started is stopped with it: exit 124 within seconds, and it no longer runs" \
-  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 30 ] && [ "$3" = ended ]' _ "$code" "$took" "$became"
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le $(($4 + 30)) ] && [ "$3" = ended ]' _ "$code" "$took" "$became" "$bound"
 printf '#!/bin/sh\necho "$$" > %q\nexec sleep 60\n' "$lab/pid" > "$lab/ssh"
 chmod +x "$lab/ssh"
 rm -f "$lab/pid"
@@ -169,7 +206,7 @@ GIT_SSH_COMMAND="$lab/ssh" again "$lab/pid" 3 git ls-remote ssh://example.invali
 became="$(state "$lab/pid")"
 measured+=", and its transport $became"
 check "a git whose ssh transport never answers is stopped with its transport: exit 124 within seconds, and neither runs" \
-  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 30 ] && [ "$3" = ended ]' _ "$code" "$took" "$became"
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le $(($4 + 30)) ] && [ "$3" = ended ]' _ "$code" "$took" "$became" "$bound"
 run 5 sh -c 'ps -o pgid= -p "$$"'
 check "the command runs in the caller's process group" \
   bash -c '[ "$(tr -d " " <<<"$1")" = "$(ps -o pgid= -p "$2" | tr -d " ")" ]' _ "$out" "$$"
@@ -180,21 +217,23 @@ check "the command runs in the caller's process group" \
 #    processes it started.
 # shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
 freeze() { kill "-$1" "$runner" $(pgrep -P "$runner"); }
+#    The bound is 10 s, and the run is held for 12: once it runs again, the stop comes within half
+#    the bound, where a bound that counted the time awake only would take nine seconds more, and a
+#    loaded machine has five seconds to stop it (agent-squad #498).
 rm -f "$lab/pid"
-"$timeout" 4 "${endless[@]}" 2>/dev/null &
+"$timeout" 10 "${endless[@]}" 2>/dev/null &
 runner=$!
 started
 freeze STOP
-sleep 6
+sleep 12
 start=$SECONDS
 freeze CONT
 wait "$runner"
 code=$?
 took=$((SECONDS - start))
 measured="exit $code, $took s after it ran again"
-#    Within 2 s of running again, where a bound counted from that moment would take 4.
 check "stopped for longer than its bound, it stops the command once it runs again: exit 124" \
-  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 2 ]' _ "$code" "$took"
+  bash -c '[ "$1" -eq 124 ] && [ "$2" -le 5 ]' _ "$code" "$took"
 check "and the command no longer runs" gone
 #    Its two seconds after SIGTERM count from the SIGTERM, not from the start, which a stop past
 #    the bound has used up: a command stopped with it gets them to end by itself (QA's finding on

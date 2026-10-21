@@ -438,7 +438,7 @@ if [ "$code" -eq 1 ] && [ "$took" -le 30 ] \
   && grep -qF "refs/tags/v1 is not the checked-out commit" <<<"$errors" && ! kill -0 "$(cat "$lab/hung.pid")" 2>/dev/null; then
   pass "a remote that never lists its branches is stopped after the bound, saying so, and every ref counts as new code"
 else
-  fail "a remote that never lists its branches: exit $code after $took s, said: $errors"
+  fail "a remote that never lists its branches: exit $code after $took s, 30 s at most, said: $errors"
 fi
 
 # 12. The release branches that .agent-squad-release-branches declares take a PR too (agent-squad
@@ -590,7 +590,9 @@ held_refused "and main is held" main
 #     to hold the run (agent-squad #490). `checks_in_background [<VAR=value>...]` starts the run
 #     with those variables, in a process group of its own, as a terminal's Ctrl-C finds it, with
 #     its PID in $checker and its errors in $lab/checks.err. `within <tenths> <command>...` passes
-#     once the command does, tried every tenth of a second, for at most that many tenths.
+#     once the command does, tried every tenth of a second, for at most that many tenths. A wait
+#     that only guards against a hang gives 300, half a minute, where what it waits for takes a
+#     second at most on an idle machine, and a case it fails says so (agent-squad #498).
 cat > "$lab/waits.sh" <<WAITS
 #!/usr/bin/env perl
 open(my \$mark, '>', q{$lab/waiting}) or die "waits.sh: \$!\\n";
@@ -640,10 +642,10 @@ chmod +x "$lab/stub/caffeinate"
 echo 0 > "$lab/release"
 checks_in_background PATH="$lab/stub:$PATH"
 finished
-if [ "$code" = 0 ] && within 50 test -s "$lab/caffeinated" && [ "$(cat "$lab/caffeinated")" = "-i -w $checker" ]; then
+if [ "$code" = 0 ] && within 300 test -s "$lab/caffeinated" && [ "$(cat "$lab/caffeinated")" = "-i -w $checker" ]; then
   pass "the checks hold caffeinate -i -w on their own run"
 else
-  fail "the checks with caffeinate on PATH: exit $code, caffeinate called with '$(cat "$lab/caffeinated" 2>/dev/null)', not '-i -w $checker'"
+  fail "the checks with caffeinate on PATH: exit $code, caffeinate called within 30 s with '$(cat "$lab/caffeinated" 2>/dev/null)', not '-i -w $checker'"
 fi
 #     Without caffeinate on PATH, the checks run as before, and say nothing more: each its line, and
 #     the exit status of one that failed. PATH holds only what the run needs.
@@ -679,17 +681,17 @@ if command -v caffeinate >/dev/null && command -v pmset >/dev/null; then
   for outcome in passed:0 failed:1 "been interrupted:130"; do
     rm -f "$lab/release" "$lab/waiting"
     checks_in_background
-    if within 50 held_for "$checker"; then held=yes; else held=no; fi
-    if within 50 test -e "$lab/waiting"; then waiting=yes; else waiting=no; fi
+    if within 300 held_for "$checker"; then held=yes; else held=no; fi
+    if within 300 test -e "$lab/waiting"; then waiting=yes; else waiting=no; fi
     case "$outcome" in
       "been interrupted":*) kill -INT -- "-$checker" ;;
       *) echo "${outcome#*:}" > "$lab/release" ;;
     esac
     finished
-    if [ "$held" = yes ] && [ "$waiting" = yes ] && [ "$code" = "${outcome#*:}" ] && within 30 released "$checker"; then
+    if [ "$held" = yes ] && [ "$waiting" = yes ] && [ "$code" = "${outcome#*:}" ] && within 300 released "$checker"; then
       pass "pmset lists the run's PreventUserIdleSystemSleep while its checks run, and none once they have ${outcome%:*}"
     else
-      fail "once the checks have ${outcome%:*}: held while they ran: $held, its check started: $waiting, exit $code, released: $(released "$checker" && echo yes || echo no)"
+      fail "once the checks have ${outcome%:*}: held within 30 s: $held, its check started within 30 s: $waiting, exit $code, released 30 s later: $(released "$checker" && echo yes || echo no)"
     fi
   done
 else
@@ -795,14 +797,14 @@ stopped() { ! kill -0 $(cat "$lab/started") 2>/dev/null; }
 for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   rm -rf "$lab/started" "$lab/tmp" && mkdir -p "$lab/tmp"
   checks_in_background TMPDIR="$lab/tmp"
-  if within 50 started_all; then started=yes; else started=no; fi
+  if within 300 started_all; then started=yes; else started=no; fi
   kill "-${signal%%:*}" -- "-$checker"
   finished
   expected="${signal#*:}" how="${signal##*:}"
-  if [ "$started" = yes ] && [ "$code" = "${expected%%:*}" ] && within 30 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
+  if [ "$started" = yes ] && [ "$code" = "${expected%%:*}" ] && within 300 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
     pass "$how, the run stops every check, with what each started, and leaves nothing in TMPDIR"
   else
-    fail "$how: all started: $started, exit $code, still running: $(if stopped; then echo none; else cat "$lab/started"; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
+    fail "$how: all started within 30 s: $started, exit $code, still running 30 s later: $(if stopped; then echo none; else cat "$lab/started"; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
   fi
   # shellcheck disable=SC2046 # the same
   kill -KILL $(cat "$lab/started") 2>/dev/null
@@ -828,15 +830,15 @@ handler_gone() { ! kill -0 "$(cat "$lab/handling")" 2>/dev/null; }
 for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   rm -f "$lab/handling" "$lab/later"
   checks_in_background
-  if within 50 test -s "$lab/handling"; then handling=yes; else handling=no; fi
+  if within 300 test -s "$lab/handling"; then handling=yes; else handling=no; fi
   kill "-${signal%%:*}" -- "-$checker"
   finished
   expected="${signal#*:}" how="${signal##*:}"
   if [ "$handling" = yes ] && [ "$code" = "${expected%%:*}" ] && [ ! -e "$lab/later" ] \
-    && within 30 handler_gone; then
+    && within 300 handler_gone; then
     pass "$how one after another, the run stops a check that ends normally on the signal, and starts no later one"
   else
-    fail "$how one after another: its check started: $handling, exit $code, a later check started: $([ -e "$lab/later" ] && echo yes || echo no)"
+    fail "$how one after another: its check started within 30 s: $handling, exit $code, a later check started: $([ -e "$lab/later" ] && echo yes || echo no), its check gone 30 s later: $(handler_gone && echo yes || echo no)"
   fi
   kill -KILL "$(cat "$lab/handling" 2>/dev/null)" 2>/dev/null
 done
@@ -856,10 +858,10 @@ for mode in "one after another:" "side by side:# squad-checks: side by side"; do
   finished
   said="$(cat "$lab/checks.err")"
   if [ "$code" = 1 ] && grep -qxF "  FAILED  $stops (stopped: it read the terminal, or wrote to it under stty tostop)" <<<"$said" \
-    && [ -e "$lab/later" ] && within 30 stopped_gone; then
+    && [ -e "$lab/later" ] && within 300 stopped_gone; then
     pass "${mode%%:*}, a check that the terminal stops fails, saying so, and the run goes on"
   else
-    fail "${mode%%:*}, a check that the terminal stops: exit $code, a later check ran: $([ -e "$lab/later" ] && echo yes || echo no), said: $said"
+    fail "${mode%%:*}, a check that the terminal stops: exit $code, a later check ran: $([ -e "$lab/later" ] && echo yes || echo no), the stopped check gone 30 s later: $(stopped_gone && echo yes || echo no), said: $said"
   fi
   kill -KILL "$(cat "$lab/stopping" 2>/dev/null)" 2>/dev/null
 done
