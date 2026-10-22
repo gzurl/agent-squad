@@ -22,10 +22,10 @@
 # report/, kcov's HTML report of every test merged into one, and runs/, each test's records,
 # output and exit status, and the root it ran in. It fails, so that the coverage job fails on its
 # own (agent-squad #507), when the total or any measured script is below 100 %, a script no test
-# ran included, or when a test failed under kcov: the summary's first line then says so, naming
-# each script short of 100 % with the lines no test ran, and each test that failed. A record it
-# cannot read fails it too, since a summary without it would count every line it records as not
-# run. --summary-only rewrites summary.md from runs/, without kcov: from CI's artifact, in a
+# ran included, or when a test failed under kcov: the line under the summary's heading says so,
+# naming each script short of 100 % with the lines no test ran, and each test that failed. A
+# record it cannot read fails it too, since a summary without it would count every line it records
+# as not run. --summary-only rewrites summary.md from runs/, without kcov: from CI's artifact, in a
 # checkout of the commit it measured.
 # Exit: 0 measured, every script at 100 % and no test failed; 1 kcov is missing, recorded
 # nothing, or wrote a record that cannot be read; 2 bad usage; 3 measured, but a script is below

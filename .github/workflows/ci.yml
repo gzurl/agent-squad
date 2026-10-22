@@ -96,8 +96,8 @@ jobs:
   # How much of the scripts the tests run (agent-squad #180): every scripts/check-*.sh under kcov,
   # the total and one line per script in the job's summary, and as an artifact kcov's report and
   # the records that `scripts/ci-coverage.sh --summary-only` makes the summary from. It fails when
-  # the total or any measured script is below 100 %, or a test fails under kcov, and its summary
-  # says why first (agent-squad #507); nothing is sent outside GitHub.
+  # the total or any measured script is below 100 %, or a test fails under kcov, and the line under
+  # its summary's heading says why (agent-squad #507); nothing is sent outside GitHub.
   coverage:
     runs-on: ubuntu-latest
     env:
