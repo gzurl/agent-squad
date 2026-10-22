@@ -20,12 +20,16 @@
 # It writes there summary.md, which CI adds to the job's summary: the total, one line per script,
 # thinnest first, the lines no test ran in each, and the lines it does not count, with why. Also
 # report/, kcov's HTML report of every test merged into one, and runs/, each test's records,
-# output and exit status, and the root it ran in. No figure fails it, and a test that fails under kcov is named in the summary; a record it
-# cannot read fails it, since a summary without it would count every line it records as not run.
-# --summary-only rewrites summary.md from runs/, without kcov: from CI's artifact, in a checkout of
-# the commit it measured.
-# Exit: 0 measured; 1 kcov is missing, recorded nothing, or wrote a record that cannot be read; 2
-# bad usage.
+# output and exit status, and the root it ran in. It fails, so that the coverage job fails on its
+# own (agent-squad #507), when the total or any measured script is below 100 %, a script no test
+# ran included, or when a test failed under kcov: the line under the summary's heading says so,
+# naming each script short of 100 % with the lines no test ran, and each test that failed. A
+# record it cannot read fails it too, since a summary without it would count every line it records
+# as not run. --summary-only rewrites summary.md from runs/, without kcov: from CI's artifact, in a
+# checkout of the commit it measured.
+# Exit: 0 measured, every script at 100 % and no test failed; 1 kcov is missing, recorded
+# nothing, or wrote a record that cannot be read; 2 bad usage; 3 measured, but a script is below
+# 100 %, or a test failed under kcov.
 set -u
 summary_only=false
 [ "${1:-}" != --summary-only ] || { summary_only=true; shift; }
@@ -211,7 +215,18 @@ printf '%s' "$records" \
   | sort_by(if .measured == 0 then -1 else .ran / .measured end) as $rows
   | ($rows | map(.ran) | add) as $ran | ($rows | map(.measured) | add) as $all
   | ($rows | map(.left_out // [] | length) | add) as $left_out
+  # The verdict, first: each script short of 100 %, a script no test ran included, and each test
+  # that failed under kcov; the job fails on either (agent-squad #507).
+  | [$rows[] | select(.measured == 0 or .ran < .measured)] as $short
+  | [(if $short == [] then empty
+      else "below 100 % in " + ($short | map("`\(.script)` " + (if .measured == 0 then "(not run)"
+        else "(line\(if (.unrun | length) > 1 then "s" else "" end) \(.unrun | map(tostring) | join(", ")))" end))
+        | join(", ")) end),
+     (if $failed == "" then empty else "a test failed under kcov: `\($failed)`" end)] as $reasons
   | "## Test coverage of the scripts",
+  "",
+  (if $reasons == [] then "Every measured script is fully run, and no test failed under kcov."
+   else "**The coverage job fails:** \($reasons | join("; "))." end),
   "",
   "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end) A line that kcov never records, though it runs (an empty case branch, a lone `(`, a `done` or `)` with only redirections or a `&` after it), counts only if it ran, and a line marked `# coverage: excluded, <reason>` does not count. The HTML report that kcov writes, in the `coverage` artifact, counts every line it measures and leaves the copies out, so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back from the records in that artifact.",
   "",
@@ -239,3 +254,7 @@ printf '%s' "$records" \
 $summary_only || kcov --merge "$out/report" "$out"/runs/*/ >/dev/null 2>&1 \
   || echo "ci-coverage: kcov could not merge the reports" >&2
 cat "$out/summary.md"
+
+# 4. The verdict the summary opens with: a script short of 100 %, or a test that failed under kcov,
+#    fails the run, and so the coverage job (agent-squad #507).
+if grep -q '^\*\*The coverage job fails:\*\*' "$out/summary.md"; then exit 3; fi
