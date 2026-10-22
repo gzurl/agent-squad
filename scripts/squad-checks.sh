@@ -58,21 +58,33 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/squad-checks.XXXXXX" 2>/dev/null || mktemp -d
 trap 'rm -rf "$work"' EXIT
 pids=()
 # `stop [<pid>...]` ends those checks, or the checks started when none is named, with every process
-# each started, as pgrep finds them under it or in its process group: SIGTERM, with SIGCONT for one
-# that is stopped, so that it takes the SIGTERM, then SIGKILL to those still running two seconds
-# later. kill passes while any of them is there to signal. The last job started counts too, should
-# a signal come before its PID is in $pids.
+# each started, as pgrep finds them under it or in its process group, and, when none is named, what
+# `seen` finds still there of what the watch saw under them: SIGTERM, with SIGCONT for one that is
+# stopped, so that it takes the SIGTERM, then SIGKILL to those still running two seconds later.
+# kill passes while any of them is there to signal. The last job started counts too, should a
+# signal come before its PID is in $pids.
 # shellcheck disable=SC2317,SC2329 # run by the traps and the watch below
 family() {
   local child
   for child in $(pgrep -P "$1"); do family "$child"; done
   echo "$1"
 }
+# `seen` prints those of the processes the watch saw the checks start that still run, by the same
+# PID and start time, which a process given an ended one's PID does not have; it reads every
+# process, as a list of those seen can outgrow what one argument takes. One that left its check's
+# process group, and whose check then ended, as a job under a check's own job control does, has no
+# parent nor group left that leads to it (agent-squad #506).
+# shellcheck disable=SC2317,SC2329 # the same
+seen() {
+  [ -s "$work/seen" ] || return 0
+  ps -A -o pid=,lstart= 2>/dev/null \
+    | awk 'NR == FNR { seen[$0]; next } { $1 = $1 } $0 in seen { print $1 }' "$work/seen" -
+}
 # shellcheck disable=SC2317,SC2329 # the same
 stop() {
-  local stopping pid tenths=20 running=("$@")
-  [ "$#" -gt 0 ] || running=("${pids[@]}" "$!")
-  stopping="$(for pid in "${running[@]}"; do family "$pid"; done)"
+  local stopping pid tenths=20 running=("$@") extra=()
+  [ "$#" -gt 0 ] || { running=("${pids[@]}" "$!"); read -r -a extra <<<"$(seen | paste -sd ' ' -)"; }
+  stopping="$(for pid in "${running[@]}" ${extra[@]+"${extra[@]}"}; do family "$pid"; done)"
   # shellcheck disable=SC2086 # the PIDs are split on purpose, one argument each
   kill -TERM -- $stopping "${running[@]/#/-}" 2>/dev/null
   # shellcheck disable=SC2086 # the same
@@ -100,8 +112,10 @@ trap 'stop; exit 143' TERM
 # checks twice a second with ps, stops any that is stopped, `T`, and leaves $work/<pid>.terminal
 # for it; it ends once none of them runs, or the run itself has ended. It acts only on a process
 # whose parent is this run: once a check has ended, its PID can name another process (QA's finding
-# on PR #497). `kept <pid> <status>` prints that check's status, `terminal` when the watch stopped
-# it.
+# on PR #497). It also adds to $work/seen every process under those checks, at any depth, with its
+# start time, for the stop to end it should it outlive its check (agent-squad #506): one that
+# starts and loses its parent within the same half second is not seen. `kept <pid> <status>` prints
+# that check's status, `terminal` when the watch stopped it.
 # shellcheck disable=SC2317,SC2329 # run in the background below
 watch() {
   local pid parent state
@@ -110,6 +124,13 @@ watch() {
       [ "$parent" = "$$" ] || continue
       case "$state" in T*) : >"$work/$pid.terminal"; stop "$pid" ;; esac
     done <<<"$(ps -o pid=,ppid=,stat= -p "$(IFS=,; echo "$*")" 2>/dev/null)"
+    ps -A -o pid=,ppid=,lstart= 2>/dev/null | awk -v roots="$*" -v seen="$work/seen" '
+      BEGIN { while ((getline line < seen) > 0) known[line]; n = split(roots, r, " ") }
+      { pid = $1; parent[pid] = $2; $1 = ""; $2 = ""; sub(/^ +/, ""); start[pid] = $0; kids[parent[pid]] = kids[parent[pid]] " " pid }
+      END { for (i = 1; i <= n; i++) queue[++q] = r[i]
+            for (h = 1; h <= q; h++) { m = split(kids[queue[h]], c, " ")
+              for (j = 1; j <= m; j++) { queue[++q] = c[j]; line = c[j] " " start[c[j]]
+                if (!(line in known)) { print line >> seen; known[line] } } } }'
     sleep 0.5 || return
   done
 }
