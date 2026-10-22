@@ -125,7 +125,10 @@ export function world(on: On, store: Record<string, unknown> = {}): World {
   on('session.end', ($, e) => ({ sessionId: e.sessionId }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
-  on('tool.check', () => ({ decision: 'ask' as const }))
+  // A query of the check asks, as auto mode's does; a real call, which carries its tool_use_id, is
+  // allowed, as the person or the classifier allows it: from Claude Code 2.1.307 a test's
+  // $.tool.call is checked first, and an ask that nobody answers refuses it (agent-squad #504).
+  on('tool.check', ($, e) => ({ decision: e.tool_use_id ? 'allow' as const : 'ask' as const }))
   on('tool.call', () => ({ result: { stdout: w.output, stderr: '', interrupted: false }, ...(w.isError ? { isError: true } : {}) } as any))
   on('prompt.submit', ($, e) => ({ text: e.text }))
   on('classic.SessionStart', () => ({}))
