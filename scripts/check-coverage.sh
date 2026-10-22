@@ -10,10 +10,10 @@
 # with why (agent-squad #352). A path that holds a double quote or a backslash, which kcov writes as it is, is read, and
 # a record that cannot be read even so stops the summary (agent-squad #348). The summary names a
 # test that failed, lists the thinnest script first, rounds its shares, lists the lines no test
-# ran, and --summary-only writes it again from the records alone. Its first line is the verdict,
-# and a script below 100 % or a test that failed under kcov fails the run, exit 3, naming each: the
-# coverage job fails on its own (agent-squad #507). Without kcov, with nothing recorded, or with a
-# record it cannot read, it exits 1. This script runs none of the tests and touches
+# ran, and --summary-only writes it again from the records alone. The line under its heading is the
+# verdict, and a script below 100 % or a test that failed under kcov fails the run, exit 3, naming
+# each: the coverage job fails on its own (agent-squad #507). Without kcov, with nothing recorded,
+# or with a record it cannot read, it exits 1. This script runs none of the tests and touches
 # neither the repository it is run from nor GitHub.
 # shellcheck disable=SC2016 # the summary's backticks are Markdown, and the fixtures are code
 set -u
@@ -216,7 +216,7 @@ summary_of "a script no test ran" '| `scripts/squad-tokens.sh` | 0 | 0 | not run
 summary_of "the total adds up the scripts: 22 of 28 is 78.6 %" '| **Total** | **22** | **28** | **78.6 %** |'
 summary_of "a test that failed under kcov is named" 'Tests that failed under kcov, so their figures may be short: `check-handoff`.'
 summary_of "the summary opens with the verdict: each script below 100 %, with its lines no test ran, and each test that failed" \
-  '**The coverage job fails:** below 100 % in `scripts/squad-tokens.sh` (not run), `.githooks/pre-push` (lines 2, 4), `scripts/squad-merge-gate.sh` (lines 5, 14), `scripts/squad-install.sh` (lines 13), `scripts/squad-latest.sh` (lines 13); a test failed under kcov: `check-handoff`.'
+  '**The coverage job fails:** below 100 % in `scripts/squad-tokens.sh` (not run), `.githooks/pre-push` (lines 2, 4), `scripts/squad-merge-gate.sh` (lines 5, 14), `scripts/squad-install.sh` (line 13), `scripts/squad-latest.sh` (line 13); a test failed under kcov: `check-handoff`.'
 if grep -qF 'kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out.' "$lab/out/summary.md" \
    && grep -qF 'so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back' "$lab/out/summary.md"; then
   pass "the summary says how many statements it left out, and why kcov's own report reads lower"
@@ -274,7 +274,7 @@ verdict "every script at 100 %, no test failed: exit 0, and the summary says so 
 verdict "every script at 100 %, but a test failed under kcov: exit 3, naming it" full-failing 3 \
   '**The coverage job fails:** a test failed under kcov: `check-handoff`.'
 verdict "one line no test ran, no test failed: exit 3, naming the script and the line" full-short 3 \
-  '**The coverage job fails:** below 100 % in `scripts/squad-checks.sh` (lines 3).'
+  '**The coverage job fails:** below 100 % in `scripts/squad-checks.sh` (line 3).'
 
 # 3. Without kcov, with nothing recorded, with no run to summarise, or with bad usage, it exits
 #    non-zero, saying why.

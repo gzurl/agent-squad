@@ -220,7 +220,8 @@ printf '%s' "$records" \
   | [$rows[] | select(.measured == 0 or .ran < .measured)] as $short
   | [(if $short == [] then empty
       else "below 100 % in " + ($short | map("`\(.script)` " + (if .measured == 0 then "(not run)"
-        else "(lines \(.unrun | map(tostring) | join(", ")))" end)) | join(", ")) end),
+        else "(line\(if (.unrun | length) > 1 then "s" else "" end) \(.unrun | map(tostring) | join(", ")))" end))
+        | join(", ")) end),
      (if $failed == "" then empty else "a test failed under kcov: `\($failed)`" end)] as $reasons
   | "## Test coverage of the scripts",
   "",
