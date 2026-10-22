@@ -792,8 +792,23 @@ printf '# squad-checks: side by side\n%s\n%s deaf\n%s apart\n%s orphan\n' "$star
   > "$wt/.agent-squad-checks"
 # shellcheck disable=SC2317,SC2329 # run through within
 started_all() { [ "$(grep -c . "$lab/started" 2>/dev/null)" = 4 ]; }
-# shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
-stopped() { ! kill -0 $(cat "$lab/started") 2>/dev/null; }
+#     `still_there` prints, one per line, each process of $lab/started that is still there and has
+#     not ended, with its state, its parent and its command; a zombie, which has ended though its
+#     parent has not waited for it, is no such process, though kill -0 still reaches it (agent-squad
+#     #506). `zombies` prints those, with their parent, which has not reaped them. `stopped` passes
+#     once nothing is still there.
+# shellcheck disable=SC2317,SC2329 # run through within, and in the messages
+still_there() {
+  ps -o pid=,stat=,ppid=,comm= -p "$(tr -s ' \n' ',' < "$lab/started" | sed 's/,$//')" 2>/dev/null \
+    | awk '$2 !~ /^Z/ { printf "%s (%s, parent %s: %s)\n", $1, $2, $3, $4 }'
+}
+# shellcheck disable=SC2317,SC2329 # the same
+zombies() {
+  ps -o pid=,stat=,ppid= -p "$(tr -s ' \n' ',' < "$lab/started" | sed 's/,$//')" 2>/dev/null \
+    | awk '$2 ~ /^Z/ { printf "%s (parent %s) ", $1, $3 }'
+}
+# shellcheck disable=SC2317,SC2329 # the same
+stopped() { [ -z "$(still_there)" ]; }
 for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   rm -rf "$lab/started" "$lab/tmp" && mkdir -p "$lab/tmp"
   checks_in_background TMPDIR="$lab/tmp"
@@ -804,8 +819,9 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   if [ "$started" = yes ] && [ "$code" = "${expected%%:*}" ] && within 300 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
     pass "$how, the run stops every check, with what each started, and leaves nothing in TMPDIR"
   else
-    fail "$how: all started within 30 s: $started, exit $code, still running 30 s later: $(if stopped; then echo none; else cat "$lab/started"; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
+    fail "$how: all started within 30 s: $started, exit $code, still running 30 s later: $(if stopped; then echo none; else still_there | paste -sd ';' -; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
   fi
+  [ -z "$(zombies)" ] || echo "  note    $how: ended, but not yet reaped: $(zombies)" >&2
   # shellcheck disable=SC2046 # the same
   kill -KILL $(cat "$lab/started") 2>/dev/null
 done
