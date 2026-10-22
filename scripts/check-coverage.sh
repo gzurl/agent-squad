@@ -10,8 +10,10 @@
 # with why (agent-squad #352). A path that holds a double quote or a backslash, which kcov writes as it is, is read, and
 # a record that cannot be read even so stops the summary (agent-squad #348). The summary names a
 # test that failed, lists the thinnest script first, rounds its shares, lists the lines no test
-# ran, and --summary-only writes it again from the records alone. Without kcov, with nothing
-# recorded, or with a record it cannot read, it exits 1. This script runs none of the tests and touches
+# ran, and --summary-only writes it again from the records alone. The line under its heading is the
+# verdict, and a script below 100 % or a test that failed under kcov fails the run, exit 3, naming
+# each: the coverage job fails on its own (agent-squad #507). Without kcov, with nothing recorded,
+# or with a record it cannot read, it exits 1. This script runs none of the tests and touches
 # neither the repository it is run from nor GitHub.
 # shellcheck disable=SC2016 # the summary's backticks are Markdown, and the fixtures are code
 set -u
@@ -111,7 +113,9 @@ EOF
 # statement, on 11 and on the here-string, with 13 unrun; and squad-latest.sh, every line run but
 # those kcov never records, the excluded one and the last.
 # KCOV_RECORDS=none makes it record nothing, and KCOV_RECORDS=broken writes check-gate.sh's record
-# cut short; --merge writes an index. Each call's arguments go to $lab/kcov.calls, and options are
+# cut short. KCOV_RECORDS=full has check-gate.sh run line 2 of every script, a statement in each,
+# and no test fail; full-failing does the same, but check-handoff.sh fails; full-short leaves line
+# 3 of squad-checks.sh unrun. --merge writes an index. Each call's arguments go to $lab/kcov.calls, and options are
 # skipped to find the output directory and the test.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/kcov" <<'KCOV'
@@ -124,6 +128,16 @@ out="${args[0]}" test="${args[1]}" root="$(git rev-parse --show-toplevel)"
 [ "${KCOV_RECORDS:-}" != none ] || exit 0
 dir="$out/$(basename "$test").0123456789abcdef"
 mkdir -p "$dir"
+if [[ "${KCOV_RECORDS:-}" == full* ]]; then
+  [[ "$test" == *check-gate.sh ]] || { [ "$KCOV_RECORDS" = full-failing ] && [[ "$test" == *check-handoff.sh ]] && exit 1; exit 0; }
+  echo '<sources><source>/</source></sources>' > "$dir/cobertura.xml"
+  jq -n --arg r "${root#/}" --arg short "$KCOV_RECORDS" '{coverage: ([
+    "scripts/squad-checks.sh", ".githooks/pre-push", "install.sh", "scripts/squad-tokens.sh",
+    "scripts/squad-merge-gate.sh", "scripts/squad-latest.sh", "scripts/squad-install.sh"]
+    | map({key: ($r + "/" + .), value: {"2": 1}}) | from_entries
+    | if $short == "full-short" then .[$r + "/scripts/squad-checks.sh"]["3"] = 0 else . end)}' > "$dir/codecov.json"
+  exit 0
+fi
 if [ "${KCOV_RECORDS:-}" = broken ] && [[ "$test" == *check-gate.sh ]]; then
   echo '<sources><source>/</source></sources>' > "$dir/cobertura.xml"
   printf '{\n  "coverage": {\n    "scripts/squad-checks.sh": {\n' > "$dir/codecov.json"
@@ -166,8 +180,8 @@ summary_of() {
 # 1. A run with the stand-in.
 out="$(cd "$repo" && PATH="$lab/bin:$PATH" "$coverage" "$lab/out" 2>&1)"
 code=$?
-if [ "$code" -eq 0 ] && [ -f "$lab/out/report/index.html" ] && [ "$out" = "$(cat "$lab/out/summary.md")" ]; then
-  pass "it exits 0, prints the summary it writes, and merges kcov's reports"
+if [ "$code" -eq 3 ] && [ -f "$lab/out/report/index.html" ] && [ "$out" = "$(cat "$lab/out/summary.md")" ]; then
+  pass "below 100 %, it exits 3, prints the summary it writes, and merges kcov's reports"
 else
   fail "a run: exit $code, printed: $out"
 fi
@@ -201,6 +215,8 @@ summary_of "in a collapsed block of their own" '<details><summary>The lines not 
 summary_of "a script no test ran" '| `scripts/squad-tokens.sh` | 0 | 0 | not run |'
 summary_of "the total adds up the scripts: 22 of 28 is 78.6 %" '| **Total** | **22** | **28** | **78.6 %** |'
 summary_of "a test that failed under kcov is named" 'Tests that failed under kcov, so their figures may be short: `check-handoff`.'
+summary_of "the summary opens with the verdict: each script below 100 %, with its lines no test ran, and each test that failed" \
+  '**The coverage job fails:** below 100 % in `scripts/squad-tokens.sh` (not run), `.githooks/pre-push` (lines 2, 4), `scripts/squad-merge-gate.sh` (lines 5, 14), `scripts/squad-install.sh` (line 13), `scripts/squad-latest.sh` (line 13); a test failed under kcov: `check-handoff`.'
 if grep -qF 'kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out.' "$lab/out/summary.md" \
    && grep -qF 'so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back' "$lab/out/summary.md"; then
   pass "the summary says how many statements it left out, and why kcov's own report reads lower"
@@ -232,11 +248,33 @@ rm -f "$lab/out/summary.md"
 cp -R "$repo" "$lab/elsewhere" || exit 2
 out="$(cd "$lab/elsewhere" && PATH="$(dirname "$(command -v jq)"):/usr/bin:/bin" "$coverage" --summary-only "$lab/out" 2>&1)"
 code=$?
-if [ "$code" -eq 0 ] && cmp -s "$lab/first.md" "$lab/out/summary.md"; then
-  pass "--summary-only writes the same summary again, without kcov, from another checkout"
+if [ "$code" -eq 3 ] && cmp -s "$lab/first.md" "$lab/out/summary.md"; then
+  pass "--summary-only writes the same summary again, without kcov, from another checkout, and fails as it"
 else
   fail "--summary-only: exit $code, said: $out"
 fi
+
+# 2b. The verdict (agent-squad #507): every script at 100 % and no test failed passes, exit 0, and
+#     says so first; one test that failed, or one line no test ran, fails the run, exit 3, naming it.
+# `verdict <case> <records> <exit> <first line>` runs the stand-in with those records, and passes
+# when the run exits so and its summary's verdict reads so.
+verdict() {
+  local case="$1" records="$2" want="$3" says="$4" out code
+  rm -rf "$lab/v-$records"
+  out="$(cd "$repo" && KCOV_RECORDS="$records" PATH="$lab/bin:$PATH" "$coverage" "$lab/v-$records" 2>&1)"
+  code=$?
+  if [ "$code" -eq "$want" ] && [ "$(sed -n 3p "$lab/v-$records/summary.md" 2>/dev/null)" = "$says" ]; then
+    pass "$case"
+  else
+    fail "$case: exit $code, its verdict: $(sed -n 3p "$lab/v-$records/summary.md" 2>/dev/null), said: $out"
+  fi
+}
+verdict "every script at 100 %, no test failed: exit 0, and the summary says so first" full 0 \
+  'Every measured script is fully run, and no test failed under kcov.'
+verdict "every script at 100 %, but a test failed under kcov: exit 3, naming it" full-failing 3 \
+  '**The coverage job fails:** a test failed under kcov: `check-handoff`.'
+verdict "one line no test ran, no test failed: exit 3, naming the script and the line" full-short 3 \
+  '**The coverage job fails:** below 100 % in `scripts/squad-checks.sh` (line 3).'
 
 # 3. Without kcov, with nothing recorded, with no run to summarise, or with bad usage, it exits
 #    non-zero, saying why.
