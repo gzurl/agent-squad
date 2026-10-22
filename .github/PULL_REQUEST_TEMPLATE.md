@@ -12,6 +12,6 @@ For each claim, the command or the steps that check it:
 
 <details><summary>Evidence</summary>
 
-Figures, searches, inventories and tables, given once (SQUAD.md §6).
+Figures, searches, inventories and tables, given once (SQUAD.md §6), and every place in the repository that mentions what the diff changes, each with why it still holds (SQUAD.md §4.2).
 
 </details>
