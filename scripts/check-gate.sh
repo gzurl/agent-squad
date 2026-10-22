@@ -780,10 +780,11 @@ cat >> "$lab/starts.sh" <<'CHECK'
 case "${1:-}" in
   deaf) trap "" TERM ;;
   apart) set -m ;;
-  orphan) (sleep 60 & echo "$! $$" >> "$started"); exit 0 ;;
+  orphan) (sleep 60 & echo "$! $$" >> "$started"; echo "$! orphan" >> "$started.kinds"); exit 0 ;;
 esac
 sleep 60 &
 echo "$! $$" >> "$started"
+echo "$! ${1:-plain}" >> "$started.kinds"
 wait
 CHECK
 chmod +x "$lab/starts.sh"
@@ -799,8 +800,11 @@ started_all() { [ "$(grep -c . "$lab/started" 2>/dev/null)" = 4 ]; }
 #     once nothing is still there.
 # shellcheck disable=SC2317,SC2329 # run through within, and in the messages
 still_there() {
-  ps -o pid=,stat=,ppid=,comm= -p "$(tr -s ' \n' ',' < "$lab/started" | sed 's/,$//')" 2>/dev/null \
-    | awk '$2 !~ /^Z/ { printf "%s (%s, parent %s: %s)\n", $1, $2, $3, $4 }'
+  ps -o pid=,stat=,ppid=,pgid=,comm= -p "$(tr -s ' \n' ',' < "$lab/started" | sed 's/,$//')" 2>/dev/null \
+    | awk -v kinds="$lab/started.kinds" '
+        BEGIN { while ((getline line < kinds) > 0) { split(line, f, " "); kind[f[1]] = f[2] } }
+        $2 !~ /^Z/ { printf "%s (%s, parent %s, group %s: %s%s)\n", $1, $2, $3, $4, $5,
+                     ($1 in kind) ? ", from the " kind[$1] " check" : "" }'
 }
 # shellcheck disable=SC2317,SC2329 # the same
 zombies() {
@@ -810,7 +814,7 @@ zombies() {
 # shellcheck disable=SC2317,SC2329 # the same
 stopped() { [ -z "$(still_there)" ]; }
 for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
-  rm -rf "$lab/started" "$lab/tmp" && mkdir -p "$lab/tmp"
+  rm -rf "$lab/started" "$lab/started.kinds" "$lab/tmp" && mkdir -p "$lab/tmp"
   checks_in_background TMPDIR="$lab/tmp"
   if within 300 started_all; then started=yes; else started=no; fi
   kill "-${signal%%:*}" -- "-$checker"
