@@ -831,6 +831,34 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   # shellcheck disable=SC2046 # the same
   kill -KILL $(cat "$lab/started") 2>/dev/null
 done
+#     A check that starts a process under its own job control, in a process group of its own, and
+#     ends, leaves that process with no parent and no group that leads to it: the run's stop ends it
+#     all the same, from what its watch saw the check start (agent-squad #506). The first check here
+#     does so, writing that process's PID and its own to $lab/left, and ends two seconds later, once
+#     the watch has seen it; the second waits, so that the run goes on. In each mode, once the first
+#     check has ended, the run is interrupted. `left_alone` passes once the first check has ended,
+#     and `left_gone` once the process it left no longer runs, a zombie being no process that runs.
+printf '#!/usr/bin/env bash\nset -m\nsleep 60 &\necho "$! $$" > %q\nsleep 2\n' "$lab/left" > "$lab/leaves.sh"
+chmod +x "$lab/leaves.sh"
+# shellcheck disable=SC2317,SC2329 # run through within
+left_alone() { [ -s "$lab/left" ] && ! kill -0 "$(cut -d' ' -f2 "$lab/left")" 2>/dev/null; }
+# shellcheck disable=SC2317,SC2329 # the same
+left_gone() { ! ps -o stat= -p "$(cut -d' ' -f1 "$lab/left")" 2>/dev/null | grep -qv '^Z'; }
+for mode in "one after another:" "side by side:# squad-checks: side by side"; do
+  rm -f "$lab/left" "$lab/started"
+  printf '%s\n%s\n%s\n' "${mode#*:}" "$(printf %q "$lab/leaves.sh")" "$starts" > "$wt/.agent-squad-checks"
+  checks_in_background
+  if within 300 left_alone; then alone=yes; else alone=no; fi
+  kill -INT -- "-$checker"
+  finished
+  if [ "$alone" = yes ] && [ "$code" = 130 ] && within 300 left_gone; then
+    pass "${mode%%:*}, the run stops what a check left under its own job control once it ended"
+  else
+    fail "${mode%%:*}, what a check left under its own job control: its check ended within 30 s: $alone, exit $code, still there 30 s later: $(if left_gone; then echo no; else ps -o pid=,stat=,ppid=,pgid=,comm= -p "$(cut -d' ' -f1 "$lab/left")" | tr -s ' '; fi)"
+  fi
+  # shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
+  kill -KILL "$(cut -d' ' -f1 "$lab/left" 2>/dev/null)" $(cat "$lab/started" 2>/dev/null) 2>/dev/null
+done
 #     One after another, the same signals end the run as side by side, whatever its check does
 #     with them (agent-squad #494). The first check here marks its start with its PID in
 #     $lab/handling, then ends normally, with 0, on SIGINT, SIGHUP or SIGTERM: a run that waited for
