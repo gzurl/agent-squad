@@ -817,13 +817,15 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   rm -rf "$lab/started" "$lab/started.kinds" "$lab/tmp" && mkdir -p "$lab/tmp"
   checks_in_background TMPDIR="$lab/tmp"
   if within 300 started_all; then started=yes; else started=no; fi
+  # What each of the run's processes was just before the signal, for a failure to show.
+  before="$(ps -o pid=,stat=,ppid=,pgid=,comm= -p "$(tr -s ' \n' ',' < "$lab/started" | sed 's/,$//')" 2>/dev/null | tr -s ' ' | paste -sd ';' -)"
   kill "-${signal%%:*}" -- "-$checker"
   finished
   expected="${signal#*:}" how="${signal##*:}"
   if [ "$started" = yes ] && [ "$code" = "${expected%%:*}" ] && within 300 stopped && [ -z "$(ls -A "$lab/tmp")" ]; then
     pass "$how, the run stops every check, with what each started, and leaves nothing in TMPDIR"
   else
-    fail "$how: all started within 30 s: $started, exit $code, still running 30 s later: $(if stopped; then echo none; else still_there | paste -sd ';' -; fi), left in TMPDIR: $(ls -A "$lab/tmp")"
+    fail "$how: all started within 30 s: $started, exit $code, still running 30 s later: $(if stopped; then echo none; else still_there | paste -sd ';' -; fi), left in TMPDIR: $(ls -A "$lab/tmp"); before the signal: $before"
   fi
   [ -z "$(zombies)" ] || echo "  note    $how: ended, but not yet reaped: $(zombies)" >&2
   # shellcheck disable=SC2046 # the same
