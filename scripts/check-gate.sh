@@ -813,7 +813,7 @@ zombies() {
 }
 # shellcheck disable=SC2317,SC2329 # the same
 stopped() { [ -z "$(still_there)" ]; }
-for signal in INT:130:interrupted HUP:129:hung\ up HUP:129:hung\ up HUP:129:hung\ up HUP:129:hung\ up HUP:129:hung\ up HUP:129:hung\ up HUP:129:hung\ up HUP:129:hung\ up HUP:129:hung\ up HUP:129:hung\ up TERM:143:terminated; do
+for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   rm -rf "$lab/started" "$lab/started.kinds" "$lab/tmp" && mkdir -p "$lab/tmp"
   checks_in_background TMPDIR="$lab/tmp"
   if within 300 started_all; then started=yes; else started=no; fi
