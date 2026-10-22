@@ -1,5 +1,37 @@
 # Changelog
 
+## v70 — 2026-10-22
+- **QA runs what a PR states about the system** (#501, the CEO's request, with the views of the QAs
+  and CTOs of rogue-trader, trivial-tape and biwenger-metrics-ai). §5: the black-box part also runs
+  every statement about how the system behaves that the diff adds or changes, in documentation as
+  in messages, and every recipe, copied from the file and run in the reader's shell. QA's
+  checklist adds three questions: whether breaking the code behind each claim fails a test,
+  whether every failure is reported rather than swallowed, and whether what can happen in another
+  order was run in that order. A headline figure on data that keeps changing gives the date of its
+  data. QA counts with a script what a script can count, and a mechanical finding that recurs
+  becomes a check.
+- **A new round reviews the delta** (#501). §4.7: QA reads what changed since the commit it
+  reviewed, reruns the checks that the change touches, and keeps its earlier results for the rest;
+  after a merge of the base into the PR, every claim is checked again on the merged commit.
+- **The author lists where the repository mentions what the diff changes** (#501). §4.2: before the
+  ping, the author searches for each name, term, rule or behaviour the diff changes, and the
+  evidence lists every place that mentions it, with why it still holds. QA's consistency check
+  starts from that list, and the PR template asks for it.
+- **The checks' stop ends what a check left under its own job control** (#506, found by QA in the
+  coverage job). Since v69 a signal stops the checks and what each started, but a process that a
+  check started in a process group of its own outlived the run once its check had ended. The run
+  now records every process under the checks with its start time, and its stop ends those still
+  there. It looks twice a second, so a process that starts and loses its parent within the same
+  half second can still be missed; a run that ends without a signal leaves such a process, as
+  before.
+- **This repository's own tests and CI** (#504, #507). The squad board's tests pass with Claude
+  Code 2.1.307 and later, whose test harness asks before a tool call; the coverage job fails on its
+  own below 100 %, or when a test fails under kcov. Neither ships, so nothing changes for a project.
+- **Upgrading from v69:** the installer leaves a project's PR template alone, so a project installed
+  before v70 adds to the evidence part of its own template the request this release adds to the
+  squad's: "every place in the repository that mentions what the diff changes, each with why it
+  still holds (SQUAD.md §4.2)". Restart the three sessions, since §4 and §5 change.
+
 ## v69 — 2026-10-21
 - **A Ctrl-C stops the checks run one after another** (#494, found by DEV on PR #493). With the
   checks one after another, the default, a SIGINT did not stop the pre-push checks when the check
