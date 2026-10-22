@@ -95,8 +95,9 @@ jobs:
 
   # How much of the scripts the tests run (agent-squad #180): every scripts/check-*.sh under kcov,
   # the total and one line per script in the job's summary, and as an artifact kcov's report and
-  # the records that `scripts/ci-coverage.sh --summary-only` makes the summary from. It is a report:
-  # no figure fails the build, and nothing is sent outside GitHub.
+  # the records that `scripts/ci-coverage.sh --summary-only` makes the summary from. It fails when
+  # the total or any measured script is below 100 %, or a test fails under kcov, and its summary
+  # says why first (agent-squad #507); nothing is sent outside GitHub.
   coverage:
     runs-on: ubuntu-latest
     env:
@@ -145,8 +146,10 @@ jobs:
         run: npm install -g --no-fund --no-audit @anthropic-ai/claude-code@2.1.289
       - name: Coverage of the scripts while the checks run
         run: |
-          PATH="$HOME/kcov/bin:$PATH" scripts/ci-coverage.sh "$RUNNER_TEMP/coverage"
-          cat "$RUNNER_TEMP/coverage/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          PATH="$HOME/kcov/bin:$PATH" scripts/ci-coverage.sh "$RUNNER_TEMP/coverage" || status=$?
+          [ ! -f "$RUNNER_TEMP/coverage/summary.md" ] || cat "$RUNNER_TEMP/coverage/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - name: kcov's report, and the records the summary comes from
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
