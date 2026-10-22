@@ -774,15 +774,17 @@ fi
 #     its PID and its own to $lab/started, and waits. The second ignores SIGTERM, as its sleep then
 #     does, and gets SIGKILL; the third starts its sleep under job control, in a process group of its
 #     own, as the tests of an interruption do; the fourth ends at once, and leaves its sleep behind,
-#     with no parent but in its process group.
+#     with no parent but in its process group. Each sleep lasts ten minutes, far longer than any
+#     wait here, so that one the run leaves behind cannot end by itself before the case has looked
+#     (QA's finding on PR #508).
 printf '#!/usr/bin/env bash\nstarted=%q\n' "$lab/started" > "$lab/starts.sh"
 cat >> "$lab/starts.sh" <<'CHECK'
 case "${1:-}" in
   deaf) trap "" TERM ;;
   apart) set -m ;;
-  orphan) (sleep 60 & echo "$! $$" >> "$started"; echo "$! orphan" >> "$started.kinds"); exit 0 ;;
+  orphan) (sleep 600 & echo "$! $$" >> "$started"; echo "$! orphan" >> "$started.kinds"); exit 0 ;;
 esac
-sleep 60 &
+sleep 600 &
 echo "$! $$" >> "$started"
 echo "$! ${1:-plain}" >> "$started.kinds"
 wait
@@ -831,17 +833,23 @@ for signal in INT:130:interrupted HUP:129:hung\ up TERM:143:terminated; do
   # shellcheck disable=SC2046 # the same
   kill -KILL $(cat "$lab/started") 2>/dev/null
 done
-#     A check that starts a process under its own job control, in a process group of its own, and
-#     ends, leaves that process with no parent and no group that leads to it: the run's stop ends it
-#     all the same, from what its watch saw the check start (agent-squad #506). The first check here
-#     does so, writing that process's PID and its own to $lab/left, and ends two seconds later, once
-#     the watch has seen it; the second waits, so that the run goes on. In each mode, once the first
-#     check has ended, the run is interrupted. `left_alone` passes once the first check has ended,
-#     and `left_gone` once the process it left no longer runs, a zombie being no process that runs.
-printf '#!/usr/bin/env bash\nset -m\nsleep 60 &\necho "$! $$" > %q\nsleep 2\n' "$lab/left" > "$lab/leaves.sh"
+#     A shell under a check that starts a process under its own job control, in a process group of
+#     its own, and ends, leaves that process with no parent and no group that leads to it: the run's
+#     stop ends it all the same, from what its watch saw under the check (agent-squad #506). The
+#     first check here runs such a shell, which writes the PIDs of that process, of itself and of
+#     the check to $lab/left, and ends two seconds later, once the watch has seen it, as the check
+#     does then; the process left, the check's grandchild, sleeps ten minutes, as above. The second
+#     check waits, so that the run goes on. In each mode, once the first check and its shell have
+#     ended, the run is interrupted. `left_alone` passes once they have, and `left_gone` once the
+#     process they left no longer runs, a zombie being no process that runs.
+printf '#!/usr/bin/env bash\nbash -c %q\nexit 0\n' \
+  "set -m; sleep 600 & echo \"\$! \$\$ \$PPID\" > $(printf %q "$lab/left"); sleep 2" > "$lab/leaves.sh"
 chmod +x "$lab/leaves.sh"
 # shellcheck disable=SC2317,SC2329 # run through within
-left_alone() { [ -s "$lab/left" ] && ! kill -0 "$(cut -d' ' -f2 "$lab/left")" 2>/dev/null; }
+left_alone() {
+  [ -s "$lab/left" ] && ! kill -0 "$(cut -d' ' -f2 "$lab/left")" 2>/dev/null \
+    && ! kill -0 "$(cut -d' ' -f3 "$lab/left")" 2>/dev/null
+}
 # shellcheck disable=SC2317,SC2329 # the same
 left_gone() { ! ps -o stat= -p "$(cut -d' ' -f1 "$lab/left")" 2>/dev/null | grep -qv '^Z'; }
 for mode in "one after another:" "side by side:# squad-checks: side by side"; do
@@ -852,9 +860,9 @@ for mode in "one after another:" "side by side:# squad-checks: side by side"; do
   kill -INT -- "-$checker"
   finished
   if [ "$alone" = yes ] && [ "$code" = 130 ] && within 300 left_gone; then
-    pass "${mode%%:*}, the run stops what a check left under its own job control once it ended"
+    pass "${mode%%:*}, the run stops what a shell under a check left under its own job control once they ended"
   else
-    fail "${mode%%:*}, what a check left under its own job control: its check ended within 30 s: $alone, exit $code, still there 30 s later: $(if left_gone; then echo no; else ps -o pid=,stat=,ppid=,pgid=,comm= -p "$(cut -d' ' -f1 "$lab/left")" | tr -s ' '; fi)"
+    fail "${mode%%:*}, what a shell under a check left under its own job control: they ended within 30 s: $alone, exit $code, still there 30 s later: $(if left_gone; then echo no; else ps -o pid=,stat=,ppid=,pgid=,comm= -p "$(cut -d' ' -f1 "$lab/left")" | tr -s ' '; fi)"
   fi
   # shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
   kill -KILL "$(cut -d' ' -f1 "$lab/left" 2>/dev/null)" $(cat "$lab/started" 2>/dev/null) 2>/dev/null
