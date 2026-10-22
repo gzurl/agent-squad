@@ -6,7 +6,7 @@ Numbered claims about what the change does, each a sentence a reviewer can prove
 2. Claim 2
 
 ## How to verify
-For each claim, the command or the steps that check it; for a PR that a comparison proves, that comparison and its command (SQUAD.md §5):
+For each claim, the command or the steps that check it:
 1. Check for claim 1
 2. Check for claim 2
 
