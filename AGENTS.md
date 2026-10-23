@@ -128,6 +128,11 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   the hooks in `.claude/settings.local.json` run `.agent-squad/playbook/scripts/squad-handoff.sh`,
   through the wrapper `.agent-squad/squad-hook` from v49 on.
   The scripts at the root are the next version's; `scripts/check-*.sh` test them.
+- `scripts/check-private-names.sh` refuses a push whose tracked files, or whose commits not yet on
+  `origin/main`, name a private repository of the owner, since this repository is public (#514).
+  It reads the names with `gh` at each run, and prints where each is, never the name. It checks in
+  the pre-push gate, on the machine, and fails there when GitHub cannot be read; in CI, whose token
+  cannot list those repositories, it says that it did not check, and passes.
 - The coverage job fails on its own when the total or any script that `scripts/ci-coverage.sh`
   measures is below 100 %, or when a test fails under kcov; the line under its summary's heading
   says which (#507). Its green can be trusted as the other jobs' is.
