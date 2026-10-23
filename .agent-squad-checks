@@ -8,6 +8,8 @@ scripts/check-links.sh
 scripts/check-link-checker.sh
 scripts/check-version.sh
 scripts/check-version-checker.sh
+scripts/check-private-names.sh
+scripts/check-private-names-checker.sh
 scripts/check-gate.sh
 scripts/check-merge-gate.sh
 scripts/check-handoff.sh
