@@ -74,8 +74,11 @@ Work from the main checkout. The upstream repository is the one named on the `up
      in step 7, and run the script again later. The labels it lists as not in the table are the
      project's own: leave them.
 
-   Delete the file when you are done. When this step stops, tell the CEO too that DEV and QA wait
-   at their safe point, and that `/squad-resume` brings them back.
+   Keep the file until step 5 is done, the first run's too when this step is run again, and
+   delete it then: only the run that installs the release names a change to a template the project
+   keeps, and a later run of the same release does not (QA's finding on PR #519). When this step
+   stops, tell the CEO too that DEV and QA wait at their safe point, and that `/squad-resume`
+   brings them back.
 5. **Do each step left by hand, and commit it,** through the installer's PR (§3; `BOOTSTRAP.md`,
    *The installer's files*): each item the installer lists under *By hand*, such as a `.gitignore`
    line, a template it created, or a change to bring into a template the project keeps, with the
