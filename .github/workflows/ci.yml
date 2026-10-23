@@ -31,6 +31,12 @@ jobs:
         run: scripts/check-version.sh
       - name: The version check names each changed section the upgrade item leaves out
         run: scripts/check-version-checker.sh
+      # Here it does not check, since the job's token cannot list the owner's private repositories:
+      # it says so, and passes. The pre-push gate runs it on the machine (agent-squad #514).
+      - name: No tracked file or new commit names a private repository of the owner
+        run: scripts/check-private-names.sh
+      - name: The private-names check refuses a name in any form, and says where without naming it
+        run: scripts/check-private-names-checker.sh
       - name: No squad script filters gh by label
         run: scripts/check-gh-filters.sh
       - name: Every squad script that runs jq drops the CR it ends its lines with on Windows
