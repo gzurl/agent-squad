@@ -405,7 +405,9 @@ one changes and whether you need to do anything, and installs nothing. To instal
 yes, so the CTO asks nothing more, and you need not run `/squad-update` first. Before installing,
 the CTO brings DEV and QA to a safe point, as `/squad-pause` does, since the install replaces the
 scripts their hooks and pushes run. If the installer leaves a step undone, or the installation's
-check fails, the CTO stops there and tells you. The agents then re-read the rules that changed, so
+check fails, the CTO stops there and tells you. Each step the release leaves to the project by hand,
+such as a change to bring into a GitHub template the project keeps as its own, the CTO does through
+a PR, and tells you. The agents then re-read the rules that changed, so
 the rules need nothing more from you; the CTO asks you to compact the sessions only after a release
 that rewrites much of the charter. The upgrade also moves the squad board to the new release, and
 keeps it off if you turned it off, and the CTO creates any label the release adds. Then the CTO asks
