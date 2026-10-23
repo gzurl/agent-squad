@@ -2,7 +2,7 @@
 
 ## v70 — 2026-10-22
 - **QA runs what a PR states about the system** (#501, the CEO's request, with the views of the QAs
-  and CTOs of rogue-trader, trivial-tape and biwenger-metrics-ai). §5: the black-box part also runs
+  and CTOs of other local projects). §5: the black-box part also runs
   every statement about how the system behaves that the diff adds or changes, in documentation as
   in messages, and every recipe, copied from the file and run in the reader's shell. QA's
   checklist adds three questions: whether breaking the code behind each claim fails a test,
