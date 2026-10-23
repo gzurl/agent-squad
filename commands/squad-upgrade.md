@@ -29,13 +29,14 @@ Work from the main checkout. The upstream repository is the one named on the `up
 2. **What it changes,** for the steps below. Read the `CHANGELOG.md` of the release to install
    (`gh api -H 'Accept: application/vnd.github.raw' 'repos/<upstream>/contents/CHANGELOG.md?ref=<tag>'`),
    every entry above the version the project runs: the rules that change, with their § numbers,
-   for step 6; each *By hand* item, for step 5; whether the release rewrites much of the charter,
-   and the headlines, for step 7. **Going back,** that file has no entry above the version the
-   project runs, and the rules to name are those that revert: read instead the installed
-   playbook's `.agent-squad/playbook/CHANGELOG.md`, now, since step 4 replaces it, every entry
-   above the release to install: the rules that revert, with their § numbers, for step 6; whether
-   one of those releases rewrote much of the charter, and their headlines, for step 7. Ask the CEO
-   nothing: typing the command was the yes.
+   for step 6; each step it leaves to the project by hand, in its *Upgrading from* item or
+   elsewhere, such as a change to bring into a template the project keeps, for step 5; whether the
+   release rewrites much of the charter, and the headlines, for step 7. **Going back,** that file
+   has no entry above the version the project runs, and the rules to name are those that revert:
+   read instead the installed playbook's `.agent-squad/playbook/CHANGELOG.md`, now, since step 4
+   replaces it, every entry above the release to install: the rules that revert, with their §
+   numbers, for step 6; whether one of those releases rewrote much of the charter, and their
+   headlines, for step 7. Ask the CEO nothing: typing the command was the yes.
 3. **Bring the squad to a safe point** before installing anything: the install replaces the
    scripts that the hooks and the pre-push gate run, and the restart that step 7 asks for ends
    whatever a session is doing. Send DEV and QA one message each: "The CEO is upgrading the
@@ -75,18 +76,22 @@ Work from the main checkout. The upstream repository is the one named on the `up
 
    Delete the file when you are done. When this step stops, tell the CEO too that DEV and QA wait
    at their safe point, and that `/squad-resume` brings them back.
-5. **Commit what the installer lists under *By hand*,** such as a `.gitignore` line or a
-   template it created, through the installer's PR (§3; `BOOTSTRAP.md`, *The installer's files*).
-   That PR needs no issue of its own, and its description names the release and each *By hand*
-   item it records.
+5. **Do each step left by hand, and commit it,** through the installer's PR (§3; `BOOTSTRAP.md`,
+   *The installer's files*): each item the installer lists under *By hand*, such as a `.gitignore`
+   line, a template it created, or a change to bring into a template the project keeps, with the
+   command that shows it; and each step that the `CHANGELOG.md` entries of step 2 leave to the
+   project, which the installer may not list (agent-squad #512). That PR needs no issue of its
+   own, and its description names the release and each step it records, with who named it: the
+   installer or the CHANGELOG.
 6. **Have the agents re-read what changed** (§7). Tell DEV and QA, one message each: the version
    installed, and whether the project went back to it; the rules that changed, or going back the
    rules that revert, with their § numbers; and to re-read those sections now in the main
    checkout's `.agent-squad/playbook/`, taking them as superseding the text their session loaded,
    and that they stay at their safe point until `/squad-resume`. Re-read the sections yourself.
 7. **Report to the CEO**, in the CEO's language: the version installed, and whether the project went
-   back to it, with the rules that revert and their § numbers, `--check`'s result, the installer's
-   PR, the labels created or corrected, and what DEV and QA were told. Say that the rules need
+   back to it, with the rules that revert and their § numbers, `--check`'s result, each step left
+   by hand, with who named it, and the installer's PR that does it, the labels created or
+   corrected, and what DEV and QA were told. Say that the rules need
    nothing more from the CEO: the agents have re-read the rules that changed, and each session loads
    the full text at its next compaction. Only when the release rewrites much of the charter, or
    going back one of the releases it takes back did, recommend that the CEO type

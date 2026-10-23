@@ -1166,6 +1166,35 @@ cases_uncommitted() {
   check "once they are committed, it lists none" lacks "$out" "Commit these files"
 }
 
+# Case 15b.
+cases_template_changes() {
+  # 15b. The run that installs a release names, under By hand, each template the project keeps that
+  #      the release changes, with a command that shows the change; none when the release leaves
+  #      them as they were, and none for a template the project lacks, which it creates (#512).
+  target="$(new_project templates)" || exit 2
+  "$install" "$target" "$tag_a" >/dev/null 2>&1
+  printf '# AGENTS.md\n\n## Squad\n@.agent-squad/playbook/SQUAD.md\n' > "$target/AGENTS.md"
+  out="$("$install" --source "$lab/vb" "$target" "$tag_b" 2>&1)"
+  check "an upgrade whose release leaves the templates as they were lists none of them" \
+    lacks "$out" "change to the playbook's"
+  # Tree T, the version after B: both templates changed. The project keeps its own PR template, and
+  # has no task template, which the upgrade creates.
+  tag_t="v$((version_a + 2))"
+  mkdir -p "$lab/vt" && cp -pR "$lab/vb/." "$lab/vt/" || exit 2
+  sed -i.orig "s/^> \*\*Version:\*\* ${tag_b#v} /> **Version:** ${tag_t#v} /" "$lab/vt/SQUAD.md" \
+    && rm "$lab/vt/SQUAD.md.orig" || exit 2
+  echo "Changed in vt." >> "$lab/vt/.github/PULL_REQUEST_TEMPLATE.md"
+  echo "Changed in vt." >> "$lab/vt/.github/ISSUE_TEMPLATE/task.md"
+  rm "$target/.github/ISSUE_TEMPLATE/task.md"
+  out="$("$install" --source "$lab/vt" "$target" "$tag_t" 2>&1)"
+  check "an upgrade whose release changes a template the project keeps names it under By hand, with a command that shows the change" \
+    contains "$out" ". Bring $tag_t's change to the playbook's .github/PULL_REQUEST_TEMPLATE.md into the project's own, which the installer keeps: diff -u <(gh api -H 'Accept: application/vnd.github.raw' 'repos/gzurl/agent-squad/contents/.github/PULL_REQUEST_TEMPLATE.md?ref=$tag_b') .agent-squad/playbook/.github/PULL_REQUEST_TEMPLATE.md shows it"
+  check "and keeps the project's own" [ "$(cat "$target/.github/PULL_REQUEST_TEMPLATE.md")" = "The project's own PR template." ]
+  check "but not the template the project lacked, which it creates from the release" \
+    bash -c 'grep -qF "change to the playbook'"'"'s .github/ISSUE_TEMPLATE" <<<"$1" && exit 1; cmp -s "$2" "$3"' _ \
+    "$out" "$target/.github/ISSUE_TEMPLATE/task.md" "$lab/vt/.github/ISSUE_TEMPLATE/task.md"
+}
+
 # Case 16.
 cases_default_branch() {
   # 16. A remote whose default branch is not main (#72). A project on trunk, complete: the worktrees
@@ -2180,6 +2209,7 @@ groups=(
   cases_check_gate
   cases_check_import
   cases_uncommitted
+  cases_template_changes
   cases_default_branch
   cases_ssh_keepalive
   cases_unanswered
