@@ -1,5 +1,26 @@
 # Changelog
 
+## v71 — 2026-10-23
+- **A private project is named nowhere in a public `agent-squad`** (#515, the CEO's request). §7:
+  when `agent-squad` is public and the project is not, what the project's agents write there (an
+  issue, its comments, a PR its CTO is assigned) and the credit the method's CTO gives them name
+  the role alone ("another project's CTO"), or an outside author's `@<login>` as §3 says, never the
+  project, its issues, pull requests or code. This CHANGELOG's older entries, and the notes of
+  their Releases, now credit by role too (#513).
+- **An upgrade lists a change to a template the project keeps** (#512, found by another project's
+  CTO). The installer leaves a project's own GitHub templates alone, so v70's upgrade listed
+  nothing by hand, though its *Upgrading from v69* asked for a change to the PR template. When a
+  release changes a template the project keeps, *By hand* now names it, with a command that shows
+  the change. `/squad-upgrade` does each step left by hand, whether the installer or the CHANGELOG
+  names it, commits it through the installer's PR and reports it; §3 has QA check that this PR
+  holds those steps too. `/squad-update`, `BOOTSTRAP.md` and the README's *Upgrade* say the same.
+- **This repository's own checks** (#514). A push here fails when a tracked file, or a commit not
+  yet on `main`, names a private repository of the owner, whose names the check reads from GitHub
+  at each run. It does not ship, so nothing changes for a project.
+- **Upgrading from v70:** nothing to do by hand, since v71 changes no template. This upgrade runs
+  v70's `/squad-upgrade`, which commits only what the installer lists; from v71 on, it also does
+  the steps the CHANGELOG names. Restart the three sessions, since §3 and §7 change.
+
 ## v70 — 2026-10-22
 - **QA runs what a PR states about the system** (#501, the CEO's request, with the views of the QAs
   and CTOs of other local projects). §5: the black-box part also runs
