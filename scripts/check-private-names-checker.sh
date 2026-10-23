@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Check that check-private-names.sh refuses a tracked file, or a commit not yet on origin/main, that
-# names a private repository of the owner, in any case and with any separator between its words,
-# and says where without naming it; that it passes when none is named; that it fails when GitHub
+# Check that check-private-names.sh refuses a tracked file, by its path or its text, or a commit
+# not yet on origin/main, by its message, the paths it touches or the lines it adds, that names a
+# private repository of the owner, in any case and with any separator between its words, and says
+# where without naming it; that it passes when none is named; that it fails when GitHub
 # cannot be read, and passes, unchecked, in GitHub Actions (agent-squad #514). The names here are
 # made up, and a stub gh lists them. Everything happens in a scratch repository, so this script
 # touches neither the repository it is run from nor GitHub.
@@ -93,6 +94,17 @@ for form in SECRET_GARDEN Secret-Garden secret.garden "Secret Garden" secretgard
   undo
 done
 
+# 2b. A tracked file's path names one: it fails, masking the name in the path, wherever it prints it.
+commit docs/Secret-Garden-notes.md $'A neutral line.\nAnd hidden_lake.'
+run
+if [ "$code" -eq 1 ] && grep -qxF '  docs/***-notes.md (its path)' <<<"$out" && grep -qxF '  docs/***-notes.md:2' <<<"$out" \
+   && ! named; then
+  pass "a tracked file's path names one: it fails, the name masked in the path wherever it prints it"
+else
+  fail "a tracked file's path names one: exit $code, said: $out"
+fi
+undo
+
 # 3. An untracked file that names one is no push's: it passes.
 printf 'hidden_lake\n' > "$repo/scratch.txt"
 run
@@ -112,6 +124,35 @@ if [ "$code" -eq 1 ] && [ "$(grep -c '^  ' <<<"$out")" = 1 ] && grep -qxF "  com
   pass "a new commit's message names one: it fails, naming that commit alone, not the repository"
 else
   fail "a new commit's message names one: exit $code, said: $out"
+fi
+undo
+
+# 4b. A commit not yet on origin/main adds a line that names one, and the next removes it: GitHub
+#     keeps both after the squash (QA's finding on PR #518). It fails, naming the first alone.
+commit notes.md "See secret garden."
+added="$(git -C "$repo" rev-parse --short HEAD)"
+commit notes.md "See nothing." "Reword notes.md"
+run
+if [ "$code" -eq 1 ] && [ "$(grep -c '^  ' <<<"$out")" = 1 ] && grep -qxF "  commit $added" <<<"$out" && ! named; then
+  pass "a new commit adds a line that names one, which the next removes: it fails, naming that commit"
+else
+  fail "a line added, then removed: exit $code, said: $out"
+fi
+undo
+
+# 4c. A commit adds an empty file at a path that names one, and the next deletes it: both touch the
+#     path, and it fails, naming the two.
+mkdir -p "$repo/docs" && : > "$repo/docs/hidden-lake.md"
+git -C "$repo" add -A && git -C "$repo" commit -qm "Add an empty page"
+empty="$(git -C "$repo" rev-parse --short HEAD)"
+git -C "$repo" rm -q docs/hidden-lake.md && git -C "$repo" commit -qm "Drop the empty page"
+dropped="$(git -C "$repo" rev-parse --short HEAD)"
+run
+if [ "$code" -eq 1 ] && [ "$(grep -c '^  ' <<<"$out")" = 2 ] && grep -qxF "  commit $empty" <<<"$out" \
+   && grep -qxF "  commit $dropped" <<<"$out" && ! named; then
+  pass "new commits add, then delete, a path that names one: it fails, naming both"
+else
+  fail "a path added, then deleted: exit $code, said: $out"
 fi
 undo
 

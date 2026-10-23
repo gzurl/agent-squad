@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Refuse a push that names a private repository of this repository's owner (agent-squad #514): this
-# repository is public, and the other squads' projects are private. It fails when a tracked file,
-# or the message of a commit not yet on origin/main, names one: in any case, with `-`, `_`, `.`, a
-# space or nothing between its words, and not inside a longer word. It prints each file and line,
-# or each commit, and never the name, so that its output can be quoted anywhere.
+# repository is public, and the other squads' projects are private. It fails when a tracked file's
+# path or text names one, or a commit not yet on origin/main does, in its message, the paths it
+# touches or the lines it adds, since GitHub keeps a PR's commits after its squash (QA's finding on
+# PR #518): in any case, with `-`, `_`, `.`, a space or nothing between its words, and not inside a
+# longer word. It prints each file and line, each path, or each commit, with every name in them
+# masked as `***`, so that its output can be quoted anywhere.
 # It reads the names from GitHub at each run, so that no list of them is written here: `gh repo
 # list`, through squad-timeout.sh, beside it, which stops the call after SQUAD_GH_TIMEOUT seconds
 # of wall-clock time (120 when unset, or not a whole number above 0). In GitHub Actions, whose token
@@ -60,20 +62,37 @@ case $? in
   *) say "the tracked files could not be read"; exit 1 ;;
 esac
 places="$(cut -d: -f1,2 <<<"$found" | grep .)"
+# Each tracked file whose path names one, as <path> (its path).
+while IFS= read -r path; do
+  [ -n "$path" ] && places="$places${places:+$'\n'}$path (its path)"
+done <<<"$(git ls-files | grep -iE "$pattern")"
 
-# Each commit not yet on origin/main whose message names one.
+# Each commit not yet on origin/main that names one: in its message, a path it touches, or a line it
+# adds, its diff's `+++` headers included.
 if ! git rev-parse -q --verify 'origin/main^{commit}' >/dev/null; then
   say "origin/main is unknown, so the commits not yet on it are too: fetch it"
   exit 1
 fi
 while read -r commit; do
   [ -n "$commit" ] || continue
-  git log -1 --format=%B "$commit" | grep -qiE "$pattern" && places="$places${places:+$'\n'}commit $commit"
+  {
+    git log -1 --format=%B "$commit"
+    git diff-tree --no-commit-id -r --name-only --root "$commit"
+    git show --format= --no-color --unified=0 "$commit" | grep '^+'
+  } | grep -qiE "$pattern" && places="$places${places:+$'\n'}commit $commit"
 done <<<"$(git rev-list --abbrev-commit origin/main..HEAD)"
 
+# Every name in what is printed becomes `***`, whatever its case: a path can name one too.
 if [ -n "$places" ]; then
-  say "these name one of $owner's private repositories; the name is not printed:"
-  while IFS= read -r place; do echo "  $place"; done <<<"$places"
+  say "these name one of $owner's private repositories, masked as ***:"
+  awk -v names="$names_pattern" '{
+      line = $0; lower = tolower(line); out = ""
+      while (match(lower, names)) {
+        out = out substr(line, 1, RSTART - 1) "***"
+        line = substr(line, RSTART + RLENGTH); lower = substr(lower, RSTART + RLENGTH)
+      }
+      print "  " out line
+    }' <<<"$places"
   exit 1
 fi
 say "no tracked file, and no commit since origin/main, names one of $owner's $count private repositories"
