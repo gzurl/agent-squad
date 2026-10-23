@@ -342,18 +342,18 @@ describe("the focus: the issue or PR its agent works on, as its own gh calls dec
     }
   })
 
-  // agent-squad #289: trivial-tape's sequence, confirmed by its DEV. The agent declared #113 and #114
+  // agent-squad #289: another project's sequence, confirmed by its DEV. The agent declared #113 and #114
   // in progress, commented on #117, merged PR #118, which QA had approved, from that same worktree,
   // edited #117's labels, read PR #118 and #117, and merged main in: it never left #114.
-  test("trivial-tape's sequence shows #114 from its first line to its end, where it showed PR #118", async ($, on) => {
+  test("another project's sequence shows #114 from its first line to its end, where it showed PR #118", async ($, on) => {
     const w = world(on)
-    await start($, 'DEV:trivial-tape')
-    const focusOn = (item: any) => expect(w.store.get('trivial-tape/DEV')).toMatchObject({ item })
+    await start($, 'DEV:beta')
+    const focusOn = (item: any) => expect(w.store.get('beta/DEV')).toMatchObject({ item })
     for (const command of [
       `gh issue edit 113 --add-label ${IN_PROGRESS} && gh issue edit 114 --add-label ${IN_PROGRESS}`,
-      'git switch -c feature/expo-iap origin/main',
+      'git switch -c feature/x origin/main',
       'gh issue comment 117 --body "Sequencing: #113 and #114 first, as you asked."',
-      'git add -A && git commit -qm "wip: expo-iap"',
+      'git add -A && git commit -qm "wip: x"',
       'p="$(git rev-parse --path-format=absolute --git-common-dir)/../.agent-squad/playbook" && head=$("$p/scripts/squad-merge-gate.sh" 118) && gh pr merge 118 --squash --match-head-commit "$head" && gh issue edit 117 --remove-label "👀 status:in-review"',
       'gh pr view 118 --json state,mergeCommit',
       'gh issue view 117 --json state',
