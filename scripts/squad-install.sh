@@ -773,6 +773,17 @@ done
 
 previous="none"
 [ -s "$log" ] && previous="$(awk 'END { print $NF }' "$log")"
+# The GitHub templates that the project keeps as its own (section 5) and that this release changes,
+# the playbook's copy compared before the new one replaces it: the By hand list names each, for the
+# CTO to bring the change in by hand (agent-squad #512).
+github_templates=(.github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md)
+changed_templates=()
+for template in "${github_templates[@]}"; do
+  if [ -e "$project/$template" ] && [ -f "$playbook/$template" ] && [ -f "$staging/$template" ] \
+    && ! cmp -s "$playbook/$template" "$staging/$template"; then
+    changed_templates+=("$template")
+  fi
+done
 installed_manifest="$(manifest "$staging")"
 if [ -d "$playbook" ] && [ "$installed_manifest" = "$(manifest "$playbook")" ]; then
   say playbook "$tag is already installed, unchanged"
@@ -1080,7 +1091,7 @@ fi
 #    them afterwards.
 #    What was created and what was kept are said in one line (agent-squad #262).
 created=() kept=()
-for template in .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md; do
+for template in "${github_templates[@]}"; do
   if [ -e "$project/$template" ]; then
     kept+=("$template")
   elif [ ! -f "$playbook/$template" ]; then
@@ -1170,10 +1181,15 @@ if [ "$set_up" -eq 1 ]; then
   if ! lists_a_command "$project/.agent-squad-checks"; then
     item "Write .agent-squad-checks: the commands the project's CI runs, one per line; until it lists one the gate refuses every push"
   fi
+  # Each template the project keeps that this release changes, with a command that shows the change,
+  # from the main checkout: the run that installs the release names it (agent-squad #512).
+  for template in ${changed_templates[@]+"${changed_templates[@]}"}; do
+    item "Bring $tag's change to the playbook's $template into the project's own, which the installer keeps: diff -u <(gh api -H 'Accept: application/vnd.github.raw' 'repos/$upstream/contents/$template?ref=$previous') .agent-squad/playbook/$template shows it"
+  done
   # The squad's files that belong in git, as git sees them now: whichever run wrote them, they are
   # left to commit until a PR takes them.
   uncommitted="$(git -C "$project" status --porcelain --untracked-files=all -- .gitignore \
-    .github/ISSUE_TEMPLATE/task.md .github/PULL_REQUEST_TEMPLATE.md | cut -c4- | LC_ALL=C sort \
+    "${github_templates[@]}" | cut -c4- | LC_ALL=C sort \
     | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')"
   if [ -n "$uncommitted" ]; then
     item "Commit these files, which the squad writes and git shows as not committed, through a PR: $uncommitted"

@@ -31,8 +31,8 @@ and send DEV and QA nothing.
      the release rewrites much of the charter, the one case in which `/squad-upgrade` recommends a
      compaction. Scripts and commands take effect at once; the squad board and any hook the
      release adds, at the restart that `/squad-upgrade` asks for.
-   - **What the project must do:** each *By hand* item, a `.gitignore` line to commit, or a
-     setting to add to a tool.
+   - **What the project must do:** each *By hand* item, a `.gitignore` line to commit, a change
+     to bring into a template the project keeps, or a setting to add to a tool.
    - **Anything else the CEO should know.**
 3. **End with your recommendation,** in one line, and what it costs: upgrade now to the latest
    release, upgrade later, or upgrade to a specific version (say which, and why). Then say how:
