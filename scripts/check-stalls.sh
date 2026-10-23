@@ -295,7 +295,7 @@ finds "megabytes of text in PRs, reviews and issues are read through files, and 
   tsv ping DEV "PR #1" https://github.com/o/r/pull/1 "merge it: QA approved its head 1111111" "2026-10-03 11:20" ""
   tsv ping CTO "#50" https://github.com/o/r/issues/50 "triage it: stranger opened it from outside the squad (NONE)" "2026-10-03 11:20" "")"
 
-# 6g. A review requested on GitHub and still pending (agent-squad #306, from trivial-tape's PR #119,
+# 6g. A review requested on GitHub and still pending (agent-squad #306, from another project's PR,
 #     where the CEO wanted a person's Approve after QA's verdict). An approved head then waits for
 #     that reviewer, not for its author: nobody is pinged, and the CEO, the only one who can reach a
 #     person, is told once the PR has been quiet for an hour, once, whatever the sessions. The

@@ -52,7 +52,7 @@
 
 ## v68 — 2026-10-20
 - **A release branch can be cut from a tag without an exception** (#482, reported by
-  trivial-tape's CTO). Since v66 the pre-push gate refused every push to a declared release branch,
+  another project's CTO). Since v66 the pre-push gate refused every push to a declared release branch,
   even one that only created it at a released commit, so each patch release needed an exception
   from the CEO. §2.3: a push that creates a release branch at a commit that the remote's default
   branch, one of its release branches or one of its tags already holds now goes through with no
@@ -104,11 +104,11 @@
   since §3 and §6 change.
 
 ## v66 — 2026-10-19
-- **A release branch is held as `main` is** (#441, reported by trivial-tape's CTO from its QA's
-  finding; #446; and #450, found by QA in its review of PR #449). trivial-tape ships 0.15.2 from
-  `release/0.15` while `main` carries 0.16, and the pre-push gate let a direct push to that branch
-  through, since it held the default branch alone. §2.3: a project lists the patterns of its
-  release branches in `.agent-squad-release-branches`, at its root, in the form of
+- **A release branch is held as `main` is** (#441, reported by another project's CTO from its
+  QA's finding; #446; and #450, found by QA in its review of PR #449). That project ships fixes
+  from a release branch while `main` carries its next release, and the pre-push gate let a direct
+  push to that branch through, since it held the default branch alone. §2.3: a project lists the
+  patterns of its release branches in `.agent-squad-release-branches`, at its root, in the form of
   `.agent-squad-checks`. Only a PR reviewed by QA changes a branch that matches, with the same
   exception as `main`. The pre-push gate refuses a direct push to one, and reads the declaration
   from the default branch's tip, so that a push cannot lift it with its own commit. A push by URL
@@ -192,9 +192,9 @@
 
 ## v62 — 2026-10-15
 - **A session in its worktree loads the project's instructions once** (#416, reported by
-  rogue-trader's squad). Until now, the first Read, Edit or Write in a worktree also loaded that
+  another project's squad). Until now, the first Read, Edit or Write in a worktree also loaded that
   worktree's copy of `CLAUDE.md`, beside the main checkout's: about 48k tokens more per session in
-  rogue-trader, and again after each compaction. The installer now writes Claude Code's
+  that project, and again after each compaction. The installer now writes Claude Code's
   `claudeMdExcludes` into `.claude/settings.local.json` for each worktree's `CLAUDE.md`,
   `.claude/CLAUDE.md` and `.claude/rules/`, and keeps the project's own entries; a `CLAUDE.md` in
   a worktree's subdirectory still loads. `--check` verifies the entries, and the uninstaller
@@ -308,7 +308,7 @@
   once v56 is installed, so v56's own PR still closed its issue.
 
 ## v55 — 2026-10-13
-- **A status label is set in one command, and read back** (#367, found by rogue-trader's DEV). An
+- **A status label is set in one command, and read back** (#367, found by another project's DEV). An
   issue there was closed carrying two states, after a `gh issue edit` whose result went unread,
   and only the merge gate checked the rule, on PRs alone.
   - **`squad-set-status.sh <issue|pr> <n> <state>`** sets the state and removes the others in one
@@ -341,7 +341,7 @@
 
 ## v54 — 2026-10-12
 - **The squad shows which sessions still run an older release** (#361, proposed by
-  rogue-trader's CEO). After an upgrade, a session keeps its old board and hooks until its
+  another project's CEO). After an upgrade, a session keeps its old board and hooks until its
   `/restart`, and nothing showed which ones had not restarted.
   - **The band** marks each such session with both releases, as `DEV ⟳ v50→v53`, until its
     `/restart` (#362).
@@ -373,7 +373,7 @@
   to load the new board.
 
 ## v52 — 2026-10-12
-- **A session that is not in the main checkout is told so** (#319, found by biwenger-metrics-ai's QA
+- **A session that is not in the main checkout is told so** (#319, found by another project's QA
   and CEO). Such a session was started in a subdirectory, or resumed from one.
   - **Before:** v50's hooks failed in it with nothing reaching the model, and older ones said the
     charter was not installed.
@@ -385,7 +385,7 @@
   `/restart` or a `/clear`, though not a compaction. The other moments keep the once-a-day rule. An
   upgrade adds a hook for `/clear`.
 - **The stall watch leaves an approved PR to a reviewer still requested on GitHub** (#306, from
-  trivial-tape's squad). It tells the CEO after an hour, since only the CEO can reach a human
+  another project's squad). It tells the CEO after an hour, since only the CEO can reach a human
   reviewer. The squad's own review and answer steps ping as before.
 - **The band:**
   - **The PR QA reviews** shows when QA checks it out with `git fetch … pull/<n>/head` and
@@ -432,7 +432,7 @@
   the CTO's.
 
 ## v50 — 2026-10-12
-- **The band follows each agent's focus** (#289, found by trivial-tape's CEO), not its last `gh`
+- **The band follows each agent's focus** (#289, found by another project's CEO), not its last `gh`
   call.
   - **Declaring work sets the item:** an issue marked `🚧 status:in-progress`, a PR the agent
     creates, or a PR it checks out or reviews.
@@ -478,7 +478,7 @@
   - **`squad-outside.sh`** lists, for `/squad-resume` and `/squad-watch`, the outside items waiting
     for triage and the outside comments and reviews since the last one, each with its account. The
     stall watch asks the CTO for a triage that has waited half an hour.
-- **The merge gate refuses a PR labelled `👨🏻‍💼 needs-ceo`** (#283, from rogue-trader's CTO). §4.9's
+- **The merge gate refuses a PR labelled `👨🏻‍💼 needs-ceo`** (#283, from another project's CTO). §4.9's
   checklist lists it: a merge would take the CEO's decision in the CEO's place.
 - **A blocked `/compact` says what to do** (#269): *Save this session's state first: type
   /squad-save-state, then /compact.*
@@ -774,7 +774,7 @@
 ## v34 — 2026-10-01
 - **`/squad-usage` and `/squad-usage-all`: the tokens each agent used** (#119, the CEO's request).
   `scripts/squad-tokens.sh` reads the transcripts Claude Code keeps on the machine, and only reads
-  them. It reports each agent by its session's name, such as `CTO:trivial-tape`, with the role read
+  them. It reports each agent by its session's name, such as `CTO:alpha`, with the role read
   on either side of the colon, and gives its input, the share of it read from the cache, its output
   and its models. Each model response counts once, by its message id, even when a forked session
   holds a copy.
@@ -799,7 +799,7 @@
     request. The README says so in *When you step away*.
 
 ## v33 — 2026-10-01
-- **The merge gate keys body-only findings on the reviewer** (#150, found by rogue-trader's QA): on
+- **The merge gate keys body-only findings on the reviewer** (#150, found by another project's QA): on
   a PR that QA authors, DEV reviews, so the gate reads the author from the first line of the PR's
   description and takes as findings the comments signed by the reviewer, DEV there and QA
   otherwise. QA's answers on its own PR no longer read as findings, and DEV's findings there now
@@ -811,7 +811,7 @@
   does not check it.
 
 ## v32 — 2026-09-30
-- **The pre-push gate lets through a tag of a past release** (#143, found by trivial-tape's CTO): a
+- **The pre-push gate lets through a tag of a past release** (#143, found by another project's CTO): a
   pushed ref whose commit one of the remote's branches already contains carries no new code, so it
   need not be the checked-out commit, and a push made only of such refs and deletions runs no
   checks. The remote's branches are listed at the push (`git ls-remote --heads`), so a stale
@@ -819,7 +819,7 @@
   new commit, everything runs as before, and only a PR changes the protected branch, whatever the
   commit. §4.2 and `AGENTS.md` say so. The new gate reaches a project when it installs v32.
 - §4.9: **the cleanup after a merge is chained to it with `&&`** (#144, found and fixed by
-  trivial-tape's DEV): a cleanup chained with `;` ran after the gate had stopped a merge, deleted
+  another project's DEV): a cleanup chained with `;` ran after the gate had stopped a merge, deleted
   the head branch, and GitHub closed the PR.
 - The README drops its notes for releases older than v31 (#145): every project upgrades with
   `/squad-upgrade`.

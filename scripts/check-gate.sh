@@ -938,7 +938,7 @@ fi
 # 17. A release branch is cut with no exception at a commit that the remote's default branch, a
 #     held branch or a tag already holds, by a push that creates it (agent-squad #482): it runs no
 #     check, since it pushes no code. One cut from a tag whose branch was merged and deleted goes
-#     through too, as trivial-tape's release/0.15 was, and so does one from a lightweight tag. A
+#     through too, as another project's was, and so does one from a lightweight tag. A
 #     commit that only a feature branch holds, which no PR has reviewed, is no such commit (QA's
 #     finding on PR #484). A push that moves a release branch that exists, or creates one at a
 #     commit the remote lacks, is refused as before. The worktree's committed list comes
