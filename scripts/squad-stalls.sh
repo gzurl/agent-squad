@@ -8,7 +8,9 @@
 # - a PR approved on its head: its author, to merge it; but while a review it requests on GitHub is
 #   pending, the reviewer it was requested from, whom the watch never pings (agent-squad #306);
 # - a draft: its author, to finish it;
-# - an issue in progress: the role of its owner label, to carry on; with none, the CTO;
+# - an issue in progress: the role of its owner label, to carry on, or, while that role has written
+#   no state on it since the issue went in progress, to write one that names its approach
+#   (agent-squad #521); with no owner label, the CTO;
 # - an issue or a PR opened from outside the squad and not triaged yet, labelled needs-triage or
 #   with no owner label: the CTO, to triage it (agent-squad #281).
 # Outside means an author whose association GitHub reports as neither the repository's owner, nor
@@ -26,16 +28,20 @@
 # often a person outside the squad's sessions, is told to the CEO, once, when it has been quiet for
 # an hour, since only the CEO can reach that reviewer. A session that waits on the CEO in its own
 # terminal, or that is not open, is reported to the CEO at once and never pinged; a busy one is
-# working, and nothing is reported for it. The session states come from the CTO, who reads them
-# with ListAgents, which a script cannot. What was reported is kept in .agent-squad/watch.tsv of
-# the main checkout, which git ignores, so that each finding is reported once; an item with new
-# activity starts afresh.
+# working, and nothing is reported for it. A missing state is the exception: it is reported 15
+# minutes after its issue went in progress, whatever the activity since, and its owner is pinged
+# even when busy, since a busy owner is the one who owes it; the rest goes as for a stall. The
+# session states come from the CTO, who reads them with ListAgents, which a script cannot. What was
+# reported is kept in .agent-squad/watch.tsv of the main checkout, which git ignores, so that each
+# finding is reported once; an item with new activity starts afresh, and a missing state when its
+# issue goes in progress again.
 #
 # Usage: squad-stalls.sh [--session <role>=<state>]...
 #   <role> is CTO, DEV or QA, and <state> idle, busy or waiting; a role not given has no session.
 # Output: one line per finding, tab-separated: what to do ("ping" the role, or tell the "ceo"),
 #   the role, or the requested reviewers, the item ("PR #12" or "#34"), its URL, the next step, since when it has been quiet
-#   (local time), and, for the CEO, why. Nothing when there is nothing to report.
+#   or, for a missing state, in progress (local time), and, for the CEO, why. Nothing when there
+#   is nothing to report.
 # Exit: 0 checked; 1 GitHub could not be read, so nothing was checked; 2 bad usage, or not run from
 #   a checkout of a project the squad is installed in.
 set -u
@@ -112,6 +118,16 @@ for number in $(jq -r '.[] | select(.isDraft | not) | .number' "$work/prs.json")
     "$work/reviews.json" >> "$work/verdicts.jsonl" || die "cannot read the reviews of PR #$number"
 done
 jq -sc 'add // {}' "$work/verdicts.jsonl" > "$work/verdicts.json" || exit 1
+# Each issue in progress: when its label was set, and the state comments on it, from its timeline
+# (agent-squad #521), one object per issue, merged into one.
+: > "$work/progress.jsonl"
+for number in $(jq -r '.[] | select(any(.labels[].name; endswith("status:in-progress"))) | .number' "$work/issues.json"); do
+  gh api --paginate --slurp "repos/$repo/issues/$number/timeline?per_page=100" > "$work/timeline.json" 2>/dev/null \
+    || die "cannot read the timeline of issue #$number"
+  jq -c -L "$(dirname "$0")" --arg n "$number" 'include "squad-steps"; {($n): progress}' \
+    "$work/timeline.json" >> "$work/progress.jsonl" 2>/dev/null || die "cannot read the timeline of issue #$number"
+done
+jq -sc 'add // {}' "$work/progress.jsonl" > "$work/progress.json" || exit 1
 
 # 2. Who owns each item's next step, which items are quiet, and what to report given the sessions
 #    and what was reported before. The new record replaces the old one: an item no longer stalled,
@@ -119,10 +135,10 @@ jq -sc 'add // {}' "$work/verdicts.jsonl" > "$work/verdicts.json" || exit 1
 { [ -f "$state" ] && jq -Rc 'split("\t") | {key: .[0], at: (.[1] | tonumber), told: (.[2] == "1")}' "$state" | jq -sc . \
   || echo '[]'; } > "$work/reported.json"
 result="$(jq -nc -L "$(dirname "$0")" --slurpfile prs "$work/prs.json" --slurpfile issues "$work/issues.json" \
-  --slurpfile verdicts "$work/verdicts.json" --slurpfile opened "$work/opened.json" \
+  --slurpfile verdicts "$work/verdicts.json" --slurpfile progress "$work/progress.json" --slurpfile opened "$work/opened.json" \
   --slurpfile reported "$work/reported.json" --argjson sessions "$sessions" --argjson now "$now" '
   include "squad-steps";
-  $prs[0] as $prs | $issues[0] as $issues | $verdicts[0] as $verdicts | $opened[0] as $opened
+  $prs[0] as $prs | $issues[0] as $issues | $verdicts[0] as $verdicts | $progress[0] as $progress | $opened[0] as $opened
   | $reported[0] as $reported
   | def local: strflocaltime("%Y-%m-%d %H:%M");
   # The issues and PRs opened from outside the squad, by number.
@@ -136,30 +152,43 @@ result="$(jq -nc -L "$(dirname "$0")" --slurpfile prs "$work/prs.json" --slurpfi
   | def waits: declared or any(closes[]; $waits[tostring] // false);
   # An outside item waits for its triage while it carries needs-triage or no owner label.
   def untriaged: any(.labels[].name; endswith("needs-triage")) or (any(.labels[].name; test("owner:(cto|dev|qa)$")) | not);
+  # An issue in progress whose owner has written no state on it since its label was set (agent-squad
+  # #521): its owner owes one that names the approach, counted from that label, whatever the
+  # activity since. Without an owner label, the CTO gives it one first.
+  def stateless: owner as $owner | $progress[.number | tostring] as $p
+    | if $owner != null and $p.since != null
+         and all($p.states[]; .role != $owner or (.at | fromdateiso8601) < ($p.since | fromdateiso8601))
+      then {from: $p.since, owner: $owner, stateless: true,
+            step: "write a state on it that names its approach: none from its owner since it went in progress"}
+      else null end;
   # Who owns each next step, and what it is: pr_step and issue_step, from squad-steps.jq, which
-  # squad-plan.sh shares (agent-squad #370).
-  ([$prs | sort_by(.number)[] | select(inside) | select(waits | not) | {item: "PR #\(.number)", url, updatedAt} + pr_step($verdicts)]
+  # squad-plan.sh shares (agent-squad #370). Each wait counts from the last activity on its item,
+  # but a missing state from when its issue went in progress.
+  ([$prs | sort_by(.number)[] | select(inside) | select(waits | not) | {item: "PR #\(.number)", url, from: .updatedAt} + pr_step($verdicts)]
    + [$issues | sort_by(.number)[] | select(inside) | select(declared | not) | select(any(.labels[].name; endswith("status:in-progress")))
-      | {item: "#\(.number)", url, updatedAt} + issue_step]
+      | {item: "#\(.number)", url} + (stateless // ({from: .updatedAt} + issue_step))]
    + [$outside | to_entries | sort_by(.key | tonumber)[] | .value | select(declared | not) | select(untriaged)
-      | {item: "\(if .pull_request then "PR " else "" end)#\(.number)", url: .html_url, updatedAt: .created_at,
+      | {item: "\(if .pull_request then "PR " else "" end)#\(.number)", url: .html_url, from: .created_at,
          owner: "CTO", step: "triage it: \(.user.login) opened it from outside the squad (\(.author_association))"}])
   # A wait for a requested reviewer comes to the CEO once it is an hour quiet, whatever the
-  # sessions, and no one is pinged for it.
-  | map(select($now - (.updatedAt | fromdateiso8601) >= (if .owner == "requested" then 3600 else 1800 end))
-        | . + {since: (.updatedAt | fromdateiso8601 | local), key: "\(.item)|\(.owner)|\(.step)|\(.updatedAt)",
+  # sessions, and no one is pinged for it. A missing state is asked of its owner 15 minutes after
+  # its issue went in progress, even while that owner is busy, since a busy owner is the one who
+  # owes it.
+  | map(select($now - (.from | fromdateiso8601) >= (if .owner == "requested" then 3600 elif .stateless then 900 else 1800 end))
+        | . + {since: (.from | fromdateiso8601 | local), key: "\(.item)|\(.owner)|\(.step)|\(.from)",
                session: (if .owner == "requested" then "reviewer" else $sessions[.owner] // "none" end)}
-        | select(.session != "busy")
+        | select(.session != "busy" or .stateless)
         | (.key as $k | $reported | map(select(.key == $k)) | first) as $before
         | if .session == "reviewer" then
             if $before == null then
               . + {action: "ceo", record: {key, at: $now, told: true},
                    why: "a review is requested from \(.reviewers) on GitHub, whom only the CEO can reach"}
             else . + {record: $before} end
-          elif .session == "idle" then
+          elif .session == "idle" or .session == "busy" then
             if $before == null then . + {action: "ping", record: {key, at: $now, told: false}}
             elif ($before.told | not) and $now - $before.at >= 3600 then
-              . + {action: "ceo", why: "pinged at \($before.at | local), and nothing since", record: ($before + {told: true})}
+              . + {action: "ceo", record: ($before + {told: true}),
+                   why: "pinged at \($before.at | local), and \(if .stateless then "still no state from its owner" else "nothing since" end)"}
             else . + {record: $before} end
           elif $before == null then
             . + {action: "ceo", record: {key, at: $now, told: true},

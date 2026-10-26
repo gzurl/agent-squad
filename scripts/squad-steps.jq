@@ -16,11 +16,15 @@ def closes: [(.closingIssuesReferences // [])[].number]
 def closes_on_purpose: [.body // "" | scan("\\bCloses #([0-9]+)") | .[0] | tonumber];
 def stray_links: closes_on_purpose as $meant | [(.closingIssuesReferences // [])[].number | select(IN($meant[]) | not)];
 
-# A PR's author: the role whose signature opens the first line of its description (SQUAD.md §6), in
-# bold or not; null when none does.
-def author: (.body // "" | split("\n") | first // "" | gsub("\\*\\*"; "")) as $line
-  | first(("QA", "DEV", "CTO") as $role
-      | select($line | startswith({QA: "👩🏼‍🔬", DEV: "👨🏼‍💻", CTO: "👷🏼‍♂️"}[$role] + "[\($role)]:")) | $role) // null;
+# The role whose signature opens a text's first line (SQUAD.md §6), in bold or not, and whose first
+# line then matches the regular expression $rest; null when none does.
+def signed($rest): (split("\n") | first // "" | gsub("\\*\\*"; "")) as $line
+  | first(("QA", "DEV", "CTO") as $role | ({QA: "👩🏼‍🔬", DEV: "👨🏼‍💻", CTO: "👷🏼‍♂️"}[$role] + "[\($role)]:") as $signature
+      | select($line | startswith($signature) and (ltrimstr($signature) | test($rest))) | $role) // null;
+
+# A PR's author: the role whose signature opens the first line of its description; null when none
+# does.
+def author: .body // "" | signed("");
 
 # A PR's next step, given $verdicts, the latest verdict on each PR by the squad's accounts, by
 # number: {commit, verdict}, or null. The reviewer reviews a head with no verdict on it; the author
@@ -56,3 +60,14 @@ def latest_verdict: add // []
   | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body | test("QA-VERDICT: "))))
   | last | if . == null then null
     else {commit: .commit_id, verdict: (.body | split("\n") | map(select(test("QA-VERDICT: "))) | last | sub(".*QA-VERDICT: "; ""))} end;
+
+# An issue's progress, from the pages of its timeline (`gh api --paginate --slurp …/timeline`), for
+# the state its owner owes once it goes in progress (agent-squad #521): since, when its
+# status:in-progress label was last set, or null; and states, the role and the time of each state
+# comment by the squad's accounts. A state comment opens with a signature, a status emoji (one of
+# SQUAD.md §6's four, or ⏸️, which a paused agent's state opens with) and `State:`; one edited in
+# place counts from its edit.
+def progress: add // []
+  | {since: ([.[] | select(.event == "labeled" and (.label.name // "" | endswith("status:in-progress")))] | last | .created_at // null),
+     states: [.[] | select(.event == "commented" and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")))
+       | {role: (.body // "" | signed("^ *(✅|⏳|⚠️?|❌|⏸️?) *State:")), at: (.updated_at // .created_at)} | select(.role)]};

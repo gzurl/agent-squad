@@ -17,8 +17,9 @@
 # Output: one line, such as
 #   status: issue #12 is 🚧 status:in-progress
 #   status: PR #34 has no status label
-# then, on stderr, a warning when the plan's table could not be updated, which leaves the exit
-# status as it is.
+# and, for an issue set in progress, a second that reminds its owner of the state it owes now,
+# naming the approach (SQUAD.md §3, agent-squad #521); then, on stderr, a warning when the plan's
+# table could not be updated, which leaves the exit status as it is.
 # Exit: 0 set and read back; 1 the item is of the other kind, nothing written; the edit or a read
 #       failed; or the item carries other status labels than the one asked for, saying what it
 #       carries; 2 bad usage, before anything reaches GitHub.
@@ -99,6 +100,10 @@ if [ "$found" != "$label" ]; then
   exit 1
 fi
 if [ -n "$label" ]; then echo "status: $name is $label"; else echo "status: $name has no status label"; fi
+# Whoever sets an issue in progress writes a state on it in the same step, naming the approach
+# (agent-squad #521).
+[ "$kind:$state" != issue:in-progress ] \
+  || echo "status: now write a state on $name that names your approach, in a line or two (SQUAD.md §3)"
 
 # The plan's table follows the state (agent-squad #370): squad-plan.sh, beside this script, rewrites
 # each open plan issue's table when it changed. A failure costs the state nothing, whose exit status

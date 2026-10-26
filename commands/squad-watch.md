@@ -27,6 +27,11 @@ nothing else.
    - **DEV or QA:** send that session one message, in English: "**👷🏼‍♂️[CTO]:** ⏳ Your next step on
      <item> (<URL>) is to <step>, quiet since <since>: carry on, or say on it what you are waiting
      for, and from whom."
+   - **An issue with no state** (agent-squad #521): its step starts with `write a state`, and its
+     time is when it went in progress. Its owner is pinged even while busy, so send the message
+     whatever that session's state: "**👷🏼‍♂️[CTO]:** ⏳ <item> (<URL>) has been in progress since
+     <since> with no state from you: write one on it now that names your approach, in a line or
+     two (§3)."
    - **You:** take the step now. A triage of an item from outside (§3) is done as `/squad-resume`
      says, in its step 3.
 4. **Each line that starts with `ceo`** is for the CEO, in the CEO's language: the item, linked;
