@@ -553,6 +553,13 @@ It also relies on GitHub, through the `gh` command line.
 and report through it, and the CTO tells you when one of them is waiting for you in its own
 terminal, for a permission or a question.
 
+**Can I watch an agent's work in VS Code?** Yes. Set `"git.detectWorktrees": true` in VS Code's
+settings, for the workspace or for your user, and reload the window. Source Control then lists the
+`dev` and `qa` worktrees beside the main folder, each with its changes and, in its Graph, its
+commits. *Git: Open Worktree in New Window*, which VS Code offers only once it detects them, opens
+one in a window of its own. Look, but don't edit there: a change in a worktree becomes part of its
+agent's work.
+
 **Can I use it on an existing project?** Yes. The CTO starts by studying the codebase and asking
 you what it needs to know.
 
