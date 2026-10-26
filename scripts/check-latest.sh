@@ -37,13 +37,15 @@ printf '%s\n' '#!/usr/bin/env bash' 'upstream="o/r"' > "$scripts/squad-install.s
 latest="$scripts/squad-latest.sh"
 # gh, as far as squad-latest.sh is concerned: each call goes to gh.log, and its PID to gh.pid, after
 # GH_START_DELAY seconds when set, as a loaded machine delays a command's start. It prints GH_ANSWER
-# (v50 when unset), sleeping GH_SLEEP seconds first, and fails when GH_FAILS is set.
+# (v50 when unset), sleeping GH_SLEEP seconds first, GH_SLEEP_LATE seconds after it wrote gh.pid
+# when set, and fails when GH_FAILS is set.
 cat > "$lab/bin/gh" <<'GH'
 #!/usr/bin/env bash
 [ -z "${GH_START_DELAY:-}" ] || sleep "$GH_START_DELAY"
 lab="$(cd "$(dirname "$0")/.." && pwd)"
 echo "$*" >> "$lab/gh.log"
 echo "$$" > "$lab/gh.pid"
+[ -z "${GH_SLEEP_LATE:-}" ] || sleep "$GH_SLEEP_LATE"
 [ -z "${GH_SLEEP:-}" ] || sleep "$GH_SLEEP"
 [ -z "${GH_FAILS:-}" ] || exit 1
 echo "${GH_ANSWER-v50}"
@@ -196,16 +198,21 @@ check "and is not left running" bash -c '! kill -0 "$(cat "$1")" 2>/dev/null' _ 
 #    try takes longer on a loaded machine. gh starts after the attempt is written, and a loaded
 #    machine can delay its start (agent-squad #527): once its PID file says it has started, within
 #    30 s more, it must still be waiting. gh's sleep is then ended, so that gh answers and the run
-#    ends as it would, leaving no file behind. `attempt_first <seconds>` runs the case with a gh that
-#    starts that late: 0, and 2, as on a loaded machine.
+#    ends as it would, leaving no file behind, within 30 s, well before gh's 60 s; a loaded machine
+#    can start that sleep late too (agent-squad #529). `attempt_first <seconds> <seconds>` runs the
+#    case with a gh that starts that late, and whose sleep starts that late: as is, then each 2 s and
+#    1 s late, as on a loaded machine.
 attempt_first() {
-  local late="$1" pid due_meanwhile=0 started waited gh_waited gh_waits=no calls
+  local late="$1" sleep_late="$2" pid due_meanwhile=0 began started waited gh_waited gh_waits=no calls took
+  local sleeper=""
   local case="while a check waits on gh"
   [ "$late" -eq 0 ] || case+=", with a gh that starts $late s late"
+  [ "$sleep_late" -eq 0 ] || case+=", with a gh whose sleep starts $sleep_late s late"
   known '"v50"' $((day + 60)) $((day + 60))
   rm -f "$lab/gh.log" "$lab/gh.pid"
-  GH_START_DELAY="$late" SQUAD_LATEST_TIMEOUT=120 GH_SLEEP=60 "$latest" "$checkout" >/dev/null 2>&1 &
+  GH_START_DELAY="$late" GH_SLEEP_LATE="$sleep_late" SQUAD_LATEST_TIMEOUT=120 GH_SLEEP=60 "$latest" "$checkout" >/dev/null 2>&1 &
   pid=$!
+  began=$SECONDS
   started=$SECONDS
   while [ $((SECONDS - started)) -lt 30 ]; do
     "$latest" --due "$checkout" && due_meanwhile=0 || due_meanwhile=$?
@@ -217,18 +224,30 @@ attempt_first() {
   while [ ! -s "$lab/gh.pid" ] && [ $((SECONDS - started)) -lt 30 ]; do sleep 0.1; done
   gh_waited=$((SECONDS - started))
   if [ -s "$lab/gh.pid" ] && kill -0 "$(cat "$lab/gh.pid")" 2>/dev/null; then gh_waits=yes; fi
-  # shellcheck disable=SC2046 # the PIDs are split on purpose, one argument each
-  kill $(pgrep -P "$(cat "$lab/gh.pid" 2>/dev/null)" 2>/dev/null) 2>/dev/null
+  # gh's sleep is found among gh's children by its command line, once it has started, within 30 s:
+  # a loaded machine can start it late, and gh may run another child first (agent-squad #529).
+  started=$SECONDS
+  while [ -s "$lab/gh.pid" ] && [ -z "$sleeper" ] && [ $((SECONDS - started)) -lt 30 ]; do
+    sleeper="$(pgrep -P "$(cat "$lab/gh.pid")" -fx "sleep 60")" || sleep 0.1
+  done
+  [ -z "$sleeper" ] || kill "$sleeper" 2>/dev/null
   wait "$pid" 2>/dev/null
+  took=$((SECONDS - began))
   calls="$(wc -l < "$lab/gh.log" 2>/dev/null | tr -d ' ')"
   if [ "$due_meanwhile" -eq 1 ] && [ "$gh_waits" = yes ] && [ "${calls:-0}" -eq 1 ]; then
     pass "$case, the attempt is already written, and no other is due"
   else
     fail "$case: --due exited $due_meanwhile after $waited s, 30 s at most; gh still waiting: $gh_waits, after $gh_waited s, 30 s at most; gh called ${calls:-0} times"
   fi
+  if [ "$took" -le 30 ]; then
+    pass "$case, gh's sleep is ended, and the run ends within 30 s"
+  else
+    fail "$case: the run ended after $took s, 30 s at most, so gh's 60 s sleep was not ended"
+  fi
 }
-attempt_first 0
-attempt_first 2
+attempt_first 0 0
+attempt_first 2 0
+attempt_first 0 1
 
 # 6. A file that is not the board's format counts as no check, and a check rewrites it.
 for content in 'not json' '["v50"]' '{} {}' '{"tag": "v50", "checkedAt": "today"}' '{"tag": "50"}' ''; do
