@@ -206,12 +206,13 @@ finds "an issue in progress is its owner's to carry on, one with no owner the CT
 # 2b. A state that names the approach (#521): an issue in progress whose owner has written no state
 #     on it since its label was set is its owner's, to write one, 15 minutes after the label,
 #     though it saw activity 5 minutes ago and its owner is busy. A state is a comment by an inside
-#     account whose first line opens with the owner's signature, bold or not, a status emoji and
-#     `State:`; one edited in place counts from its edit. DEV owns all of them.
+#     account whose first line opens with the owner's signature, bold or not, a status emoji, or
+#     the ⏸️ of a pause, and `State:`; one edited in place counts from its edit. DEV owns all of
+#     them.
 rm -f "$state"
 dev_state='**👨🏼‍💻[DEV]:** ⏳ State: started. Approach: the cache.'
 issues=""
-for n in 60 61 62 63 64 65 66 67 68 69; do issues+="${issues:+,}$(issue "$n" '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 5)"; done
+for n in 60 61 62 63 64 65 66 67 68 69 70; do issues+="${issues:+,}$(issue "$n" '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 5)"; done
 github '[]' "[$issues]"
 timeline 60 "$(labeled 20)"
 timeline 61 "$(labeled 20)" "$(commented "$dev_state" 18)"
@@ -223,14 +224,16 @@ timeline 66 "$(labeled 20)" "$(commented '**👨🏼‍💻[DEV]:** ⏳ Taking i
 timeline 67 "$(labeled 20)" "$(commented "$dev_state" 18 18 NONE)"
 timeline 68 "$(labeled 60)" "$(commented "$dev_state" 50)" "$(labeled 20 '👀 status:in-review')" "$(labeled 20)"
 timeline 69 "$(labeled 20)" "$(commented '👨🏼‍💻[DEV]: ⚠️ State: stuck on the cache.' 18)"
+timeline 70 "$(labeled 20)" "$(commented '**👨🏼‍💻[DEV]:** ⏸️ State: paused at a safe point; approach: the cache.' 18)"
 approach="write a state on it that names its approach: none from its owner since it went in progress"
 stateless() { tsv "${1:-ping}" DEV "#$2" "https://github.com/o/r/issues/$2" "$approach" "${3:-2026-10-03 11:40}" "${4:-}"; }
 run 0 --session CTO=idle --session DEV=busy --session QA=idle
 finds "an issue in progress with no state from its owner 15 minutes after its label is its owner's, busy or not" "$(
   stateless ping 60; stateless ping 63; stateless ping 65; stateless ping 66; stateless ping 67; stateless ping 68)"
 #    #61 has its state, #62 went in progress 10 minutes ago, #64's state was edited after the label,
-#    and #69's is signed without bold; #63's state predates the label, #65's is QA's, #66 opens with
-#    no `State:`, #67's comes from outside, and #68 went in progress again after its state.
+#    #69's is signed without bold, and #70's is a pause's; #63's state predates the label, #65's is
+#    QA's, #66 opens with no `State:`, #67's comes from outside, and #68 went in progress again
+#    after its state.
 run 5 --session CTO=idle --session DEV=busy --session QA=idle
 finds "five minutes later, #62 reaches its 15 minutes and is pinged, and the others are not pinged again" \
   "$(stateless ping 62 "2026-10-03 11:50")"

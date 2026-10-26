@@ -64,9 +64,10 @@ def latest_verdict: add // []
 # An issue's progress, from the pages of its timeline (`gh api --paginate --slurp …/timeline`), for
 # the state its owner owes once it goes in progress (agent-squad #521): since, when its
 # status:in-progress label was last set, or null; and states, the role and the time of each state
-# comment by the squad's accounts. A state comment opens with a signature, a status emoji and
-# `State:` (SQUAD.md §6); one edited in place counts from its edit.
+# comment by the squad's accounts. A state comment opens with a signature, a status emoji (one of
+# SQUAD.md §6's four, or ⏸️, which a paused agent's state opens with) and `State:`; one edited in
+# place counts from its edit.
 def progress: add // []
   | {since: ([.[] | select(.event == "labeled" and (.label.name // "" | endswith("status:in-progress")))] | last | .created_at // null),
      states: [.[] | select(.event == "commented" and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")))
-       | {role: (.body // "" | signed("^ *(✅|⏳|⚠️?|❌) *State:")), at: (.updated_at // .created_at)} | select(.role)]};
+       | {role: (.body // "" | signed("^ *(✅|⏳|⚠️?|❌|⏸️?) *State:")), at: (.updated_at // .created_at)} | select(.role)]};
