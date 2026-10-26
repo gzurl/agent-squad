@@ -1,5 +1,20 @@
 # Changelog
 
+## v72 — 2026-10-26
+- **An issue in progress names its approach from the start** (#521, found by another project's
+  CEO). §3: whoever sets `🚧 status:in-progress` on an issue writes on it, right after setting it,
+  a first state that names the approach in a line or two, and updates it when the approach
+  changes; DEV's quick reference in §1 says the same, and `squad-set-status.sh` reminds it when it
+  sets the label. A diagnosis can run long before its first milestone, and the issue is where the
+  CEO reads how it is being solved. `/squad-watch` pings an owner who has written none since the
+  label, 15 minutes after it was set, even while that owner is busy; a state written before the
+  label does not count. §6, `/squad-autopilot` and the README's *Work that stalls* say so.
+- **The README's FAQ says how to watch the agents' worktrees in VS Code** (#524, the CEO's
+  request): with `git.detectWorktrees` on, Source Control lists `dev` and `qa`, with their changes
+  and commits.
+- **Upgrading from v71:** nothing to do by hand, since v72 changes no template. Restart the three
+  sessions, since §1, §3 and §6 change.
+
 ## v71 — 2026-10-23
 - **A private project is named nowhere in a public `agent-squad`** (#515, the CEO's request). §7:
   when `agent-squad` is public and the project is not, what the project's agents write there (an
