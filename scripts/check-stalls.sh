@@ -11,8 +11,11 @@
 # issue or a PR opened from outside the squad, by the account's association and whatever its
 # signature, is the CTO's to triage once it has waited 30 minutes, and nobody else's (#281). An
 # approved PR with a review still requested on GitHub waits for that reviewer: nobody is pinged, and
-# the CEO is told once it has been quiet for an hour, whatever the sessions (#306). A jq that ends
-# its lines with CRLF, as on Windows, finds the same (#405). Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
+# the CEO is told once it has been quiet for an hour, whatever the sessions (#306). An issue in
+# progress whose owner has written no state on it since its label was set is its owner's, to write
+# one that names its approach, 15 minutes after the label, whatever the activity since and even
+# when that owner is busy (#521). A jq that ends its lines with CRLF, as on Windows, finds the same
+# (#405). Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
 # happens in a temporary directory; this script touches neither its repository nor GitHub.
 # shellcheck disable=SC2016 # jq programs use jq variables
 set -u
@@ -42,7 +45,8 @@ git -C "$repo" worktree add -q --detach "$repo/.agent-squad/worktrees/dev" || ex
 state="$repo/.agent-squad/watch.tsv"
 
 # GitHub, as far as squad-stalls.sh is concerned: the open PRs, the open issues, who opened each
-# (the REST list of open issues and PRs) and each PR's reviews come from files in $lab/gh;
+# (the REST list of open issues and PRs), each PR's reviews and each issue's timeline come from
+# files in $lab/gh;
 # GH_FAIL=<what> makes that call fail, and GH_FAIL=prs-hang makes the list of PRs never answer, its
 # PID in $lab/gh/hung.pid.
 mkdir -p "$lab/bin" "$lab/gh"
@@ -68,6 +72,15 @@ case "$1 ${2:-}" in
           esac
           echo "[$(cat "$gh_dir/opened.json" 2>/dev/null || echo '[]')]"
           [ "${GH_FAIL:-}" != opened-partial ] || exit 1
+          exit 0 ;;
+        repos/o/r/issues/*/timeline*)
+          # timeline fails at once; timeline-garbage answers with something that is not JSON.
+          case "${GH_FAIL:-}" in
+            timeline) exit 1 ;;
+            timeline-garbage) echo "not JSON"; exit 0 ;;
+          esac
+          n="${arg#repos/o/r/issues/}"
+          echo "[$(cat "$gh_dir/timeline-${n%%/*}.json" 2>/dev/null || echo '[]')]"
           exit 0 ;;
       esac
     done
@@ -111,10 +124,20 @@ review() {
     '{commit_id: $c, body: "**👩🏼‍🔬[QA]:** a review\n\nQA-VERDICT: \($v)", author_association: $a}'
 }
 # `github <prs as JSON> <issues as JSON> [<opened as JSON>]` sets what GitHub answers, the last the
-# REST list of who opened what, outside items alone unless given; reviews are set by hand.
+# REST list of who opened what, outside items alone unless given; reviews and timelines are set by
+# hand.
 github() {
   echo "$1" > "$lab/gh/prs.json"; echo "$2" > "$lab/gh/issues.json"; echo "${3:-[]}" > "$lab/gh/opened.json"
-  rm -f "$lab/gh"/reviews-*.json
+  rm -f "$lab/gh"/reviews-*.json "$lab/gh"/timeline-*.json
+}
+# `timeline <number> <event as JSON>...` sets an issue's timeline: `labeled <minutes ago> [label]`
+# prints a label set, status:in-progress unless given, and `commented <body> <minutes ago> [<minutes
+# ago it was last edited> [association]]` a comment.
+timeline() { local n="$1" IFS=,; shift; echo "[$*]" > "$lab/gh/timeline-$n.json"; }
+labeled() { jq -nc --arg c "$(at "$1")" --arg l "${2:-🚧 status:in-progress}" '{event: "labeled", label: {name: $l}, created_at: $c}'; }
+commented() {
+  jq -nc --arg b "$1" --arg c "$(at "$2")" --arg u "$(at "${3:-$2}")" --arg a "${4:-OWNER}" \
+    '{event: "commented", body: $b, created_at: $c, updated_at: $u, author_association: $a}'
 }
 # `opened <number> <login> <association> <minutes ago> [pr] [label...]` prints an item of the REST
 # list: who opened it, when, and its labels.
@@ -173,11 +196,97 @@ finds "and a minute later, from the state they left, nobody is pinged again" ""
 # 2. Who owns the next step of an issue in progress; other issues are not watched.
 rm -f "$state"
 github '[]' "[$(issue 10 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 45),$(issue 11 '👩🏼‍🔬 owner:qa' '🚧 status:in-progress' 45),$(issue 12 '' '🚧 status:in-progress' 45),$(issue 13 '👨🏼‍💻 owner:dev' '👀 status:in-review' 45),$(issue 14 '👨🏼‍💻 owner:dev' '' 45)]"
+timeline 12 "$(labeled 45)"
 run 0 "${everyone_idle[@]}"
 finds "an issue in progress is its owner's to carry on, one with no owner the CTO's, and other issues are not watched" "$(
   tsv ping DEV "#10" https://github.com/o/r/issues/10 "carry on with it" "2026-10-03 11:15" ""
   tsv ping QA "#11" https://github.com/o/r/issues/11 "carry on with it" "2026-10-03 11:15" ""
   tsv ping CTO "#12" https://github.com/o/r/issues/12 "give it an owner" "2026-10-03 11:15" "")"
+
+# 2b. A state that names the approach (#521): an issue in progress whose owner has written no state
+#     on it since its label was set is its owner's, to write one, 15 minutes after the label,
+#     though it saw activity 5 minutes ago and its owner is busy. A state is a comment by an inside
+#     account whose first line opens with the owner's signature, bold or not, a status emoji and
+#     `State:`; one edited in place counts from its edit. DEV owns all of them.
+rm -f "$state"
+dev_state='**👨🏼‍💻[DEV]:** ⏳ State: started. Approach: the cache.'
+issues=""
+for n in 60 61 62 63 64 65 66 67 68 69; do issues+="${issues:+,}$(issue "$n" '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 5)"; done
+github '[]' "[$issues]"
+timeline 60 "$(labeled 20)"
+timeline 61 "$(labeled 20)" "$(commented "$dev_state" 18)"
+timeline 62 "$(labeled 10)"
+timeline 63 "$(commented "$dev_state" 40)" "$(labeled 20)"
+timeline 64 "$(commented "$dev_state" 40 10)" "$(labeled 20)"
+timeline 65 "$(labeled 20)" "$(commented '**👩🏼‍🔬[QA]:** ⏳ State: testing it.' 18)"
+timeline 66 "$(labeled 20)" "$(commented '**👨🏼‍💻[DEV]:** ⏳ Taking it. State: soon.' 18)"
+timeline 67 "$(labeled 20)" "$(commented "$dev_state" 18 18 NONE)"
+timeline 68 "$(labeled 60)" "$(commented "$dev_state" 50)" "$(labeled 20 '👀 status:in-review')" "$(labeled 20)"
+timeline 69 "$(labeled 20)" "$(commented '👨🏼‍💻[DEV]: ⚠️ State: stuck on the cache.' 18)"
+approach="write a state on it that names its approach: none from its owner since it went in progress"
+stateless() { tsv "${1:-ping}" DEV "#$2" "https://github.com/o/r/issues/$2" "$approach" "${3:-2026-10-03 11:40}" "${4:-}"; }
+run 0 --session CTO=idle --session DEV=busy --session QA=idle
+finds "an issue in progress with no state from its owner 15 minutes after its label is its owner's, busy or not" "$(
+  stateless ping 60; stateless ping 63; stateless ping 65; stateless ping 66; stateless ping 67; stateless ping 68)"
+#    #61 has its state, #62 went in progress 10 minutes ago, #64's state was edited after the label,
+#    and #69's is signed without bold; #63's state predates the label, #65's is QA's, #66 opens with
+#    no `State:`, #67's comes from outside, and #68 went in progress again after its state.
+run 5 --session CTO=idle --session DEV=busy --session QA=idle
+finds "five minutes later, #62 reaches its 15 minutes and is pinged, and the others are not pinged again" \
+  "$(stateless ping 62 "2026-10-03 11:50")"
+#    With a jq that ends its lines with CRLF, as on Windows, the same.
+rm -f "$state"
+crlf run 0 --session CTO=idle --session DEV=busy --session QA=idle
+finds "with a jq that ends its lines with CRLF, the same" "$(
+  stateless ping 60; stateless ping 63; stateless ping 65; stateless ping 66; stateless ping 67; stateless ping 68)"
+
+#    An idle owner is pinged as a busy one; one that waits on the CEO, or has no session open, is the
+#    CEO's at once, and then not again.
+github '[]' "[$(issue 60 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 5)]"
+timeline 60 "$(labeled 20)"
+rm -f "$state"
+run 0 "${everyone_idle[@]}"
+finds "an idle owner with no state is pinged" "$(stateless ping 60)"
+rm -f "$state"
+run 0 --session CTO=idle --session DEV=waiting
+finds "an owner waiting on the CEO is the CEO's to know" "$(stateless ceo 60 "" "its session waits on the CEO in its own terminal")"
+rm -f "$state"
+run 0 --session CTO=idle
+finds "and so is an owner with no session" "$(stateless ceo 60 "" "it has no session open")"
+run 30 --session CTO=idle
+finds "and only once" ""
+
+#    An hour after the ping, with still no state, the CEO is told, once.
+rm -f "$state"
+run 0 --session DEV=busy
+finds "a missing state pings its owner" "$(stateless ping 60)"
+run 30 --session DEV=busy
+finds "half an hour later, it is not pinged again" ""
+run 60 --session DEV=busy
+finds "an hour after the ping, with no state yet, the CEO is told" \
+  "$(stateless ceo 60 "" "pinged at 2026-10-03 12:00, and still no state from its owner")"
+run 90 --session DEV=busy
+finds "and only once" ""
+
+#    Once its owner writes a state, the issue is a stall like any other: nothing while it moves, and
+#    its owner pinged to carry on once it has been quiet 30 minutes and its owner idle.
+rm -f "$state"
+run 0 --session DEV=busy
+timeline 60 "$(labeled 20)" "$(commented "$dev_state" -2)"
+run 5 --session DEV=busy
+finds "a state written after the ping ends it" ""
+if [ -z "$(cut -f1 "$state" 2>/dev/null)" ]; then
+  pass "and what was kept of it is gone"
+else
+  fail "the state still holds: $(cat "$state")"
+fi
+github '[]' "[$(issue 60 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 40)]"
+timeline 60 "$(labeled 60)" "$(commented "$dev_state" 50)"
+run 0 --session DEV=busy
+finds "an issue with its state, quiet for 40 minutes, is not pinged while its owner is busy" ""
+run 0 "${everyone_idle[@]}"
+finds "and its owner is pinged to carry on once idle" \
+  "$(tsv ping DEV "#60" https://github.com/o/r/issues/60 "carry on with it" "2026-10-03 11:20" "")"
 
 # 3. Thirty minutes of quiet make a stall, not fewer; a busy owner is working.
 rm -f "$state"
@@ -255,6 +364,8 @@ closing() { jq -c --argjson n "$1" '.closingIssuesReferences = [{number: $n}]'; 
 needs_ceo='👨🏻‍💼 needs-ceo' blocked='⛔ status:blocked'
 github "[$(pr 20 DEV "$head1" 40 | labelled "$needs_ceo"),$(pr 21 DEV "$head1" 40 | labelled "$blocked"),$(pr 22 DEV "$head1" 40 | closing 30),$(pr 23 DEV "$head1" 40 | jq -c '.body += "\nCloses #31."'),$(pr 24 DEV "$head1" 40)]" \
   "[$(issue 25 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 45 | jq -c --arg l "$needs_ceo" '.labels += [{name: $l}]'),$(issue 26 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 45 | jq -c --arg l "$blocked" '.labels += [{name: $l}]'),$(issue 30 '' '' 45 | labelled "$needs_ceo"),$(issue 31 '' '' 45 | labelled "$blocked")]"
+timeline 25 "$(labeled 45)"
+timeline 26 "$(labeled 45)"
 run 0 "${everyone_idle[@]}"
 finds "needs-ceo and status:blocked, on an issue, on a PR or on a PR's closing issue, leave the item out" \
   "$(tsv ping QA "PR #24" https://github.com/o/r/pull/24 "review its head 1111111" "2026-10-03 11:20" "")"
@@ -372,7 +483,7 @@ github '[]' '[]'
 run 0 "${everyone_idle[@]}"
 finds "with nothing open, nothing is printed" ""
 github "[$(pr 1 DEV "$head1" 40)]" "[$(issue 10 '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 45)]"
-for what in repo prs issues opened opened-partial opened-garbage reviews; do
+for what in repo prs issues opened opened-partial opened-garbage reviews timeline timeline-garbage; do
   rm -f "$state"
   GH_FAIL="$what" run 0 "${everyone_idle[@]}"
   if [ "$code" -eq 1 ] && [ -z "$out" ] && [[ "$err" == "squad-stalls: cannot read "*"; nothing was checked" ]] && [ ! -e "$state" ]; then

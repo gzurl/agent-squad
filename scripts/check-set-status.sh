@@ -3,7 +3,8 @@
 # labels in a file, applies each edit to them as GitHub does, and answers the read-back from them.
 # Each state of each kind is set in one edit that adds its label and removes the other three, never
 # the one it adds, and leaves the other labels alone; `none` removes all four; the read-back passes
-# only on exactly the state asked for. A read-back that finds two states, or a status label with
+# only on exactly the state asked for. An issue set in progress is followed by a line that reminds
+# its owner of the state it owes (#521). A read-back that finds two states, or a status label with
 # another emoji, fails; so do a failed edit and a failed read, with gh's message. Bad usage exits 2
 # with nothing sent to GitHub, and the script passes gh no input of its own. A number of the other
 # kind, an issue's for a PR or the converse, is refused before anything is written (agent-squad
@@ -130,7 +131,11 @@ for kind in issue pr; do
     run "$kind" 12 "$state"
     name="PR #12"
     [ "$kind" != issue ] || name="issue #12"
-    check "$kind $state: exit 0, saying so" bash -c '[ "$1" -eq 0 ] && [ "$2" = "$3" ]' _ "$code" "$out" "status: $name is $label"
+    said="status: $name is $label"
+    # An issue set in progress reminds its owner of the state it owes now (#521).
+    [ "$kind:$state" != issue:in-progress ] \
+      || said+=$'\n'"status: now write a state on issue #12 that names your approach, in a line or two (SQUAD.md §3)"
+    check "$kind $state: exit 0, saying so" bash -c '[ "$1" -eq 0 ] && [ "$2" = "$3" ]' _ "$code" "$out" "$said"
     check "$kind $state: one edit, which adds the label and removes the other three, never the one it adds" \
       edited_with "$kind" edit 12 --add-label "$label" "${others[@]}"
     check "$kind $state: a read of its kind before the edit, a read-back after it, and no other call" \

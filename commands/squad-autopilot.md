@@ -23,9 +23,10 @@ Your role is your session name. The squad's commands are in the main checkout's
    note its PID on your issue. Stop it with `kill <PID>` when every agent has said it has nothing
    left, and at `/squad-resume`.
 3. **Keep the stall watch** (agent-squad #174): type `/loop 30m /squad-watch` in your own session.
-   Every half hour it finds work whose owner sits idle, pings that owner once, and tells the CEO
-   if nothing moves within the hour; when it finds nothing, it says nothing. Nothing else wakes an
-   idle session. `/squad-resume` and `/squad-pause` stop it.
+   Every half hour it finds work whose owner sits idle, or an issue in progress with no state from
+   its owner, pings that owner once, and tells the CEO if nothing moves within the hour; when it
+   finds nothing, it says nothing. Nothing else wakes an idle session. `/squad-resume` and
+   `/squad-pause` stop it.
    - **If the loop cannot be scheduled,** because a permission refuses it, as auto mode may: tell
      the CEO in one line that the stall watch is not running, and why, so that the CEO can allow
      it on return or type `/squad-watch` by hand. Carry on with the rest.
