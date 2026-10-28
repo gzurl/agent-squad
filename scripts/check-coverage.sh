@@ -12,7 +12,9 @@
 # test that failed, lists the thinnest script first, rounds its shares, lists the lines no test
 # ran, and --summary-only writes it again from the records alone. The line under its heading is the
 # verdict, and a script below 100 % or a test that failed under kcov fails the run, exit 3, naming
-# each: the coverage job fails on its own (agent-squad #507). Without kcov, with nothing recorded,
+# each: the coverage job fails on its own (agent-squad #507). When kcov drops a line on the tests'
+# first pass, a second pass counts it, and the summary lists it; a line no test runs still fails
+# (agent-squad #540). Without kcov, with nothing recorded,
 # or with a record it cannot read, it exits 1. A line that bash's job control adds to a run's
 # output under load is not taken for the run's own (agent-squad #536). This script runs none of the
 # tests and touches neither the repository it is run from nor GitHub.
@@ -125,12 +127,18 @@ EOF
 # KCOV_RECORDS=none makes it record nothing, and KCOV_RECORDS=broken writes check-gate.sh's record
 # cut short. KCOV_RECORDS=full has check-gate.sh run line 2 of every script, a statement in each,
 # and no test fail; full-failing does the same, but check-handoff.sh fails; full-short leaves line
-# 3 of squad-checks.sh unrun. --merge writes an index. Each call's arguments go to $lab/kcov.calls, and options are
+# 3 of squad-checks.sh unrun. full-lossy leaves line 2 of squad-checks.sh unrun in the first pass
+# alone, as kcov drops a line that ran, and records it in the second, which runs in runs/second/;
+# full-lossy-failing does the same, but check-handoff.sh fails in the second pass. --merge fails on
+# a directory that is not there, as kcov does. --merge writes an index. Each call's arguments go to $lab/kcov.calls, and options are
 # skipped to find the output directory and the test.
 mkdir -p "$lab/bin"
 cat > "$lab/bin/kcov" <<'KCOV'
 #!/usr/bin/env bash
-if [ "$1" = --merge ]; then mkdir -p "$2" && touch "$2/index.html"; exit 0; fi
+if [ "$1" = --merge ]; then
+  for dir in "${@:3}"; do [ -d "$dir" ] || exit 1; done
+  mkdir -p "$2" && touch "$2/index.html"; exit 0
+fi
 echo "$*" >> "$(dirname "$0")/../kcov.calls"
 args=()
 for arg; do case "$arg" in --*) ;; *) args+=("$arg") ;; esac; done
@@ -139,13 +147,21 @@ out="${args[0]}" test="${args[1]}" root="$(git rev-parse --show-toplevel)"
 dir="$out/$(basename "$test").0123456789abcdef"
 mkdir -p "$dir"
 if [[ "${KCOV_RECORDS:-}" == full* ]]; then
-  [[ "$test" == *check-gate.sh ]] || { [ "$KCOV_RECORDS" = full-failing ] && [[ "$test" == *check-handoff.sh ]] && exit 1; exit 0; }
+  pass=first
+  [[ "$out" != */runs/second/* ]] || pass=second
+  if [[ "$test" == *check-handoff.sh ]] \
+    && { [ "$KCOV_RECORDS" = full-failing ] || [ "$KCOV_RECORDS-$pass" = full-lossy-failing-second ]; }; then
+    exit 1
+  fi
+  [[ "$test" == *check-gate.sh ]] || exit 0
   echo '<sources><source>/</source></sources>' > "$dir/cobertura.xml"
-  jq -n --arg r "${root#/}" --arg short "$KCOV_RECORDS" '{coverage: ([
+  jq -n --arg r "${root#/}" --arg short "$KCOV_RECORDS" --arg pass "$pass" '{coverage: ([
     "scripts/squad-checks.sh", ".githooks/pre-push", "install.sh", "scripts/squad-tokens.sh",
     "scripts/squad-merge-gate.sh", "scripts/squad-latest.sh", "scripts/squad-install.sh"]
     | map({key: ($r + "/" + .), value: {"2": 1}}) | from_entries
-    | if $short == "full-short" then .[$r + "/scripts/squad-checks.sh"]["3"] = 0 else . end)}' > "$dir/codecov.json"
+    | if $short == "full-short" then .[$r + "/scripts/squad-checks.sh"]["3"] = 0
+      elif ($short | startswith("full-lossy")) and $pass == "first" then .[$r + "/scripts/squad-checks.sh"]["2"] = 0
+      else . end)}' > "$dir/codecov.json"
   exit 0
 fi
 if [ "${KCOV_RECORDS:-}" = broken ] && [[ "$test" == *check-gate.sh ]]; then
@@ -285,6 +301,48 @@ verdict "every script at 100 %, but a test failed under kcov: exit 3, naming it"
   '**The coverage job fails:** a test failed under kcov: `check-handoff`.'
 verdict "one line no test ran, no test failed: exit 3, naming the script and the line" full-short 3 \
   '**The coverage job fails:** below 100 % in `scripts/squad-checks.sh` (line 3).'
+
+# 2c. A second pass (agent-squad #540): kcov drops lines that ran, at random. When the first pass
+#     leaves lines unrun and no test failed, the tests run again into runs/second/, and a line
+#     counts when either pass recorded it; the summary lists those only the second recorded.
+# `passes <records>` prints how many passes that run made: 2 when runs/second/ holds every test's
+# status, 1 when it holds none, and "?" otherwise.
+passes() {
+  local second tests
+  second="$(find "$lab/v-$1/runs/second" -name '*.status' 2>/dev/null | grep -c .)"
+  tests="$(find "$repo/scripts" -name 'check-*.sh' | grep -c .)"
+  if [ "$second" -eq "$tests" ]; then echo 2; elif [ "$second" -eq 0 ]; then echo 1; else echo "?"; fi
+}
+verdict "a line kcov dropped in the first pass alone counts from the second: exit 0, and the verdict says so" full-lossy 0 \
+  "Every measured script is fully run, and no test failed under kcov. 1 line of them only the tests' second pass recorded, listed below."
+if [ "$(passes full-lossy)" = 2 ] \
+  && grep -qxF '<details><summary>The lines only the second pass recorded</summary>' "$lab/v-full-lossy/summary.md" \
+  && grep -qxF -- '- `scripts/squad-checks.sh`: 2' "$lab/v-full-lossy/summary.md" \
+  && grep -qF 'so the tests ran a second time, and a line counts as run when either pass recorded it' "$lab/v-full-lossy/summary.md"; then
+  pass "every test ran twice, and the summary lists the line the second pass alone recorded"
+else
+  fail "the second pass: $(passes full-lossy) passes, its summary: $(cat "$lab/v-full-lossy/summary.md" 2>/dev/null)"
+fi
+cp "$lab/v-full-lossy/summary.md" "$lab/lossy.md"
+out="$(cd "$repo" && PATH="$(dirname "$(command -v jq)"):/usr/bin:/bin" "$coverage" --summary-only "$lab/v-full-lossy" 2>&1)"
+code=$?
+if [ "$code" -eq 0 ] && cmp -s "$lab/lossy.md" "$lab/v-full-lossy/summary.md"; then
+  pass "--summary-only writes the same summary from both passes' records"
+else
+  fail "--summary-only after a second pass: exit $code, said: $out"
+fi
+if [ "$(passes full-short)" = 2 ] && ! grep -q '^- `scripts/squad-checks.sh`: 2$' "$lab/v-full-short/summary.md"; then
+  pass "a line that no test runs is unrun in the second pass too, and still fails the run"
+else
+  fail "a line no test runs: $(passes full-short) passes, its summary: $(cat "$lab/v-full-short/summary.md" 2>/dev/null)"
+fi
+if [ "$(passes full-failing)" = 1 ] && [ "$(passes full)" = 1 ]; then
+  pass "no second pass when a test failed, nor when every line ran"
+else
+  fail "a second pass where none was due: $(passes full-failing) passes with a test failed, $(passes full) with every line run"
+fi
+verdict "a test that fails in the second pass fails the run, named so" full-lossy-failing 3 \
+  '**The coverage job fails:** a test failed under kcov: `second/check-handoff`.'
 
 # 3. Without kcov, with nothing recorded, with no run to summarise, or with bad usage, it exits
 #    non-zero, saying why.

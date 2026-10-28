@@ -16,6 +16,13 @@
 # ran. A line that ends with the comment `# coverage: excluded, <reason>` is not counted at all, and
 # the summary lists it with its reason: it is for a line that no test can reach sensibly.
 #
+# kcov also drops lines that ran, at random (agent-squad #540), most likely because every bash
+# process of a test traces into one pipe, which kcov reads with one quote state: the lines one
+# process writes while another's quoted trace is still coming read as inside its quote. When the
+# tests leave lines unrun and none failed, they run a second time, into runs/second/, and a line
+# counts as run when either pass recorded it; the summary lists the lines only the second pass
+# recorded. A line no test runs is unrun in both, and still fails the run.
+#
 # Usage: ci-coverage.sh [--summary-only] <output directory>
 # It writes there summary.md, which CI adds to the job's summary: the total, one line per script,
 # thinnest first, the lines no test ran in each, and the lines it does not count, with why. Also
@@ -59,32 +66,27 @@ measured=(scripts/squad-*.sh .githooks/pre-push install.sh)
 #    while it writes, the traces wait, and a script that removes itself as it ends, as the
 #    uninstaller's temporary copy does, can be gone before kcov reads it, which fails its test
 #    (agent-squad #473). With --output-interval=0, kcov writes them once, at the end.
-if ! $summary_only; then
-  patterns="$(printf '/%s,' "${measured[@]##*/}")"
-  printf '%s\n' "$root" > "$out/runs/root"
+# `run_tests <directory>` runs every test so, into that directory.
+run_tests() {
+  local dir="$1" test name
+  mkdir -p "$dir" || exit 1
   set -m
   for test in scripts/check-*.sh; do
     name="$(basename "$test" .sh)"
     (
-      kcov --output-interval=0 --include-pattern="${patterns%,}" "$out/runs/$name" "$test" >"$out/runs/$name.log" 2>&1 </dev/null
-      echo "$?" > "$out/runs/$name.status"
+      kcov --output-interval=0 --include-pattern="${patterns%,}" "$dir/$name" "$test" >"$dir/$name.log" 2>&1 </dev/null
+      echo "$?" > "$dir/$name.status"
     ) &
   done
   set +m
   wait
+}
+if ! $summary_only; then
+  patterns="$(printf '/%s,' "${measured[@]##*/}")"
+  printf '%s\n' "$root" > "$out/runs/root"
+  rm -rf "$out/runs/second"
+  run_tests "$out/runs"
 fi
-run_root="$(cat "$out/runs/root" 2>/dev/null)" \
-  || { echo "ci-coverage: $out/runs holds no run of this script" >&2; exit 1; }
-failed=()
-for status in "$out"/runs/*.status; do
-  [ -f "$status" ] || continue
-  [ "$(cat "$status")" = 0 ] || failed+=("$(basename "$status" .status)")
-done
-# kcov writes a codecov.json per script it ran and, for some tests, a merged one too: reading
-# every one is safe, since a line counts as run when any record says so.
-recorded=()
-while IFS= read -r file; do recorded+=("$file"); done < <(find "$out/runs" -name codecov.json)
-[ ${#recorded[@]} -gt 0 ] || { echo "ci-coverage: kcov recorded nothing in $out/runs" >&2; exit 1; }
 
 # 2. Per script, across every test and every copy with the same lines: the lines kcov measures,
 #    and those that ran at least once. kcov writes a line's hits as a number, or as "hits/total".
@@ -95,13 +97,13 @@ while IFS= read -r file; do recorded+=("$file"); done < <(find "$out/runs" -name
 #    that opens the file's lines: a path that holds a double quote or a backslash, as the install
 #    test's quoted names do (agent-squad #319), leaves a record jq cannot read. Those two are
 #    escaped on such a line before jq reads it (agent-squad #348).
-# `with_source <codecov.json>` prints the record with that common part, and fails when jq cannot
-# read it even so.
+# `with_source <codecov.json> <pass>` prints the record with that common part and the pass that
+# wrote it, first or second, and fails when jq cannot read it even so.
 with_source() {
   local source
   source="$(sed -n 's|.*<source>\(.*\)</source>.*|\1|p' "$(dirname "$1")/cobertura.xml" 2>/dev/null | head -n 1)"
   perl -pe 's/^(\s*")(.*)(": \{\s*)$/my ($open, $path, $close) = ($1, $2, $3); $open . ($path =~ s{(["\\])}{\\$1}gr) . $close/e' "$1" \
-    | jq -c --arg source "$source" '{source: $source, coverage}'
+    | jq -c --arg source "$source" --arg pass "$2" '{source: $source, pass: $pass, coverage}'
 }
 # `continued <script>` prints, one per line, "c <n>" for each line after which the statement goes
 # on (inside a quote or a $( ), from a heredoc's first line to its end, after a trailing \, | or
@@ -165,35 +167,60 @@ shape="$(for script in "${measured[@]}"; do
               empty: [$marks[] | select(.[0] == "e") | .[1] | tonumber],
               excluded: [$marks[] | select(.[0] == "x") | {line: (.[1] | tonumber), reason: (.[2:] | join(" "))}]}}'
 done | jq -s 'add')"
-# Every record, read; one that cannot be read stops the summary, named.
-records="" unreadable=()
-for record in "${recorded[@]}"; do
-  if read_one="$(with_source "$record" 2>/dev/null)" && [ -n "$read_one" ]; then
-    records+="$read_one"$'\n'
-  else
-    unreadable+=("${record#"$out"/}")
+# `summarise` writes summary.md from the records and statuses in runs/, a second pass's included,
+# and sets `failed` to the tests that failed under kcov, a second pass's named second/<test>.
+summarise() {
+  local run_root status name file record read_one pass records="" recorded=() unreadable=()
+  run_root="$(cat "$out/runs/root" 2>/dev/null)" \
+    || { echo "ci-coverage: $out/runs holds no run of this script" >&2; exit 1; }
+  failed=()
+  for status in "$out"/runs/*.status "$out"/runs/second/*.status; do
+    [ -f "$status" ] || continue
+    name="${status#"$out"/runs/}"
+    [ "$(cat "$status")" = 0 ] || failed+=("${name%.status}")
+  done
+  # kcov writes a codecov.json per script it ran and, for some tests, a merged one too: reading
+  # every one is safe, since a line counts as run when any record says so.
+  while IFS= read -r file; do recorded+=("$file"); done < <(find "$out/runs" -name codecov.json)
+  [ ${#recorded[@]} -gt 0 ] || { echo "ci-coverage: kcov recorded nothing in $out/runs" >&2; exit 1; }
+  # Every record, read; one that cannot be read stops the summary, named.
+  for record in "${recorded[@]}"; do
+    pass=first
+    [[ "$record" != "$out"/runs/second/* ]] || pass=second
+    if read_one="$(with_source "$record" "$pass" 2>/dev/null)" && [ -n "$read_one" ]; then
+      records+="$read_one"$'\n'
+    else
+      unreadable+=("${record#"$out"/}")
+    fi
+  done
+  if [ ${#unreadable[@]} -gt 0 ]; then
+    echo "ci-coverage: kcov wrote records that cannot be read: ${unreadable[*]}" >&2
+    exit 1
   fi
-done
-if [ ${#unreadable[@]} -gt 0 ]; then
-  echo "ci-coverage: kcov wrote records that cannot be read: ${unreadable[*]}" >&2
-  exit 1
-fi
-printf '%s' "$records" \
-  | jq -s -r --arg root "$run_root" --arg failed "${failed[*]}" --argjson shape "$shape" '
+  printf '%s' "$records" \
+  | jq -s -r --arg root "$run_root" --arg failed "${failed[*]-}" --argjson shape "$shape" '
   def hits: if type == "number" then . else tostring | split("/")[0] | tonumber end;
   def basename: split("/") | last;
   def pct($r; $m): if $m == 0 then "not run" else "\($r * 1000 / $m | round / 10) %" end;
   # path -> {line: ran?}, every test merged.
-  (map(.source as $source | .coverage | to_entries[] | .key |= $source + .) | group_by(.key)
+  def merged: map(.source as $source | .coverage | to_entries[] | .key |= $source + .) | group_by(.key)
    | map({key: .[0].key, value: (map(.value | with_entries(.value |= (hits > 0))) | reduce .[] as $m ({};
        reduce ($m | to_entries[]) as $l (.; .[$l.key] = ((.[$l.key] // false) or $l.value))))})
-   | from_entries) as $files
-  | [$ARGS.positional[] as $script | ($root + "/" + $script) as $path
+   | from_entries;
+  # Both passes, and the first alone, whose difference is what the second pass recorded alone.
+  merged as $files | (map(select(.pass == "first")) | merged) as $first
+  | any(.[]; .pass == "second") as $second
+  # `ran_in($in; $script; $all)` gives the lines of $all that ran, in those files, in the script
+  # or in a copy of it.
+  | def ran_in($in; $script; $all): [$in | to_entries[] | select((.key | basename) == ($script | basename) and (.value | keys) == $all)]
+      as $copies | [$all[] | . as $l | select(any($copies[]; .value[$l])) | tonumber];
+  [$ARGS.positional[] as $script | ($root + "/" + $script) as $path
      | if $files[$path] == null then {script: $script, measured: 0, ran: 0}
        else ($files[$path] | keys) as $all
          | [$files | to_entries[] | select((.key | basename) == ($script | basename) and (.value | keys) == $all)]
            as $copies
          | [$all[] | . as $l | select(any($copies[]; .value[$l])) | tonumber] as $hit
+         | ran_in($first; $script; $all) as $hit_first
          | $shape[$script].continued as $continued | $shape[$script].empty as $empty
          | $shape[$script].excluded as $excluded
          # A line belongs to the statement that starts at the first line of its run of continued
@@ -205,16 +232,19 @@ printf '%s' "$records" \
             | {line: $l, start: ($l | until((. - 1) as $p | any($continued[]; . == $p) | not; . - 1))}]
          | group_by(.start)
          | map({start: .[0].start, ran: any(.[]; .line as $l | any($hit[]; . == $l)),
+                ran_first: any(.[]; .line as $l | any($hit_first[]; . == $l)),
                 multi: any(.[]; .line as $l | any($continued[]; . == $l))})
          | [.[] | select(.ran or (.multi | not))] as $statements
          | {script: $script, measured: ($statements | length), copies: (($copies | length) - 1),
             ran: ([$statements[] | select(.ran)] | length),
             left_out: [.[] | select((.ran or (.multi | not)) | not) | .start],
-            excluded: $excluded, unrun: [$statements[] | select(.ran | not) | .start]}
+            excluded: $excluded, unrun: [$statements[] | select(.ran | not) | .start],
+            second_only: [$statements[] | select(.ran and (.ran_first | not)) | .start]}
        end]
   | sort_by(if .measured == 0 then -1 else .ran / .measured end) as $rows
   | ($rows | map(.ran) | add) as $ran | ($rows | map(.measured) | add) as $all
   | ($rows | map(.left_out // [] | length) | add) as $left_out
+  | ($rows | map(.second_only // [] | length) | add) as $second_only
   # The verdict, first: each script short of 100 %, a script no test ran included, and each test
   # that failed under kcov; the job fails on either (agent-squad #507).
   | [$rows[] | select(.measured == 0 or .ran < .measured)] as $short
@@ -225,10 +255,10 @@ printf '%s' "$records" \
      (if $failed == "" then empty else "a test failed under kcov: `\($failed)`" end)] as $reasons
   | "## Test coverage of the scripts",
   "",
-  (if $reasons == [] then "Every measured script is fully run, and no test failed under kcov."
+  (if $reasons == [] then "Every measured script is fully run, and no test failed under kcov.\(if $second_only > 0 then " \($second_only) line\(if $second_only == 1 then "" else "s" end) of them only the tests\u0027 second pass recorded, listed below." else "" end)"
    else "**The coverage job fails:** \($reasons | join("; "))." end),
   "",
-  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end) A line that kcov never records, though it runs (an empty case branch, a lone `(`, a `done` or `)` with only redirections or a `&` after it), counts only if it ran, and a line marked `# coverage: excluded, <reason>` does not count. The HTML report that kcov writes, in the `coverage` artifact, counts every line it measures and leaves the copies out, so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back from the records in that artifact.",
+  "The lines of each script that `scripts/check-*.sh` ran, measured with kcov. A copy that a test runs from a temporary directory counts for the script it copies, and a statement written over several lines counts as one line. \(if $left_out == 1 then "kcov recorded 1 such statement on none of its lines; whether it ran is unknown, so it is left out." else "kcov recorded \($left_out) such statements on none of their lines; whether they ran is unknown, so they are left out." end) A line that kcov never records, though it runs (an empty case branch, a lone `(`, a `done` or `)` with only redirections or a `&` after it), counts only if it ran, and a line marked `# coverage: excluded, <reason>` does not count. The HTML report that kcov writes, in the `coverage` artifact, counts every line it measures and leaves the copies out, so it reads lower; `scripts/ci-coverage.sh --summary-only` gives these figures back from the records in that artifact.\(if $second then " kcov drops some lines that ran, when a test\u0027s processes trace at once: the first pass left lines unrun and no test failed, so the tests ran a second time, and a line counts as run when either pass recorded it." else "" end)",
   "",
   "| Script | Lines run | Lines measured | Coverage |",
   "|---|--:|--:|--:|",
@@ -242,6 +272,9 @@ printf '%s' "$records" \
   "",
   "</details>",
   "",
+  (if $second then "<details><summary>The lines only the second pass recorded</summary>", "",
+     ($rows[] | select((.second_only // []) != []) | "- `\(.script)`: \(.second_only | map(tostring) | join(", "))"),
+     "", "</details>", "" else empty end),
   "<details><summary>The lines not counted</summary>",
   "",
   ($rows[] | .script as $script | (.excluded // [])[] | "- `\($script)` \(.line), excluded: \(.reason)"),
@@ -249,10 +282,21 @@ printf '%s' "$records" \
   "",
   "</details>"
 ' --args "${measured[@]}" >"$out/summary.md" || exit 1
+}
+summarise
+# A second pass, when the first leaves lines unrun and no test failed: kcov dropped them, or no
+# test runs them, which the second pass tells apart (agent-squad #540).
+if ! $summary_only && [ ${#failed[@]} -eq 0 ] && grep -q '^\*\*The coverage job fails:\*\*' "$out/summary.md"; then
+  run_tests "$out/runs/second"
+  summarise
+fi
 
 # 3. kcov's own report, every test merged into one.
-$summary_only || kcov --merge "$out/report" "$out"/runs/*/ >/dev/null 2>&1 \
-  || echo "ci-coverage: kcov could not merge the reports" >&2
+if ! $summary_only; then
+  reports=("$out"/runs/check-*/)
+  [ ! -d "$out/runs/second" ] || reports+=("$out"/runs/second/check-*/)
+  kcov --merge "$out/report" "${reports[@]}" >/dev/null 2>&1 || echo "ci-coverage: kcov could not merge the reports" >&2
+fi
 cat "$out/summary.md"
 
 # 4. The verdict the summary opens with: a script short of 100 %, or a test that failed under kcov,
