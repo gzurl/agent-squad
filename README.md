@@ -182,13 +182,13 @@ Hooks save the project's state before Claude Code compacts a session and hand it
 session you resume, after updating Claude Code for instance, starts again in the main folder, and a
 hook reminds its agent which folder each agent works in.
 
-**GitHub holds the work.** Issues are the backlog, grouped into milestones; pull requests carry the
-changes, and reviews carry QA's verdicts. While setting up, the CTO creates a set of labels the
-agents coordinate with: who owns an issue (CTO, DEV or QA), its type and priority, and its status
-(in progress, in review, approved or blocked). One more label, `needs-ceo`, marks what is waiting
-for you, so filtering by it gives you your inbox. The agents usually share one GitHub account, so
-they sign everything they write. Before a merge, a script asks GitHub, through `gh`, whether the
-pull request is really ready.
+**GitHub holds the work.** Issues are the backlog, and those that make one deliverable are grouped
+into a milestone; pull requests carry the changes, and reviews carry QA's verdicts. While setting
+up, the CTO creates a set of labels the agents coordinate with: who owns an issue (CTO, DEV or QA),
+its type and priority, and its status (in progress, in review, approved or blocked). One more label,
+`needs-ceo`, marks what is waiting for you, so filtering by it gives you your inbox. The agents
+usually share one GitHub account, so they sign everything they write. Before a merge, a script asks
+GitHub, through `gh`, whether the pull request is really ready.
 
 ### How the team works
 
