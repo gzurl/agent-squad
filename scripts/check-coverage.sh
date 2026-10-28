@@ -13,8 +13,9 @@
 # ran, and --summary-only writes it again from the records alone. The line under its heading is the
 # verdict, and a script below 100 % or a test that failed under kcov fails the run, exit 3, naming
 # each: the coverage job fails on its own (agent-squad #507). Without kcov, with nothing recorded,
-# or with a record it cannot read, it exits 1. This script runs none of the tests and touches
-# neither the repository it is run from nor GitHub.
+# or with a record it cannot read, it exits 1. A line that bash's job control adds to a run's
+# output under load is not taken for the run's own (agent-squad #536). This script runs none of the
+# tests and touches neither the repository it is run from nor GitHub.
 # shellcheck disable=SC2016 # the summary's backticks are Markdown, and the fixtures are code
 set -u
 
@@ -33,6 +34,15 @@ status=0
 
 pass() { echo "  ok      $1" >&2; }
 fail() { echo "  FAILED  $1" >&2; status=1; }
+# `unjobbed <output>` prints a run's output without the lines that bash's job control writes there:
+# ci-coverage.sh runs the tests under `set -m`, and a loaded machine can refuse a child's setpgid,
+# which bash reports as `<shell>: child setpgid (<pid> to <pid>): <error>`, before the run's own
+# message or among its lines (agent-squad #536).
+unjobbed() { grep -vE ': child setpgid \([0-9]+ to [0-9]+\): ' <<<"$1"; }
+# Such a line, as the cases put it before a run's output: `jobbed <command...>` runs the command
+# after writing it.
+jobbed="$coverage: child setpgid (89940 to 89940): Operation not permitted"
+jobbed() { bash -c 'echo "$0" >&2; exec "$@"' "$jobbed" "$@"; }
 
 # The scratch repository: three tests, whose content does not matter, and the scripts measured.
 repo="$lab/repo"
@@ -177,11 +187,11 @@ summary_of() {
   fi
 }
 
-# 1. A run with the stand-in.
-out="$(cd "$repo" && PATH="$lab/bin:$PATH" "$coverage" "$lab/out" 2>&1)"
+# 1. A run with the stand-in, after a line of bash's job control, as on a loaded machine.
+out="$(cd "$repo" && PATH="$lab/bin:$PATH" jobbed "$coverage" "$lab/out" 2>&1)"
 code=$?
-if [ "$code" -eq 3 ] && [ -f "$lab/out/report/index.html" ] && [ "$out" = "$(cat "$lab/out/summary.md")" ]; then
-  pass "below 100 %, it exits 3, prints the summary it writes, and merges kcov's reports"
+if [ "$code" -eq 3 ] && [ -f "$lab/out/report/index.html" ] && [ "$(unjobbed "$out")" = "$(cat "$lab/out/summary.md")" ]; then
+  pass "below 100 %, it exits 3, prints the summary it writes, and nothing else but bash's job control, and merges kcov's reports"
 else
   fail "a run: exit $code, printed: $out"
 fi
@@ -284,7 +294,7 @@ refused() {
   shift 3
   out="$(cd "$repo" && "$@" 2>&1)"
   code=$?
-  if [ "$code" -eq "$want" ] && [[ "$out" == "$says"* ]]; then
+  if [ "$code" -eq "$want" ] && [[ "$(unjobbed "$out")" == "$says"* ]]; then
     pass "$case: exit $want, saying so"
   else
     fail "$case: exit $code, said: $out"
@@ -293,6 +303,17 @@ refused() {
 refused "without kcov" 1 "ci-coverage: kcov is not installed" env PATH="/usr/bin:/bin" "$coverage" "$lab/none"
 refused "with nothing recorded" 1 "ci-coverage: kcov recorded nothing in " \
   env KCOV_RECORDS=none PATH="$lab/bin:$PATH" "$coverage" "$lab/empty"
+#    A line of bash's job control before the message, as on a loaded machine (agent-squad #536),
+#    is not taken for the run's output; a wrong message after it still is, and the line alone is
+#    no message.
+refused "with nothing recorded, after a line of bash's job control" 1 "ci-coverage: kcov recorded nothing in " \
+  jobbed env KCOV_RECORDS=none PATH="$lab/bin:$PATH" "$coverage" "$lab/empty-jobbed"
+if [[ "$(unjobbed "$jobbed"$'\n'"ci-coverage: kcov is not installed")" != "ci-coverage: kcov recorded nothing in "* ]] \
+  && [ -z "$(unjobbed "$jobbed")" ] && [ "$(unjobbed "a line"$'\n'"$jobbed"$'\n'"another")" = "a line"$'\n'"another" ]; then
+  pass "only bash's setpgid lines are dropped: a wrong message after one is still wrong, and one alone is no message"
+else
+  fail "unjobbed: dropped too much or too little"
+fi
 refused "with a record that cannot be read even so, which it names" 1 \
   "ci-coverage: kcov wrote records that cannot be read: runs/check-gate/check-gate.sh.0123456789abcdef/codecov.json" \
   env KCOV_RECORDS=broken PATH="$lab/bin:$PATH" "$coverage" "$lab/broken"
