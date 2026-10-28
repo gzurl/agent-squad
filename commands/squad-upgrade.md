@@ -89,8 +89,8 @@ Work from the main checkout. The upstream repository is the one named on the `up
 6. **Have the agents re-read what changed** (§7). Tell DEV and QA, one message each: the version
    installed, and whether the project went back to it; the rules that changed, or going back the
    rules that revert, with their § numbers; and to re-read those sections now in the main
-   checkout's `.agent-squad/playbook/`, taking them as superseding the text their session loaded,
-   and that they stay at their safe point until `/squad-resume`. Re-read the sections yourself.
+   checkout's `.agent-squad/playbook/`, taking them as superseding the text their session loaded.
+   Re-read the sections yourself.
 7. **Report to the CEO**, in the CEO's language: the version installed, and whether the project went
    back to it, with the rules that revert and their § numbers, `--check`'s result, each step left
    by hand, with who named it, and the installer's PR that does it, the labels created or
