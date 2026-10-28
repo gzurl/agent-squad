@@ -12,9 +12,11 @@
   step 6 told DEV and QA to stay at their safe point until `/squad-resume`, a hold that carried no
   "Sent at" line for a late reader; step 3's timed `/squad-pause` relay already holds them, so step
   6 now only asks them to re-read the sections that changed.
-- **This repository's own tests** (#527, #529). `scripts/check-latest.sh`'s case *while a check
-  waits on gh* no longer fails under load: it waits for gh to start, and ends gh's sleep however
-  late it starts. It does not ship, so nothing changes for a project.
+- **This repository's own tests** (#527, #529, #536). Two cases no longer fail under load:
+  `scripts/check-latest.sh`'s *while a check waits on gh*, which waits for gh to start and ends gh's
+  sleep however late it starts, and `scripts/check-coverage.sh`'s *with nothing recorded*, which no
+  longer takes bash's line on a failed `setpgid` for the run's own output. They do not ship, so
+  nothing changes for a project.
 - **Upgrading from v72:** nothing to do by hand, since v73 changes no template. Restart the three
   sessions, since §3 changes.
 
