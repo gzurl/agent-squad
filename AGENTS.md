@@ -135,7 +135,9 @@ Your session name tells you who you are: `CTO:agent-squad`, `DEV:agent-squad` or
   cannot list those repositories, it says that it did not check, and passes.
 - The coverage job fails on its own when the total or any script that `scripts/ci-coverage.sh`
   measures is below 100 %, or when a test fails under kcov; the line under its summary's heading
-  says which (#507). Its green can be trusted as the other jobs' is.
+  says which (#507). Its green can be trusted as the other jobs' is. kcov drops some lines that
+  ran, at random, so when the first pass leaves lines unrun and no test failed, the tests run a
+  second time, and the summary lists the lines only that pass recorded (#540).
 - A time limit in these tests only guards against a hang: it allows ten times what its case takes
   on an idle machine, and its failure names the case and the limit. A test of a script's own timing
   compares it with the time of what the script stops or waits for, with a margin that a loaded

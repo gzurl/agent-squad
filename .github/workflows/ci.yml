@@ -103,7 +103,9 @@ jobs:
   # the total and one line per script in the job's summary, and as an artifact kcov's report and
   # the records that `scripts/ci-coverage.sh --summary-only` makes the summary from. It fails when
   # the total or any measured script is below 100 %, or a test fails under kcov, and the line under
-  # its summary's heading says why (agent-squad #507); nothing is sent outside GitHub.
+  # its summary's heading says why (agent-squad #507). kcov drops some lines that ran, so a first
+  # pass that leaves lines unrun with no test failed runs the tests again, into runs/second/, and the
+  # summary lists what only that pass recorded (agent-squad #540); nothing is sent outside GitHub.
   coverage:
     runs-on: ubuntu-latest
     env:
@@ -167,6 +169,8 @@ jobs:
             ${{ runner.temp }}/coverage/runs/root
             ${{ runner.temp }}/coverage/runs/*.status
             ${{ runner.temp }}/coverage/runs/*.log
+            ${{ runner.temp }}/coverage/runs/second/*.status
+            ${{ runner.temp }}/coverage/runs/second/*.log
             ${{ runner.temp }}/coverage/runs/**/codecov.json
             ${{ runner.temp }}/coverage/runs/**/cobertura.xml
           if-no-files-found: warn
