@@ -1,5 +1,25 @@
 # Changelog
 
+## v73 — 2026-10-28
+- **Several issues of one deliverable get a milestone; an issue alone, none** (#532, the CEO's
+  request). §3: two or more issues that make one deliverable SHOULD get a milestone and its pinned
+  plan issue as soon as they are planned; a release keeps its own whatever its number of issues; an
+  issue on its own SHOULD get none, since its page already shows its state. A deliverable's plan
+  issue is closed and unpinned once its issues are closed and its README read, as a release's is
+  after the release. `BOOTSTRAP.md` row 8 no longer asks for a milestone before the first issue, and
+  the README's *GitHub holds the work* says the same.
+- **`/squad-upgrade`'s re-read notice holds no one** (#531, found by another project's QA). Its
+  step 6 told DEV and QA to stay at their safe point until `/squad-resume`, a hold that carried no
+  "Sent at" line for a late reader; step 3's timed `/squad-pause` relay already holds them, so step
+  6 now only asks them to re-read the sections that changed.
+- **This repository's own tests** (#527, #529, #536). Two cases no longer fail under load:
+  `scripts/check-latest.sh`'s *while a check waits on gh*, which waits for gh to start and ends gh's
+  sleep however late it starts, and `scripts/check-coverage.sh`'s *with nothing recorded*, which no
+  longer takes bash's line on a failed `setpgid` for the run's own output. They do not ship, so
+  nothing changes for a project.
+- **Upgrading from v72:** nothing to do by hand, since v73 changes no template. Restart the three
+  sessions, since §3 changes.
+
 ## v72 — 2026-10-26
 - **An issue in progress names its approach from the start** (#521, found by another project's
   CEO). §3: whoever sets `🚧 status:in-progress` on an issue writes on it, right after setting it,
