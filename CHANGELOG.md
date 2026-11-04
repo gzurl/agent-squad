@@ -1,5 +1,33 @@
 # Changelog
 
+## v74 — 2026-11-05
+- **Sourcetree no longer runs `git lfs install` in a project that uses Git LFS** (#543, found by
+  the CEO). With LFS's auto-init on, Sourcetree looks for `lfs pre-push` in `.git/hooks/pre-push`,
+  and without it ran `git lfs install`, which refuses a hook that is not its own and failed again
+  and again with "Hook already exists: pre-push". The squad's pre-push shim now says
+  `git lfs pre-push` in its comment on `pre-push.local`, where such a project runs it (#121), and
+  behaves as before. The dialog's `git lfs update --force` is no fix: it replaces the shim with
+  LFS's hook, which drops the gate.
+- **`--check` takes a `CLAUDE.md` that imports `@AGENTS.md`** (#546, proposed by @fctcode in
+  #542). Where git writes no symlinks, as on Windows without Developer Mode, `CLAUDE.md` can be a
+  file that imports `@AGENTS.md` on a line of its own, outside code and comments. `--check`'s item,
+  now *CLAUDE.md loads AGENTS.md, which imports the charter*, passes it as it passes the symlink,
+  and fails anything else, naming both ways; `BOOTSTRAP.md` row 10, `templates/AGENTS.md` and the
+  installer's *By hand* advice say the same.
+- **The README's pinned plan is any deliverable's of several issues** (#539, #548, both found by
+  QA). *The plan, pinned on GitHub* says that a release and any other deliverable of two or more
+  issues each have a pinned plan issue, and that an issue on its own has none, as §3 says since
+  v73; the README and `/squad-watch` say that the watch shows each plan's table.
+- **This repository's own tests** (#540). When kcov drops lines that ran, the coverage job runs the
+  tests a second time, and lists only the lines that pass recorded. It does not ship, so nothing
+  changes for a project.
+- **Upgrading from v73:** nothing to do by hand. The pre-push shim's text changes, and v74's
+  installer writes it in the same run, so `--check` passes once v74 is installed as the README
+  says; an older installer run with the `v74` tag leaves `--check` failing until v74's runs.
+  `templates/AGENTS.md`'s opening lines name the import, which a project's own `AGENTS.md` may
+  follow when its `CLAUDE.md` imports it. The charter does not change; restart the three sessions,
+  as after any upgrade, to load v74's squad board (README, *Upgrade*).
+
 ## v73 — 2026-10-28
 - **Several issues of one deliverable get a milestone; an issue alone, none** (#532, the CEO's
   request). §3: two or more issues that make one deliverable SHOULD get a milestone and its pinned
