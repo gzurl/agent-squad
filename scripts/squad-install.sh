@@ -206,9 +206,11 @@ lists_a_command() {
 }
 # `imports <file> <path>` passes when the file imports @<path> where Claude Code evaluates an
 # import: a whole line at the margin (trailing blanks allowed), outside fenced code blocks and HTML
-# comments. Indented, inline or commented out, it imports nothing.
+# comments. Indented, inline or commented out, it imports nothing. The line is compared byte for
+# byte: in a UTF-8 locale, macOS's awk compares strings by collation, which ignores invisible
+# characters, such as a zero-width space after the path (QA's finding on PR #551).
 imports() {
-  awk -v import="@$2" '
+  LC_ALL=C awk -v import="@$2" '
     /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
     fenced { next }
     commented { if (/-->/) commented = 0; next }

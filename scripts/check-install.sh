@@ -1130,13 +1130,14 @@ cases_check_gate() {
 
 # `inert_imports <file> <import>` writes into the file, one after the other, the forms of the import
 # that Claude Code does not evaluate: in a fence, indented, inline, commented out, or of another
-# file; each must fail the import item.
+# file, such as the name followed by a zero-width space, which a comparison by collation ignores;
+# each must fail the import item.
 inert_imports() {
   local inert
   for inert in '```\n'"$2"'\n```' '~~~\n'"$2"'\n~~~' "    $2" "Read \`$2\`." \
-    "<!-- $2 -->" "<!--\n$2\n-->" "$2.bak"; do
+    "<!-- $2 -->" "<!--\n$2\n-->" "$2.bak" "$2\0342\0200\0213"; do
     printf '# %s\n\n%b\n' "${1##*/}" "$inert" > "$1"
-    check "an import that is not evaluated, in ${1##*/}, fails the import item: $(head -c 24 <<<"$inert" | tr '\n' ' ')" \
+    check "an import that is not evaluated, in ${1##*/}, fails the import item: ${inert//"$2"/<import>}" \
       check_reports "$item_import"
   done
 }
