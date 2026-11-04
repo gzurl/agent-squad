@@ -25,8 +25,8 @@
   installer writes it in the same run, so `--check` passes once v74 is installed as the README
   says; an older installer run with the `v74` tag leaves `--check` failing until v74's runs.
   `templates/AGENTS.md`'s opening lines name the import, which a project's own `AGENTS.md` may
-  follow when its `CLAUDE.md` imports it. The charter does not change, so no session needs a
-  restart.
+  follow when its `CLAUDE.md` imports it. The charter does not change; restart the three sessions,
+  as after any upgrade, to load v74's squad board (README, *Upgrade*).
 
 ## v73 — 2026-10-28
 - **Several issues of one deliverable get a milestone; an issue alone, none** (#532, the CEO's
