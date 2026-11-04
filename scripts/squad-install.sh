@@ -280,6 +280,9 @@ excludes_ours='def ours: type == "string" and startswith($prefix);'
 # worktree runs it. --check requires it byte for byte, comments included, as this installer writes
 # it. install.sh runs the chosen tag's own installer, which writes that tag's text in the same run;
 # an older installer run with a newer tag writes its own, and --check fails until the newer runs.
+# Its text says git lfs pre-push (agent-squad #543): Sourcetree, in a project that uses LFS, runs
+# git lfs install, which refuses a hook that is not its own, unless a line of hooks/pre-push
+# contains "lfs pre-push".
 hooks_dir="$common_dir/hooks"
 shim="$(cat <<'SHIM'
 #!/usr/bin/env bash
@@ -290,7 +293,9 @@ set -u
 hooks_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)" || exit 1
 refs="$(cat)"
 
-# The project's own hook first, with the arguments and the input git gave this one.
+# The project's own hook first, with the arguments and the input git gave this one. A project that
+# uses Git LFS runs git lfs pre-push "$@" from it. Sourcetree looks for that text in this file, and
+# without it runs git lfs install, which refuses a hook that is not LFS's own.
 if [ -x "$hooks_dir/pre-push.local" ]; then
   "$hooks_dir/pre-push.local" "$@" <<<"$refs" || exit
 fi
