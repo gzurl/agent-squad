@@ -768,7 +768,8 @@ cases_lfs() {
   #     an item for it only when a .gitattributes of the project has filter=lfs: failing without an
   #     executable pre-push.local that runs git lfs pre-push, passing with one. LFS's own hook, there
   #     before the install, is kept as pre-push.local and passes as it is. No git-lfs is needed: the
-  #     item reads files.
+  #     item reads files. The shim says git lfs pre-push, which Sourcetree looks for in
+  #     hooks/pre-push before it runs git lfs install (#543).
   lfs_hook="$(printf '%s\n' '#!/bin/sh' \
     'command -v git-lfs >/dev/null 2>&1 || { echo "git-lfs was not found on your path" >&2; exit 2; }' \
     'git lfs pre-push "$@"')"
@@ -776,6 +777,8 @@ cases_lfs() {
   lfs_line() { "$install" --check "$1" 2>&1 | grep -F "$item_lfs" || true; }
   target="$(new_project lfs)" || exit 2
   "$install" "$target" "$tag_a" >/dev/null 2>&1
+  check "the shim says git lfs pre-push, which Sourcetree looks for" \
+    grep -qF 'git lfs pre-push' "$target/.git/hooks/pre-push"
   check "without LFS, --check shows no LFS item" [ -z "$(lfs_line "$target")" ]
   printf '# *.psd filter=lfs diff=lfs merge=lfs -text\n*.txt text\n' > "$target/.gitattributes"
   check "nor with filter=lfs only in a comment of .gitattributes" [ -z "$(lfs_line "$target")" ]
