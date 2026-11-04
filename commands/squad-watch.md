@@ -1,5 +1,5 @@
 ---
-description: One pass of the stall watch; pings whoever owns stalled work, and shows the plan's table (agent-squad)
+description: One pass of the stall watch; pings whoever owns stalled work, and shows each plan's table (agent-squad)
 ---
 One pass of the squad's stall watch (agent-squad #174). Work stalls when the agent who owns its
 next step is idle, and nothing will wake it: a ping that never arrived, or a next step announced
@@ -62,7 +62,7 @@ nothing else.
    write the rest in the CEO's language (`AGENTS.md`, *Language*): the count, the time, and every
    cell of every row. On GitHub, the table stays in English.
 8. **When neither `squad-stalls.sh` nor `squad-outside.sh` lists anything,** send nothing to
-   anyone, and tell the CEO nothing beyond the plan's table. Say at most one line more in your own
+   anyone, and tell the CEO nothing beyond each plan's table. Say at most one line more in your own
    terminal: `squad-watch: nothing stalled`.
 
 **What it watches from outside:** an issue or a PR opened by an account outside the squad, whatever

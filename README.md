@@ -289,7 +289,7 @@ progress gets a ping too, 15 minutes later, even while that owner is busy. A PR 
 that still waits for a review requested on GitHub, such as a colleague's, is nobody's to merge yet:
 the watch tells you once it has waited an hour, since only you can reach that reviewer. It leaves
 out what already waits on you (`needs-ceo`) and what is blocked on purpose (`status:blocked`), and
-when it finds nothing, it says nothing more than the plan's table, which it updates and shows at
+when it finds nothing, it says nothing more than each plan's table, which it updates and shows at
 each pass. `/squad-autopilot` runs it every half hour until you pause or resume the squad, and you
 can type it yourself at any time.
 
