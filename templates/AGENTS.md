@@ -1,7 +1,8 @@
 # AGENTS.md — <Project>
 
 Project-specific conventions for every agent working in this repository.
-`CLAUDE.md` is a symlink to this file. Owner: CTO.
+`CLAUDE.md` is a symlink to this file or, where git writes no symlinks, a file that imports it
+(`@AGENTS.md`). Owner: CTO.
 
 Team roles, the review and merge protocol, the worktree policy and the rules about what may be
 pushed directly to `main` are project-agnostic and live in the team charter, imported below. This
