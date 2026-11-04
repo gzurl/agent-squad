@@ -112,7 +112,7 @@ item_shim="the pre-push shim is installed and core.hooksPath is unset"
 item_gate="the gate refuses a failing check and lets a passing one through"
 item_list=".agent-squad-checks exists and is tracked"
 item_worktrees=".agent-squad/worktrees/dev and qa are worktrees of this repository"
-item_import="CLAUDE.md links to AGENTS.md, which imports the charter"
+item_import="CLAUDE.md loads AGENTS.md, which imports the charter"
 item_branch="git knows the remote's default branch, the one the gate protects"
 item_lfs="Git LFS's pre-push runs from hooks/pre-push.local"
 item_mods="the squad's mods are enabled from the playbook"
@@ -1128,6 +1128,19 @@ cases_check_gate() {
   check "with every breakage undone, --check passes again" check_reports
 }
 
+# `inert_imports <file> <import>` writes into the file, one after the other, the forms of the import
+# that Claude Code does not evaluate: in a fence, indented, inline, commented out, or of another
+# file; each must fail the import item.
+inert_imports() {
+  local inert
+  for inert in '```\n'"$2"'\n```' '~~~\n'"$2"'\n~~~' "    $2" "Read \`$2\`." \
+    "<!-- $2 -->" "<!--\n$2\n-->" "$2.bak"; do
+    printf '# %s\n\n%b\n' "${1##*/}" "$inert" > "$1"
+    check "an import that is not evaluated, in ${1##*/}, fails the import item: $(head -c 24 <<<"$inert" | tr '\n' ' ')" \
+      check_reports "$item_import"
+  done
+}
+
 #   The import of the charter.
 cases_check_import() {
   complete_project complete || exit 2
@@ -1135,18 +1148,42 @@ cases_check_import() {
   broken "$project/AGENTS.md"
   printf '# AGENTS.md\n' > "$project/AGENTS.md"
   check "a missing import fails the import item" check_reports "$item_import"
-  # Imports that Claude Code does not evaluate: in a fence, indented, inline, commented out, or of
-  # another file.
   import="@.agent-squad/playbook/SQUAD.md"
-  for inert in '```\n'"$import"'\n```' '~~~\n'"$import"'\n~~~' "    $import" "Read \`$import\`." \
-    "<!-- $import -->" "<!--\n$import\n-->" "$import.bak"; do
-    printf '# AGENTS.md\n\n%b\n' "$inert" > "$project/AGENTS.md"
-    check "an import that is not evaluated fails the import item: $(head -c 24 <<<"$inert" | tr '\n' ' ')" \
-      check_reports "$item_import"
-  done
+  inert_imports "$project/AGENTS.md" "$import"
   printf '# AGENTS.md\n\n%s  \n' "$import" > "$project/AGENTS.md"
   check "an import with trailing blanks still counts" check_reports
   mended "$project/AGENTS.md"
+
+  check "with every breakage undone, --check passes again" check_reports
+}
+
+#   How CLAUDE.md loads AGENTS.md: as a symlink to it or, where git writes no symlinks, as a file
+#   that imports @AGENTS.md (#546). Anything else fails the import item, with a reason that names
+#   both ways, and the By hand list of a run says what to do.
+cases_check_claude_md() {
+  complete_project complete || exit 2
+  claude="$project/CLAUDE.md"
+  both_ways="CLAUDE.md is neither a symlink to AGENTS.md nor a file that imports @AGENTS.md on a line of its own, outside code and comments"
+  rm "$claude"
+  check "a missing CLAUDE.md fails the import item, naming both ways" check_reason "$item_import" "$both_ways"
+  check "and only that item" check_reports "$item_import"
+  out="$("$install" "$project" "$tag_a" 2>&1)"
+  check "and a run's By hand list says to make it a symlink, or a file that imports @AGENTS.md" \
+    contains "$out" "Make CLAUDE.md a symlink to AGENTS.md (ln -s AGENTS.md CLAUDE.md), once its content is in AGENTS.md; where git writes no symlinks, as on Windows without Developer Mode, make it a file that imports @AGENTS.md on a line of its own instead"
+  printf 'AGENTS.md' > "$claude"
+  check "the text file that git writes for the link where it writes no symlinks fails it" \
+    check_reason "$item_import" "$both_ways"
+  printf '# CLAUDE.md\n\n@AGENTS.md\n' > "$claude"
+  check "a CLAUDE.md that imports @AGENTS.md passes it" check_reports
+  out="$("$install" "$project" "$tag_a" 2>&1)"
+  check "and a run's By hand list asks nothing about it" lacks "$out" "Make CLAUDE.md"
+  printf '# CLAUDE.md\n\n@AGENTS.md \r\n' > "$claude"
+  check "with trailing blanks and a CRLF ending too" check_reports
+  inert_imports "$claude" "@AGENTS.md"
+  printf '@AGENTS.md\n' > "$lab/imports-agents.md"
+  rm "$claude" && ln -s "$lab/imports-agents.md" "$claude"
+  check "a symlink to another file that imports @AGENTS.md fails it" check_reason "$item_import" "$both_ways"
+  rm "$claude" && ln -s AGENTS.md "$claude"
 
   check "with every breakage undone, --check passes again" check_reports
 }
@@ -2211,6 +2248,7 @@ groups=(
   cases_check_commands_even
   cases_check_gate
   cases_check_import
+  cases_check_claude_md
   cases_uncommitted
   cases_template_changes
   cases_default_branch

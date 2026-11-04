@@ -204,17 +204,29 @@ hooks_path_settings() {
 lists_a_command() {
   awk '{ sub(/\r$/, ""); sub(/^[[:space:]]+/, "") } $0 != "" && !/^#/ { found = 1 } END { exit !found }' "$1" 2>/dev/null
 }
-# `imports_charter <file>` passes when the file imports the charter where Claude Code evaluates
-# an import: a whole line at the margin (trailing blanks allowed), outside fenced code blocks and
-# HTML comments. Indented, inline or commented out, it imports nothing.
-imports_charter() {
-  awk '
+# `imports <file> <path>` passes when the file imports @<path> where Claude Code evaluates an
+# import: a whole line at the margin (trailing blanks allowed), outside fenced code blocks and HTML
+# comments. Indented, inline or commented out, it imports nothing.
+imports() {
+  awk -v import="@$2" '
     /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
     fenced { next }
     commented { if (/-->/) commented = 0; next }
     /<!--/ && !/-->/ { commented = 1; next }
-    /^@\.agent-squad\/playbook\/SQUAD\.md[[:space:]]*$/ { found = 1 }
+    { line = $0; sub(/[[:space:]]+$/, "", line); if (line == import) found = 1 }
     END { exit !found }' "$1" 2>/dev/null
+}
+# `imports_charter <file>` passes when the file imports the charter.
+imports_charter() { imports "$1" .agent-squad/playbook/SQUAD.md; }
+# `loads_agents_md` passes when the project's CLAUDE.md loads AGENTS.md into every session: as a
+# symlink to it, or, where git writes no symlinks (Windows without Developer Mode, where it writes a
+# text file that holds AGENTS.md and loads nothing), as a file of its own that imports @AGENTS.md
+# (agent-squad #546).
+loads_agents_md() {
+  case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
+    AGENTS.md|./AGENTS.md) return 0 ;;
+  esac
+  [ ! -L "$project/CLAUDE.md" ] && imports "$project/CLAUDE.md" AGENTS.md
 }
 
 # The squad's session hooks as the installer writes them (D5 and D10 of agent-squad #23, #164 for
@@ -632,14 +644,12 @@ check_installation() {
 
   # 8. Every session loads the charter.
   why="$({
-    case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
-      AGENTS.md|./AGENTS.md) ;;
-      *) echo "CLAUDE.md is not a symlink to AGENTS.md" ;;
-    esac
+    loads_agents_md \
+      || echo "CLAUDE.md is neither a symlink to AGENTS.md nor a file that imports @AGENTS.md on a line of its own, outside code and comments"
     imports_charter "$project/AGENTS.md" \
       || echo "AGENTS.md does not import @.agent-squad/playbook/SQUAD.md on a line of its own, outside code and comments"
   } | join)"
-  verdict "CLAUDE.md links to AGENTS.md, which imports the charter" "$why"
+  verdict "CLAUDE.md loads AGENTS.md, which imports the charter" "$why"
 
   # 10. The pre-push gate protects the remote's default branch, which it reads from origin/HEAD;
   #     without it, the gate falls back to main, whatever the remote's default is (agent-squad #72).
@@ -1179,10 +1189,8 @@ if [ "$set_up" -eq 1 ]; then
     items=$((items + 1))
     printf '  %d. %s\n' "$items" "$1"
   }
-  case "$(readlink "$project/CLAUDE.md" 2>/dev/null)" in
-    AGENTS.md|./AGENTS.md) ;;
-    *) item "Make CLAUDE.md a symlink to AGENTS.md (ln -s AGENTS.md CLAUDE.md), once its content is in AGENTS.md" ;;
-  esac
+  loads_agents_md \
+    || item "Make CLAUDE.md a symlink to AGENTS.md (ln -s AGENTS.md CLAUDE.md), once its content is in AGENTS.md; where git writes no symlinks, as on Windows without Developer Mode, make it a file that imports @AGENTS.md on a line of its own instead"
   if ! lists_a_command "$project/.agent-squad-checks"; then
     item "Write .agent-squad-checks: the commands the project's CI runs, one per line; until it lists one the gate refuses every push"
   fi
