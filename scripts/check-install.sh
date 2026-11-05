@@ -2232,12 +2232,16 @@ cases_quoted_names() {
 }
 
 # The groups run side by side, each in its lab (agent-squad #245), and the slowest sets how long the
-# check takes. Each group's lines are printed once it has ended, after a line that names it and gives
-# its time, group after group in the order below. The check fails when a group does, when one stops
-# before its end (exit 2), when one runs no check, and when a group is defined here but not run.
-# They start under job control, each in a process group of its own, which the exit trap ends: without
-# it, a command started in the background ignores SIGINT, and so would every --check case 14
-# interrupts with it.
+# check takes. Once they have all ended, each group's lines are printed after a line that names it
+# and gives its time, group after group in the order below. The check fails when a group does, when
+# one stops before its end (exit 2), when one runs no check, and when a group is defined here but not
+# run. They start under job control, each in a process group of its own, which the exit trap ends:
+# without it, a command started in the background ignores SIGINT, and so would every --check case
+# 14 interrupts with it.
+# Each group's job writes the group's exit status to a file as it ends, which the run reads, as
+# ci-coverage.sh does: `wait <pid>` loses the status of a job that has ended once bash gives its PID
+# to a new child, as PIDs wrap around on a loaded machine, and says it is not its child, exit 127
+# (agent-squad #549).
 groups=(
   cases_main_project
   cases_release
@@ -2265,26 +2269,31 @@ groups=(
   cases_uninstall_refusals
   cases_quoted_names
 )
-pids=()
 set -m
 for group in "${groups[@]}"; do
   (
-    in_lab "$group" || exit 2
-    started=$SECONDS
-    "$group"
-    echo "$((SECONDS - started))" > "$lab.seconds"
-    exit "$status"
-  ) </dev/null >"$labs/$group.log" 2>&1 &
-  pids+=("$!")
+    (
+      in_lab "$group" || exit 2
+      started=$SECONDS
+      "$group"
+      echo "$((SECONDS - started))" > "$lab.seconds"
+      exit "$status"
+    ) </dev/null >"$labs/$group.log" 2>&1
+    echo "$?" > "$labs/$group.status"
+  ) &
 done
 set +m
-for i in "${!groups[@]}"; do
-  group="${groups[$i]}"
-  wait "${pids[$i]}"
-  code=$?
+wait
+for group in "${groups[@]}"; do
   echo "check-install: $group ($(cat "$labs/$group.seconds" 2>/dev/null || echo "?") s)" >&2
   cat "$labs/$group.log" >&2
   grep -qE '^  (ok|FAILED)  ' "$labs/$group.log" || fail "$group ran no check"
+  # A job ended by a signal before it could write the status leaves none: it stopped too.
+  if ! code="$(cat "$labs/$group.status" 2>/dev/null)"; then
+    fail "$group stopped before its end, and left no exit status"
+    [ "$status" -ge 2 ] || status=2
+    continue
+  fi
   [ "$code" -le 1 ] || fail "$group stopped before its end, with exit $code"
   [ "$code" -le "$status" ] || status="$code"
 done
