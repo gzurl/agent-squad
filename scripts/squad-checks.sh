@@ -114,8 +114,7 @@ trap 'stop; exit 143' TERM
 # whose parent is this run: once a check has ended, its PID can name another process (QA's finding
 # on PR #497). It also adds to $work/seen every process under those checks, at any depth, with its
 # start time, for the stop to end it should it outlive its check (agent-squad #506): one that
-# starts and loses its parent within the same half second is not seen. `kept <pid> <status>` prints
-# that check's status, `terminal` when the watch stopped it.
+# starts and loses its parent within the same half second is not seen.
 # shellcheck disable=SC2317,SC2329 # run in the background below
 watch() {
   local pid parent state
@@ -134,7 +133,21 @@ watch() {
     sleep 0.5 || return
   done
 }
-kept() { if [ -e "$work/$1.terminal" ]; then echo terminal; else echo "$2"; fi; }
+# Once a check has ended, bash drops its status as soon as a new child of this shell gets its PID
+# back, as PIDs wrap around on a loaded machine, and `wait` then says that it is not its child, exit
+# 127 (agent-squad #553); a PID that another process's child gets leaves it alone. So between a
+# check's start and its wait, this shell forks only what starts with it, an instant later, too soon
+# for the PIDs to wrap around: the checks after it, side by side, and the watch. Everything else in
+# between is builtins, these two functions included.
+# `kept <i> <pid> <status>` sets check <i>'s code: its status, or `terminal` when the watch stopped it.
+kept() { if [ -e "$work/$2.terminal" ]; then codes[$1]=terminal; else codes[$1]="$3"; fi; }
+# `copied <file>` writes the file's bytes as they are, NULs and a last line with no newline included:
+# `read -d ''` reads up to each NUL, which the C locale leaves every other byte to.
+copied() {
+  local LC_ALL=C chunk=''
+  while IFS= read -r -d '' chunk; do printf '%s\0' "$chunk"; done < "$1"
+  printf '%s' "$chunk"
+}
 # `watching <pid>...` starts the watch on those checks, its PID in $watcher, out of bash's table of
 # jobs: ended with a signal once they have ended, it is then not reported, as bash on Linux reports
 # a job killed so ("Terminated").
@@ -155,7 +168,7 @@ if [ "$side_by_side" = no ]; then
     set +m
     watching "${pids[0]}"
     wait "${pids[0]}"
-    codes+=("$(kept "${pids[0]}" "$?")")
+    kept "$i" "${pids[0]}" "$?"
     kill "$watcher" 2>/dev/null
   done
 else
@@ -171,10 +184,10 @@ else
   watching "${pids[@]}"
   for i in "${!commands[@]}"; do
     wait "${pids[$i]}"
-    codes+=("$(kept "${pids[$i]}" "$?")")
+    kept "$i" "${pids[$i]}" "$?"
     if [ "${codes[$i]}" != 0 ]; then
       echo "checks: output of ${commands[$i]}:" >&2
-      cat "$work/$i" >&2
+      copied "$work/$i" >&2
     fi
   done
   kill "$watcher" 2>/dev/null
