@@ -31,6 +31,22 @@ status=0
 pass() { echo "  ok      $1" >&2; }
 fail() { echo "  FAILED  $1" >&2; status=1; }
 
+# `unjobbed [<file>]` prints the file, or its input, without the lines that bash's job control writes
+# there: squad-checks.sh starts its checks under `set -m`, and a loaded machine can refuse a child's
+# setpgid, which bash reports on the run's stderr as `<shell>: child setpgid (<pid> to <pid>):
+# <error>` (agent-squad #557, as #536 found for check-coverage.sh). Every other byte is kept, NULs
+# included. `jobbed <command...>` writes such a line, then runs the command, as a loaded run would.
+unjobbed() { grep -a -vE ': child setpgid \([0-9]+ to [0-9]+\): ' "$@"; }
+jobbed() { echo "$1: child setpgid (89940 to 89940): Operation not permitted" >&2; "$@"; }
+if [ "$(unjobbed <<<"checks: running: true"$'\n'"$(jobbed true 2>&1)"$'\n'"  FAILED  true (exit 1)")" \
+    = "checks: running: true"$'\n'"  FAILED  true (exit 1)" ] \
+  && [ -z "$(jobbed true 2>&1 | unjobbed)" ] \
+  && [ "$(unjobbed <<<"a child setpgid line without its numbers")" = "a child setpgid line without its numbers" ]; then
+  pass "only bash's setpgid lines are dropped: the lines around one are kept as they are, and one alone leaves nothing"
+else
+  fail "unjobbed drops more, or less, than bash's setpgid lines"
+fi
+
 # `list <directory> <command>` makes that checkout's checks the one command given.
 list() { printf '# the sandbox checks\n%s\n' "$2" > "$1/.agent-squad-checks"; }
 
@@ -653,17 +669,23 @@ mkdir -p "$lab/bare"
 for tool in bash git mktemp rm ps sleep; do ln -s "$(type -P "$tool")" "$lab/bare/$tool"; done
 list "$wt" 'true
 false'
-errors="$(cd "$wt" && PATH="$lab/bare" "$runner" </dev/null 2>&1)"
-code=$?
-if [ "$code" -eq 1 ] && [ "$errors" = "checks: running: true
+for run in plain jobbed; do
+  if [ "$run" = plain ]; then
+    errors="$(cd "$wt" && PATH="$lab/bare" "$runner" </dev/null 2>&1)"
+  else
+    errors="$(cd "$wt" && PATH="$lab/bare" jobbed "$runner" </dev/null 2>&1)"
+  fi
+  code=$?
+  if [ "$code" -eq 1 ] && [ "$(unjobbed <<<"$errors")" = "checks: running: true
 checks: running: false
 checks: summary
   ok      true
   FAILED  false (exit 1)" ]; then
-  pass "without caffeinate, the checks run as before, and a failing one fails the run"
-else
-  fail "without caffeinate: exit $code, said: $errors"
-fi
+    pass "without caffeinate, the checks run as before, and a failing one fails the run ($run)"
+  else
+    fail "without caffeinate ($run): exit $code, said: $errors"
+  fi
+done
 list "$wt" "$(printf %q "$lab/waits.sh")"
 #     On macOS, pmset lists a PreventUserIdleSystemSleep that caffeinate holds on behalf of the run
 #     while it runs, and none once it has ended: passed, failed or interrupted, the interruption
@@ -760,14 +782,20 @@ fi
 printf 'one\r\ntwo\000three\n\001\335\001v\nno newline' > "$lab/odd-output"
 odd="cat $(printf %q "$lab/odd-output"); exit 1"
 printf '# squad-checks: side by side\n%s\n' "$odd" > "$wt/.agent-squad-checks"
-(cd "$wt" && TMPDIR="$lab/tmp" "$runner" </dev/null 2>"$lab/odd-shown")
 { printf 'checks: running: %s\nchecks: output of %s:\n' "$odd" "$odd"; cat "$lab/odd-output"
   printf 'checks: summary\n  FAILED  %s (exit 1)\n' "$odd"; } > "$lab/odd-expected"
-if cmp -s "$lab/odd-expected" "$lab/odd-shown"; then
-  pass "side by side, a failing check's output is shown byte for byte, a NUL and no last newline included"
-else
-  fail "side by side, a failing check's output is not shown as it was written: $(od -c "$lab/odd-shown" | head -8)"
-fi
+for run in plain jobbed; do
+  if [ "$run" = plain ]; then
+    (cd "$wt" && TMPDIR="$lab/tmp" "$runner" </dev/null 2>"$lab/odd-shown")
+  else
+    (cd "$wt" && TMPDIR="$lab/tmp" jobbed "$runner" </dev/null 2>"$lab/odd-shown")
+  fi
+  if unjobbed "$lab/odd-shown" | cmp -s "$lab/odd-expected" -; then
+    pass "side by side, a failing check's output is shown byte for byte, a NUL and no last newline included ($run)"
+  else
+    fail "side by side, a failing check's output is not shown as it was written ($run): $(od -c "$lab/odd-shown" | head -8)"
+  fi
+done
 #     Through the gate, a failing check refuses the push, and passing ones let it through.
 printf '# squad-checks: side by side\ntrue\nfalse\n' > "$wt/.agent-squad-checks"
 commit "$wt" "failing checks, side by side" >/dev/null
