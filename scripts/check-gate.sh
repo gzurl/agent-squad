@@ -753,6 +753,21 @@ if [ "$code" -eq 1 ] && grep -qxF "  ok      echo passed-quietly" <<<"$errors" &
 else
   fail "side by side, with a failing check: exit $code, said: $errors"
 fi
+#     The output is shown byte for byte, as the check wrote it: a carriage return, a NUL, a last line
+#     with no newline, and \001\335\001, whose second \001 bash 5.3's read drops in a UTF-8 locale.
+#     The run copies it with builtins, since its shell forks nothing while it waits for the checks
+#     (agent-squad #553).
+printf 'one\r\ntwo\000three\n\001\335\001v\nno newline' > "$lab/odd-output"
+odd="cat $(printf %q "$lab/odd-output"); exit 1"
+printf '# squad-checks: side by side\n%s\n' "$odd" > "$wt/.agent-squad-checks"
+(cd "$wt" && TMPDIR="$lab/tmp" "$runner" </dev/null 2>"$lab/odd-shown")
+{ printf 'checks: running: %s\nchecks: output of %s:\n' "$odd" "$odd"; cat "$lab/odd-output"
+  printf 'checks: summary\n  FAILED  %s (exit 1)\n' "$odd"; } > "$lab/odd-expected"
+if cmp -s "$lab/odd-expected" "$lab/odd-shown"; then
+  pass "side by side, a failing check's output is shown byte for byte, a NUL and no last newline included"
+else
+  fail "side by side, a failing check's output is not shown as it was written: $(od -c "$lab/odd-shown" | head -8)"
+fi
 #     Through the gate, a failing check refuses the push, and passing ones let it through.
 printf '# squad-checks: side by side\ntrue\nfalse\n' > "$wt/.agent-squad-checks"
 commit "$wt" "failing checks, side by side" >/dev/null
