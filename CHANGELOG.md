@@ -1,5 +1,20 @@
 # Changelog
 
+## v75 — 2026-11-06
+- **A check that passed is never reported as failed with exit 127** (#553, found by DEV).
+  `squad-checks.sh`, which the pre-push gate runs, read each check's status with `wait` and forked
+  between its waits. On a machine whose PIDs wrap around while the checks run, a child of its own
+  shell that got a finished check's PID back made bash forget that check's status, so a check that
+  passed could be reported `FAILED … (exit 127)` and the push refused; it was not seen in a log.
+  The runner's waiting loops now fork nothing, and a failing check's output is still shown as it
+  ends, byte for byte.
+- **This repository's own tests** (#549, found by the CTO). `check-install.sh` reads each group's
+  exit status from a file instead of from `wait`, which reported a group that passed as stopped
+  with exit 127 under a heavy load. It does not ship, so nothing changes for a project.
+- **Upgrading from v74:** nothing to do by hand. The charter does not change; the gate runs the fix
+  once v75 is installed. Restart the three sessions, as after any upgrade, to load v75's squad
+  board (README, *Upgrade*).
+
 ## v74 — 2026-11-05
 - **Sourcetree no longer runs `git lfs install` in a project that uses Git LFS** (#543, found by
   the CEO). With LFS's auto-init on, Sourcetree looks for `lfs pre-push` in `.git/hooks/pre-push`,
