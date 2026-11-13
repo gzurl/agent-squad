@@ -12,9 +12,9 @@
 # signature, is the CTO's to triage once it has waited 30 minutes, and nobody else's (#281). An
 # approved PR with a review still requested on GitHub waits for that reviewer: nobody is pinged, and
 # the CEO is told once it has been quiet for an hour, whatever the sessions (#306). An issue in
-# progress whose owner has written no state on it since its label was set is its owner's, to write
-# one that names its approach, 15 minutes after the label, whatever the activity since and even
-# when that owner is busy (#521). A jq that ends its lines with CRLF, as on Windows, finds the same
+# progress whose owner has written no state on it since five minutes before its label was set is
+# its owner's, to write one that names its approach, 15 minutes after the label, whatever the
+# activity since and even when that owner is busy (#521, #561). A jq that ends its lines with CRLF, as on Windows, finds the same
 # (#405). Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
 # happens in a temporary directory; this script touches neither its repository nor GitHub.
 # shellcheck disable=SC2016 # jq programs use jq variables
@@ -104,7 +104,11 @@ crlf() { STUB_CRLF=1 PATH="$lab/crlf:$PATH" "$@"; }
 # The clock: noon. `at <minutes ago>` prints the time that many minutes before it, as GitHub
 # writes times.
 noon="$(jq -n '"2026-10-03T12:00:00Z" | fromdateiso8601')"
-at() { jq -nr --argjson t "$((noon - $1 * 60))" '$t | todateiso8601'; }
+at() {
+  local ago="$1"
+  case "$ago" in *s) ago="${ago%s}" ;; *) ago=$((ago * 60)) ;; esac
+  jq -nr --argjson t "$((noon - ago))" '$t | todateiso8601'
+}
 head1=1111111111111111111111111111111111111111 head2=2222222222222222222222222222222222222222
 # `pr <number> <author> <head> <minutes quiet> [draft]` prints a PR; `issue <number> <owner label>
 # <status label> <minutes quiet>` an issue; `review <commit> <verdict> [association]` a review.
@@ -204,15 +208,15 @@ finds "an issue in progress is its owner's to carry on, one with no owner the CT
   tsv ping CTO "#12" https://github.com/o/r/issues/12 "give it an owner" "2026-10-03 11:15" "")"
 
 # 2b. A state that names the approach (#521): an issue in progress whose owner has written no state
-#     on it since its label was set is its owner's, to write one, 15 minutes after the label,
-#     though it saw activity 5 minutes ago and its owner is busy. A state is a comment by an inside
-#     account whose first line opens with the owner's signature, bold or not, a status emoji, or
-#     the ⏸️ of a pause, and `State:`; one edited in place counts from its edit. DEV owns all of
-#     them.
+#     on it since five minutes before its label was set (#561) is its owner's, to write one, 15
+#     minutes after the label, though it saw activity 5 minutes ago and its owner is busy. A state
+#     is a comment by an inside account whose first line opens with the owner's signature, bold or
+#     not, a status emoji, or the ⏸️ of a pause, and `State:`; one edited in place counts from its
+#     edit. DEV owns all of them.
 rm -f "$state"
 dev_state='**👨🏼‍💻[DEV]:** ⏳ State: started. Approach: the cache.'
 issues=""
-for n in 60 61 62 63 64 65 66 67 68 69 70; do issues+="${issues:+,}$(issue "$n" '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 5)"; done
+for n in 60 61 62 63 64 65 66 67 68 69 70 71 72 73; do issues+="${issues:+,}$(issue "$n" '👨🏼‍💻 owner:dev' '🚧 status:in-progress' 5)"; done
 github '[]' "[$issues]"
 timeline 60 "$(labeled 20)"
 timeline 61 "$(labeled 20)" "$(commented "$dev_state" 18)"
@@ -225,15 +229,20 @@ timeline 67 "$(labeled 20)" "$(commented "$dev_state" 18 18 NONE)"
 timeline 68 "$(labeled 60)" "$(commented "$dev_state" 50)" "$(labeled 20 '👀 status:in-review')" "$(labeled 20)"
 timeline 69 "$(labeled 20)" "$(commented '👨🏼‍💻[DEV]: ⚠️ State: stuck on the cache.' 18)"
 timeline 70 "$(labeled 20)" "$(commented '**👨🏼‍💻[DEV]:** ⏸️ State: paused at a safe point; approach: the cache.' 18)"
+timeline 71 "$(commented "$dev_state" 1203s)" "$(labeled 20)"
+timeline 72 "$(commented "$dev_state" 24)" "$(labeled 20)"
+timeline 73 "$(commented "$dev_state" 26)" "$(labeled 20)"
 approach="write a state on it that names its approach: none from its owner since it went in progress"
 stateless() { tsv "${1:-ping}" DEV "#$2" "https://github.com/o/r/issues/$2" "$approach" "${3:-2026-10-03 11:40}" "${4:-}"; }
 run 0 --session CTO=idle --session DEV=busy --session QA=idle
 finds "an issue in progress with no state from its owner 15 minutes after its label is its owner's, busy or not" "$(
-  stateless ping 60; stateless ping 63; stateless ping 65; stateless ping 66; stateless ping 67; stateless ping 68)"
+  stateless ping 60; stateless ping 63; stateless ping 65; stateless ping 66; stateless ping 67; stateless ping 68
+  stateless ping 73)"
 #    #61 has its state, #62 went in progress 10 minutes ago, #64's state was edited after the label,
-#    #69's is signed without bold, and #70's is a pause's; #63's state predates the label, #65's is
-#    QA's, #66 opens with no `State:`, #67's comes from outside, and #68 went in progress again
-#    after its state.
+#    #69's is signed without bold, #70's is a pause's, and #71's and #72's were written 3 s and
+#    4 minutes before the label, in the same step; #63's state predates the label by 20 minutes and
+#    #73's by 6, #65's is QA's, #66 opens with no `State:`, #67's comes from outside, and #68 went
+#    in progress again after its state.
 run 5 --session CTO=idle --session DEV=busy --session QA=idle
 finds "five minutes later, #62 reaches its 15 minutes and is pinged, and the others are not pinged again" \
   "$(stateless ping 62 "2026-10-03 11:50")"
@@ -241,7 +250,8 @@ finds "five minutes later, #62 reaches its 15 minutes and is pinged, and the oth
 rm -f "$state"
 crlf run 0 --session CTO=idle --session DEV=busy --session QA=idle
 finds "with a jq that ends its lines with CRLF, the same" "$(
-  stateless ping 60; stateless ping 63; stateless ping 65; stateless ping 66; stateless ping 67; stateless ping 68)"
+  stateless ping 60; stateless ping 63; stateless ping 65; stateless ping 66; stateless ping 67; stateless ping 68
+  stateless ping 73)"
 
 #    An idle owner is pinged as a busy one; one that waits on the CEO, or has no session open, is the
 #    CEO's at once, and then not again.
