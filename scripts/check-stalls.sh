@@ -14,9 +14,10 @@
 # the CEO is told once it has been quiet for an hour, whatever the sessions (#306). An issue in
 # progress whose owner has written no state on it since five minutes before its label was set is
 # its owner's, to write one that names its approach, 15 minutes after the label, whatever the
-# activity since and even when that owner is busy (#521, #561). A jq that ends its lines with CRLF, as on Windows, finds the same
-# (#405). Nothing found prints nothing; GitHub unreadable is an error, never an all-clear. Everything
-# happens in a temporary directory; this script touches neither its repository nor GitHub.
+# activity since and even when that owner is busy (#521, #561). A jq that ends its lines with
+# CRLF, as on Windows, finds the same (#405). Nothing found prints nothing; GitHub unreadable is
+# an error, never an all-clear. Everything happens in a temporary directory; this script touches
+# neither its repository nor GitHub.
 # shellcheck disable=SC2016 # jq programs use jq variables
 set -u
 
