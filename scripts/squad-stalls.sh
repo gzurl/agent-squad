@@ -9,8 +9,8 @@
 #   pending, the reviewer it was requested from, whom the watch never pings (agent-squad #306);
 # - a draft: its author, to finish it;
 # - an issue in progress: the role of its owner label, to carry on, or, while that role has written
-#   no state on it since the issue went in progress, to write one that names its approach
-#   (agent-squad #521); with no owner label, the CTO;
+#   no state on it since five minutes before the issue went in progress, to write one that names
+#   its approach (agent-squad #521, #561); with no owner label, the CTO;
 # - an issue or a PR opened from outside the squad and not triaged yet, labelled needs-triage or
 #   with no owner label: the CTO, to triage it (agent-squad #281).
 # Outside means an author whose association GitHub reports as neither the repository's owner, nor
@@ -154,10 +154,12 @@ result="$(jq -nc -L "$(dirname "$0")" --slurpfile prs "$work/prs.json" --slurpfi
   def untriaged: any(.labels[].name; endswith("needs-triage")) or (any(.labels[].name; test("owner:(cto|dev|qa)$")) | not);
   # An issue in progress whose owner has written no state on it since its label was set (agent-squad
   # #521): its owner owes one that names the approach, counted from that label, whatever the
-  # activity since. Without an owner label, the CTO gives it one first.
+  # activity since. A state written up to five minutes before the label counts too, as written in
+  # the same step, whichever of the two GitHub recorded first; an older one belongs to an earlier
+  # spell of work (agent-squad #561). Without an owner label, the CTO gives it one first.
   def stateless: owner as $owner | $progress[.number | tostring] as $p
     | if $owner != null and $p.since != null
-         and all($p.states[]; .role != $owner or (.at | fromdateiso8601) < ($p.since | fromdateiso8601))
+         and all($p.states[]; .role != $owner or (.at | fromdateiso8601) < ($p.since | fromdateiso8601) - 300)
       then {from: $p.since, owner: $owner, stateless: true,
             step: "write a state on it that names its approach: none from its owner since it went in progress"}
       else null end;
