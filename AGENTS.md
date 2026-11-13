@@ -18,6 +18,11 @@ tell the CTO that the squad is not installed.
 The CEO's language is Spanish: everything addressed to the CEO is written in it, whoever writes it.
 Messages between agents are written in English, like everything in the repository and on GitHub.
 
+## The CEO's review
+The CEO reads the README before a release is tagged, when the release changes it: its plan lists
+`- [ ] CEO: read the README`, and a release that leaves the README as the last tag had lists no
+such step. Nothing else is the CEO's to check beyond QA's review.
+
 ## This is the upstream
 This repository is where the method is maintained: its files are **edited here, through PRs**
 reviewed like any other, and projects install tagged versions of it (§7). The charter this

@@ -20,6 +20,11 @@ The CEO's language is <language>: everything addressed to the CEO is written in 
 writes it. Messages between agents are written in English, like everything in the repository and
 on GitHub.
 
+## The CEO's review
+What the CEO checks before a deliverable closes, beyond QA's review: <nothing, or a list such as
+"read the README, when the deliverable changes it">. The CTO writes each as a step of the plan's
+checklist (SQUAD.md §3).
+
 ## Compact instructions
 When compacting this conversation, always preserve: my role and signature; the issue and PR I am
 working on, with their status labels, the PR's `headRefOid`, its latest verdict and open threads;
