@@ -239,11 +239,13 @@ table() {
     | ($plan | labelled("needs-ceo")) as $asked
     # The plan'"'"'s own steps (SQUAD.md §3, agent-squad #560): each checklist line of the plan
     # issue'"'"'s description, outside its markers, its fenced code and its HTML comments, that starts
-    # with the role that takes it, as "- [ ] CEO: read the README", done once ticked.
+    # with the role that takes it, as "- [ ] CEO: read the README", done once ticked. A fence closes
+    # only on a line of its own character, at least as long, as Markdown has it (QA'"'"'s finding on
+    # PR #570).
     | def checklist: reduce splits("\n") as $line ({in: null, steps: []};
-        if .in == "code" then (if $line | test("^\\s*(```|~~~)") then .in = null else . end)
-        elif .in == "comment" then (if $line | test("-->") then .in = null else . end)
-        elif $line | test("^\\s*(```|~~~)") then .in = "code"
+        if .in == "comment" then (if $line | test("-->") then .in = null else . end)
+        elif .in != null then .in as $fence | (if $line | test("^\\s*" + $fence + "+\\s*$") then .in = null else . end)
+        elif $line | test("^\\s*(```|~~~)") then .in = ($line | capture("^\\s*(?<fence>`{3,}|~{3,})").fence)
         elif ($line | test("<!--")) and ($line | test("<!--.*-->") | not) then .in = "comment"
         else .steps += [$line | capture("^\\s*[-*+]\\s+\\[(?<tick>[ xX])\\]\\s+(?<who>CEO|CTO|DEV|QA):\\s*(?<what>\\S.*?)\\s*$")] end)
       | .steps | map({who, what, done: (.tick != " ")});

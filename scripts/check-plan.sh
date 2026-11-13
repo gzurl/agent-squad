@@ -428,7 +428,9 @@ expect_steps "\"No README read:\" and \"README read by:\" are plain text: no row
 #     comments, that starts with a role and names what it does, before the markers or after them,
 #     ticked as [x] or [X], with *, + or - and any indent. A line with no box, no role, a role in
 #     lower case, nothing after the role, or text before its dash, is no step; nor is one inside a
-#     fenced block, an HTML comment or the markers. Ticked, a step is done; unticked, it waits for
+#     fenced block, an HTML comment or the markers. A fence closes only on its own character, at
+#     least as long: a fence of three closes on one of four, a ``` line inside ~~~ hides no step
+#     after it, and a fence of four quotes a fence of three (QA's finding on PR #570). Ticked, a step is done; unticked, it waits for
 #     the version PR, then for its role: the CEO's once asked, another role's at once. The tag waits
 #     for the steps not ticked, named by their rows, past three by their count.
 world && upstream 54
@@ -447,13 +449,19 @@ Note: - [ ] CEO: read it
 - [ ] ceo: read it
 ```
 - [ ] CEO: in a fence
-```
+````
 <!--
 - [ ] CEO: in a comment
 -->
 ~~~
 - [ ] QA: in a tilde fence
+```
 ~~~
+````
+```
+- [ ] CEO: quoted in a fence of four
+```
+````
 
 <!-- squad-plan:start -->
 - [ ] CEO: between the markers
