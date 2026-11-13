@@ -4,8 +4,9 @@
 # closed each, the open PRs with their reviews and CI, the repository's files, its tags and its
 # Releases. Each table is compared whole. A milestone with nothing started, one half done, with a PR
 # under review, one with changes requested and one approved, and one complete, in a project and in a
-# repository that tracks SQUAD.md; the release's version PR open in each of its states, and the PRs
-# that are not it (agent-squad #384); the plan issue rewritten between its markers, and left alone
+# repository that tracks SQUAD.md; the plan's own steps, from the checklist of its description, in
+# each (agent-squad #560); the release's version PR open in each of its states, and the PRs that are
+# not it (agent-squad #384); the plan issue rewritten between its markers, and left alone
 # when only the time changed; the plan issue's sub-issues kept in step with its milestone
 # (agent-squad #391), a write that another run made first taken as done (agent-squad #562); the
 # same table and sub-issues with a jq that ends its lines with CRLF, as on Windows
