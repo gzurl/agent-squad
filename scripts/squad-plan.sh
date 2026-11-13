@@ -32,7 +32,10 @@
 # structure. GitHub allows 100 sub-issues per issue, so those past that stay out, said on the line.
 # Sub-issues are matched by id, and parents by URL, since either may be another repository's. They
 # go through gh api, which any gh can call. A sub-issue that cannot be read or written stops no
-# other plan: every table is still written, and the run ends with exit status 1.
+# other plan: every table is still written, and the run ends with exit status 1. A write that
+# GitHub refuses because a run at the same time made it first (an add of an issue already under the
+# plan issue, a remove of one already gone from it) is done, and the line leaves it out
+# (agent-squad #562).
 #
 # Usage: squad-plan.sh [--update]
 # Output: each table, in Markdown, a blank line between two; with --update, after each table, one
@@ -318,6 +321,13 @@ rewrite() {
   fi
 }
 
+# `sub_issue_now <plan issue> <id>` prints "yes" when the issue of that id is, as GitHub reads now,
+# a sub-issue of the plan issue, and "no" when it is not; when GitHub cannot be read, nothing.
+sub_issue_now() {
+  gh api --paginate --slurp "repos/$repo/issues/$1/sub_issues?per_page=100" </dev/null 2>/dev/null > "$work/now.pages" || return 1
+  jq -r --argjson id "$2" 'if add // [] | any(.id == $id) then "yes" else "no" end' "$work/now.pages"
+}
+
 # `adopt <plan issue>` makes the plan issue's sub-issues its milestone's issues, as table() last
 # read them (agent-squad #391), and says what changed, as the end of the plan issue's line: the
 # issues it added, the sub-issues it removed, the issues GitHub's limit keeps out, and each issue
@@ -339,17 +349,32 @@ adopt() {
        others: [$items[] | select(.parent != null and .parent != $plan)
          | .parent |= (capture("/repos/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)$") | named(.r; .n))]}' \
     "$work/issues.json" > "$work/adopt.json" || die "cannot read the sub-issues of #$number"
+  # A run at the same time as this one, such as a stall-watch pass and another agent's
+  # squad-set-status.sh, may make the same write first, and GitHub then refuses this one
+  # (agent-squad #562). A refused write whose sub-issue is already where it would have put it is
+  # done: gh's message is dropped, and the line leaves it out, since another run made it. Any other
+  # refusal stops the run with gh's message.
+  done_by_another=""
   for pair in $(jq -r '.remove[] | "\(.name):\(.id)"' "$work/adopt.json"); do
-    gh api -X DELETE "repos/$repo/issues/$number/sub_issue" -F sub_issue_id="${pair##*:}" </dev/null >/dev/null \
-      || die "cannot remove ${pair%:*} from the sub-issues of #$number, as gh says above"
+    gh api -X DELETE "repos/$repo/issues/$number/sub_issue" -F sub_issue_id="${pair##*:}" </dev/null >/dev/null 2>"$work/gh.err" \
+      && continue
+    if [ "$(sub_issue_now "$number" "${pair##*:}")" = no ]; then done_by_another+=" ${pair##*:}"; continue; fi
+    cat "$work/gh.err" >&2
+    die "cannot remove ${pair%:*} from the sub-issues of #$number, as gh says above"
   done
   for pair in $(jq -r '.add[] | "\(.number):\(.id)"' "$work/adopt.json"); do
-    gh api -X POST "repos/$repo/issues/$number/sub_issues" -F sub_issue_id="${pair#*:}" </dev/null >/dev/null \
-      || die "cannot add #${pair%%:*} to the sub-issues of #$number, as gh says above"
+    gh api -X POST "repos/$repo/issues/$number/sub_issues" -F sub_issue_id="${pair#*:}" </dev/null >/dev/null 2>"$work/gh.err" \
+      && continue
+    if [ "$(sub_issue_now "$number" "${pair#*:}")" = yes ]; then done_by_another+=" ${pair#*:}"; continue; fi
+    cat "$work/gh.err" >&2
+    die "cannot add #${pair%%:*} to the sub-issues of #$number, as gh says above"
   done
-  jq -r --argjson limit "$limit" '# The issues a line names: each, or past three, how many.
+  jq -r --argjson limit "$limit" --arg others "$done_by_another" '# The issues a line names: each, or past three, how many.
     def names: if length > 3 then "\(length) issues" else map(.name) | join(", ") end;
-    [(if .add != [] then "sub-issues added: \(.add | names)" else empty end),
+    # The writes another run made first are left out.
+    ($others | [splits(" +") | select(. != "") | tonumber]) as $others
+    | .add |= map(select(.id | IN($others[]) | not)) | .remove |= map(select(.id | IN($others[]) | not))
+    | [(if .add != [] then "sub-issues added: \(.add | names)" else empty end),
      (if .remove != [] then "sub-issues removed: \(.remove | names)" else empty end),
      (if .full != [] then "\(.full | names) not added: GitHub allows \($limit) sub-issues" else empty end),
      (.others[] | "\(.name) left under its parent \(.parent)")] | map("; " + .) | join("")' "$work/adopt.json"

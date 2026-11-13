@@ -7,9 +7,10 @@
 # repository that tracks SQUAD.md; the release's version PR open in each of its states, and the PRs
 # that are not it (agent-squad #384); the plan issue rewritten between its markers, and left alone
 # when only the time changed; the plan issue's sub-issues kept in step with its milestone
-# (agent-squad #391); the same table and sub-issues with a jq that ends its lines with CRLF, as on
-# Windows (agent-squad #405); no open milestone, and a milestone without a plan issue; a failed read
-# or write; bad usage. Nothing reaches GitHub.
+# (agent-squad #391), a write that another run made first taken as done (agent-squad #562); the
+# same table and sub-issues with a jq that ends its lines with CRLF, as on Windows
+# (agent-squad #405); no open milestone, and a milestone without a plan issue; a failed read or
+# write; bad usage. Nothing reaches GitHub.
 # shellcheck disable=SC2016 # the checks' bash -c bodies take their values as arguments
 set -u
 
@@ -63,6 +64,11 @@ case "$1 $2" in
   "api "*) shift ;;
   *) exit 1 ;;
 esac
+# `set_parent <id> <parent>` gives the issue of that id that parent, a number or null.
+set_parent() {
+  jq --argjson id "$1" --argjson parent "$2" 'map(if .id == $id then .parent = $parent else . end)' "$W/issues.json" > "$W/issues.new"
+  mv "$W/issues.new" "$W/issues.json"
+}
 filter="" slurp=false paginate=false endpoint="" milestone="" query="" method=GET sub=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -100,12 +106,20 @@ case "$endpoint" in
   # adding a 101st, past GitHub's limit; removing one that is not there fails too. Both take the
   # sub-issue's id, not its number.
   "repos/o/r/issues/"*"/sub_issues?per_page=100")
+    [ ! -e "$W/blind" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
     parent="${endpoint#repos/o/r/issues/}"
     json="$(jq --argjson p "${parent%%/*}" '[.[] | select(.parent == $p) | {number, id, state, title, repository_url}]' "$W/issues.json")" ;;
   repos/o/r/issues/*/sub_issues|repos/o/r/issues/*/sub_issue)
     # gh -F sends a value that is not a number as a string, which GitHub refuses (agent-squad #405).
     [[ "$sub" =~ ^[0-9]+$ ]] || { echo "Invalid property /sub_issue_id: \`\"$sub\"\` is not of type \`integer\`. (HTTP 422)" >&2; exit 1; }
     parent="${endpoint#repos/o/r/issues/}" parent="${parent%%/*}"
+    # Another run's write, or a move by hand, made just before this one (agent-squad #562):
+    # STUB_RACE=<id>=<parent> gives the issue of that id that parent, a number or null, as this write
+    # arrives; with STUB_RACE_BLIND set, GitHub's sub-issues cannot be read from then on.
+    if [ "${STUB_RACE%%=*}" = "$sub" ]; then
+      set_parent "$sub" "${STUB_RACE#*=}"
+      [ -z "${STUB_RACE_BLIND:-}" ] || : > "$W/blind"
+    fi
     case "$method:$endpoint" in
       POST:*/sub_issues) before=null after="$parent" ;;
       DELETE:*/sub_issue) before="$parent" after=null ;;
@@ -114,8 +128,7 @@ case "$endpoint" in
     jq -e --argjson id "$sub" --argjson before "$before" --argjson after "$after" \
       'any(.[]; .id == $id and .parent == $before) and ($after == null or ([.[] | select(.parent == $after)] | length) < 100)' "$W/issues.json" >/dev/null \
       || { echo "HTTP 422: Validation Failed" >&2; exit 1; }
-    jq --argjson id "$sub" --argjson after "$after" 'map(if .id == $id then .parent = $after else . end)' "$W/issues.json" > "$W/issues.new"
-    mv "$W/issues.new" "$W/issues.json"
+    set_parent "$sub" "$after"
     exit 0 ;;
   repos/o/r/pulls/*/reviews) json="$(cat "$W/reviews-$(basename "$(dirname "$endpoint")").json" 2>/dev/null || echo '[]')" ;;
   repos/o/r/contents) json="$(jq -R '{name: .}' "$W/files" | jq -s .)" ;;
@@ -804,5 +817,36 @@ run --update
 check "another repository's sub-issue and parent are told apart from this one's by id and URL" \
   bash -c '[ "$1" -eq 0 ] && [ "$(tail -1 <<<"$2")" = "plan: #10 updated; sub-issues added: #1; sub-issues removed: other/r#1; #2 left under its parent other/r#10" ]' \
   _ "$code" "$out"
+
+#     A run at the same time, such as a stall-watch pass and another agent's squad-set-status.sh,
+#     can make the same write first, and GitHub then refuses this one (agent-squad #562). An add
+#     refused because the issue is already the plan's sub-issue, and a remove refused because the
+#     sub-issue is already gone, are done: exit 0, gh's message dropped, and the line leaves them
+#     out, with a jq that ends its lines with CRLF too. An add refused because the issue went under
+#     another parent leaves it there and fails, as does a refused write when GitHub cannot then be
+#     read; and a write GitHub fails for, with the sub-issue where it was, fails (part 9).
+while IFS='|' read -r race line; do
+  for jq_kind in plain crlf; do
+    sub_world
+    if [ "$jq_kind" = crlf ]; then STUB_RACE="$race" crlf run --update; else STUB_RACE="$race" run --update; fi
+    check "another run's write first ($race), $jq_kind jq: exit 0, nothing of it said" \
+      bash -c '[ "$1" -eq 0 ] && ! grep -qE "HTTP|cannot" <<<"$2" && [ "$(tail -1 <<<"$2")" = "$3" ] && [ "$4" = "1:10 2:10 3:50 4:- 5:10 9:- 10:- " ]' \
+      _ "$code" "$out" "$line" "$(parents)"
+  done
+done <<'CASES'
+9001=10|plan: #10 updated; sub-issues added: #2; sub-issues removed: #4; #3 left under its parent #50
+9004=null|plan: #10 updated; sub-issues added: #1, #2; #3 left under its parent #50
+CASES
+while IFS='|' read -r race blind message parents; do
+  sub_world
+  STUB_RACE="$race" STUB_RACE_BLIND="$blind" run --update
+  check "a refused write ($race${blind:+, then GitHub unreadable}): exit 1, $message" \
+    bash -c '[ "$1" -eq 1 ] && grep -qxF "HTTP 422: Validation Failed" <<<"$2" && grep -qxF "plan: $3" <<<"$2" && [ "$4" = "$5" ]' \
+    _ "$code" "$out" "$message" "$(parents)" "$parents"
+done <<'CASES'
+9001=50||cannot add #1 to the sub-issues of #10, as gh says above|1:50 2:- 3:50 4:- 5:10 9:- 10:- 
+9001=10|1|cannot add #1 to the sub-issues of #10, as gh says above|1:10 2:- 3:50 4:- 5:10 9:- 10:- 
+9004=null|1|cannot remove #4 from the sub-issues of #10, as gh says above|1:- 2:- 3:50 4:- 5:10 9:- 10:- 
+CASES
 
 exit "$status"
