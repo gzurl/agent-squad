@@ -1,5 +1,35 @@
 # Changelog
 
+## v76 — 2026-11-13
+- **A plan's own steps are the project's checklist** (#560, reported by another project's CTO; #563;
+  #567, found by QA in its review of PR #565). The plan no longer has a fixed *README read* row, nor
+  the `No README read:` and `README read by:` lines. §3: what the CEO checks before a deliverable
+  closes is each project's choice, listed in a new *The CEO's review* section of its `AGENTS.md`,
+  and nothing beyond QA's review when it lists nothing. The CTO writes each as a checklist line of
+  the plan issue's description, outside its markers, that starts with the role that takes it (`- [ ]
+  CEO: read the README`); it asks for a CEO step with `needs-ceo`, ticks the line once the step is
+  done, and takes `needs-ceo` off when no other CEO step waits. `squad-plan.sh` shows each line as a
+  row after the issues, done once ticked, in any repository; where `SQUAD.md` is versioned, the tag
+  waits for every step. `BOOTSTRAP.md` row 12b asks the CEO what they check, and
+  `templates/AGENTS.md` has the section, empty.
+- **The stall watch takes a first state written just before the in-progress label** (#561, found by
+  another project's DEV). A state written up to five minutes before `🚧 status:in-progress` counts as
+  written in the same step; an older one, from an earlier spell of work, still does not. §3 and the
+  README say so.
+- **`squad-plan.sh --update` takes a sub-issue write that a concurrent run made first** (#562, found
+  by another project's CTO). When GitHub refuses to add an issue already under the plan issue, or to
+  remove one already gone from it, the run exits 0; any other refusal still exits 1.
+- **This repository's own tests** (#557, found by the CTO). `check-gate.sh` no longer takes the line
+  bash writes for a failed `setpgid`, under load, for the runner's output. It does not ship, so
+  nothing changes for a project.
+- **Upgrading from v75:** by hand, the CTO asks the CEO what they check before a deliverable closes
+  and records it in a *The CEO's review* section of `AGENTS.md` (`BOOTSTRAP.md` row 12b;
+  `templates/AGENTS.md` has it), since the installer keeps a project's own `AGENTS.md`; until then,
+  the CEO checks nothing beyond QA's review. In an open plan issue, `No README read:` and `README
+  read by:` lines are now plain text: write its steps as checklist lines, such as `- [ ] CEO: read
+  the README`, ticked if already done. §3 changes: restart the three sessions, as after any upgrade,
+  to load v76's charter and squad board (README, *Upgrade*).
+
 ## v75 — 2026-11-06
 - **A check that passed is never reported as failed with exit 127** (#553, found by DEV).
   `squad-checks.sh`, which the pre-push gate runs, read each check's status with `wait` and forked
