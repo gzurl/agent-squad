@@ -4,8 +4,9 @@
 # closed each, the open PRs with their reviews and CI, the repository's files, its tags and its
 # Releases. Each table is compared whole. A milestone with nothing started, one half done, with a PR
 # under review, one with changes requested and one approved, and one complete, in a project and in a
-# repository that tracks SQUAD.md; the release's version PR open in each of its states, and the PRs
-# that are not it (agent-squad #384); the plan issue rewritten between its markers, and left alone
+# repository that tracks SQUAD.md; the plan's own steps, from the checklist of its description, in
+# each (agent-squad #560); the release's version PR open in each of its states, and the PRs that are
+# not it (agent-squad #384); the plan issue rewritten between its markers, and left alone
 # when only the time changed; the plan issue's sub-issues kept in step with its milestone
 # (agent-squad #391), a write that another run made first taken as done (agent-squad #562); the
 # same table and sub-issues with a jq that ends its lines with CRLF, as on Windows
@@ -226,7 +227,7 @@ upstream() {
   printf 'README.md\nSQUAD.md\n' > "$W/files"
   printf '# Squad Charter\n\n> **Version:** %s (2026-10-13). **Home:** the agent-squad repository.\n' "$1" > "$W/SQUAD.md"
 }
-PLAN_BODY=$'The plan of v55.\n\n<!-- squad-plan:start -->\nnothing yet\n<!-- squad-plan:end -->\n\nThe CEO reads the README here.'
+PLAN_BODY=$'The plan of v55.\n\n<!-- squad-plan:start -->\nnothing yet\n<!-- squad-plan:end -->\n\n- [ ] CEO: read the README'
 
 # 1. No open plan issue: an open issue with one marker only, one that quotes both inline, as an
 #    issue describing the plan does, one with both in the wrong order, one with either marker inline
@@ -251,8 +252,8 @@ done
 
 # 2. Nothing started, in a project: rows by priority then number, a long title cut at a word, a pipe
 #    kept out of the table, an issue without an owner, an issue that only quotes the markers, which
-#    is a row like any other, and the README read waiting for the open issues, with the plan issue
-#    left out of rows and counts.
+#    is a row like any other, and the plan's step, the CEO's read of the README, waiting for the
+#    open issues, with the plan issue left out of rows and counts.
 world
 issue 3 open "Third, a feature" "👨🏼‍💻 owner:dev" "🟡 P2"
 issue 1 open "First, the most urgent" "👷🏼‍♂️ owner:cto" "🔴 P1"
@@ -270,7 +271,7 @@ cat > "$lab/expected" <<EOF
 | 2 | #3 Third, a feature | DEV | ⚪ not started | DEV: start it |
 | 3 | #4 Quotes the markers | DEV | ⚪ not started | DEV: start it |
 | 4 | #2 Second \| with a pipe, and a title long enough… | — | ⚪ not started | CTO: give it an owner |
-| 5 | README read | CEO | ⚪ waits for 4 issues | — |
+| 5 | read the README | CEO | ⚪ waits for 4 issues | — |
 EOF
 check "nothing started, in a project: the table as expected, exit 0" bash -c '[ "$1" -eq 0 ]' _ "$code"
 check "the table is the one expected" same "$lab/expected"
@@ -323,8 +324,8 @@ cat > "$lab/expected" <<EOF
 | 12 | #20 Approved, a reviewer requested | DEV | 👀 PR #17 approved (\`fffffff\`), CI ✅ | wait for alice |
 | 13 | #21 In review, no open PR | DEV | 👀 in review, no open PR | DEV: carry on |
 | 14 | Version PR | CTO | ⚪ waits for 9 issues | — |
-| 15 | README read | CEO | ⚪ waits for the version PR | — |
-| 16 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |
+| 15 | read the README | CEO | ⚪ waits for the version PR | — |
+| 16 | Tag, Release, install here | CTO | ⚪ waits for the version PR | — |
 EOF
 check "half done, upstream: exit 0" bash -c '[ "$1" -eq 0 ]' _ "$code"
 check "the table is the one expected" same "$lab/expected"
@@ -335,164 +336,171 @@ check "with a jq that ends its lines with CRLF: exit 0, and the same table" \
   bash -c '[ "$1" -eq 0 ] && diff "$2" <(printf "%s\n" "$3") >&2' _ "$code" "$lab/expected" "$out"
 
 # 4. The release's own steps, step by step, upstream: every issue closed, the version PR not yet
-#    merged, then merged, then the README asked, then the tag, the Release and the install.
+#    merged, then merged, then the plan's step asked of the CEO, ticked, then the tag, the Release
+#    and the install.
 world && upstream 54
 issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
 plan_issue 10
-# `steps` prints the release's own rows of the last run.
-steps() { grep -E '^\| [0-9]+ \| (Version PR|README read|Tag, Release, install here) \|' <<<"$out"; }
+# `steps` prints the rows of the last run that are no issue's: the release's and the plan's steps.
+steps() { grep -E '^\| [0-9]+ \| [^#]' <<<"$out"; }
 expect_steps() {
   run
   check "$1" bash -c '[ "$1" = "$2" ]' _ "$(steps)" "$2"
 }
-expect_steps "every issue closed, the version PR not merged: the CTO opens it" \
+expect_steps "every issue closed, the version PR not merged: the CTO opens it, and the step and the tag wait for it" \
 "| 2 | Version PR | CTO | ⚪ not started | CTO: open it |
-| 3 | README read | CEO | ⚪ waits for the version PR | — |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+| 3 | read the README | CEO | ⚪ waits for the version PR | — |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the version PR | — |"
 upstream 55
-expect_steps "the version PR merged: the CTO asks the CEO" \
+expect_steps "the version PR merged: the CTO asks the CEO, and the tag waits for the step" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+| 3 | read the README | CEO | ⚪ not asked yet | CTO: ask the CEO |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for step 3 | — |"
 set_issue 10 '.labels += [{name: "👨🏻‍💼 needs-ceo"}]'
-expect_steps "the plan issue labelled needs-ceo: the README read waits for the CEO" \
+expect_steps "the plan issue labelled needs-ceo: the step waits for the CEO" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ⏳ waits for the CEO | CEO: read it |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
-set_issue 10 '.labels = []'
+| 3 | read the README | CEO | ⏳ waits for the CEO | CEO: read the README |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for step 3 | — |"
+set_issue 10 '.labels = [] | .body |= sub("- \\[ \\] CEO:"; "- [x] CEO:")'
+expect_steps "the step ticked: done, and the CTO tags the release" \
+"| 2 | Version PR | CTO | ✅ done | — |
+| 3 | read the README | CEO | ✅ done | — |
+| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
 echo '[{"ref": "refs/tags/v550"}]' > "$W/refs.json"
 expect_steps "a tag whose name only starts the same is not the release's" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
+| 3 | read the README | CEO | ✅ done | — |
+| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
 echo '[{"ref": "refs/tags/v55"}, {"ref": "refs/tags/v550"}]' > "$W/refs.json"
-expect_steps "tagged: the README read is done, and the CTO publishes the Release" \
+expect_steps "tagged: the CTO publishes the Release" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ✅ done | — |
+| 3 | read the README | CEO | ✅ done | — |
 | 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ⚪ | CTO: publish the Release |"
 echo '[{"tag_name": "v54"}, {"tag_name": "v55"}]' > "$W/releases.json"
 printf '2026-10-13 18:00 v54 -> v55\n2026-10-13 18:05 v55 -> v54\n' > "$project/.agent-squad/install.log"
 expect_steps "published, and installed here earlier but not last: the CTO installs it" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ✅ done | — |
+| 3 | read the README | CEO | ✅ done | — |
 | 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ✅, install ⚪ | CTO: install it here |"
 printf '2026-10-13 18:10 v54 -> v55\n' >> "$project/.agent-squad/install.log"
 expect_steps "installed here: every step done" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ✅ done | — |
+| 3 | read the README | CEO | ✅ done | — |
 | 4 | Tag, Release, install here | CTO | ✅ done | — |"
 #    A later release's install brings this one in, and the row names it (agent-squad #462).
 printf '2026-10-14 09:00 v55 -> v56\n' >> "$project/.agent-squad/install.log"
 expect_steps "installed by a later release, v56: done, naming it" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ✅ done | — |
+| 3 | read the README | CEO | ✅ done | — |
 | 4 | Tag, Release, install here | CTO | ✅ done, installed by v56 | — |"
 echo '[{"tag_name": "v54"}]' > "$W/releases.json"
 expect_steps "and with its Release not published, the install is still done, by v56" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ✅ done | — |
+| 3 | read the README | CEO | ✅ done | — |
 | 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ✅ by v56 | CTO: publish the Release |"
 echo '[{"tag_name": "v54"}, {"tag_name": "v55"}]' > "$W/releases.json"
 printf '2026-10-14 09:00 v55 -> v56\n' > "$project/.agent-squad/install.log"
 check "with the header counting the issues closed, the plan issue left out" \
   bash -c '[[ "$(head -1 <<<"$1")" == *" · 1 of 1 issues closed · "* ]]' _ "$out"
 
-# 4b. A release that takes no README read (agent-squad #429): the line of the plan issue's
-#     description that says so, outside its markers, is its README row, before the tag and after it,
-#     and the CTO tags the release once its version PR is merged.
+# 4b. A plan with no step (agent-squad #560): no row between the version PR and the tag, which waits
+#     for the version PR alone. The lines that took a README read away or gave it to another role
+#     (agent-squad #429, #462) are plain text now, and make no row.
 world && upstream 54
 issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
 plan_issue 10
 # `plan_body <text before the markers>` writes the plan issue's description, the table after it.
 plan_body() { set_issue 10 '.body = $body' --arg body "$1"$'\n\n<!-- squad-plan:start -->\nnothing yet\n<!-- squad-plan:end -->'; }
-plan_body $'The plan of v55.\n\nNo README read: it only fixes things'
-expect_steps "no README read, the version PR not merged: the row says so, and the tag waits for the version PR" \
+plan_body 'The plan of v55.'
+expect_steps "no step, the version PR not merged: the tag waits for it" \
 "| 2 | Version PR | CTO | ⚪ not started | CTO: open it |
-| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the version PR | — |"
+| 3 | Tag, Release, install here | CTO | ⚪ waits for the version PR | — |"
 upstream 55
-expect_steps "the version PR merged: the CTO tags it, asking the CEO nothing" \
+expect_steps "no step, the version PR merged: the CTO tags it" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
-| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
-echo '[{"ref": "refs/tags/v55"}]' > "$W/refs.json"
-expect_steps "tagged: the row still says that no read was taken" \
+| 3 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
+plan_body $'No README read: it only fixes things\nREADME read by: QA, as the CEO asked'
+expect_steps "\"No README read:\" and \"README read by:\" are plain text: no row, and the tag waits for nothing" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
-| 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ⚪ | CTO: publish the Release |"
-echo '[]' > "$W/refs.json"
-#     The line counts only at the start of a line, with a reason, and outside the markers: the table
-#     between them is rewritten at every update.
-for text in $'Note: No README read: it only fixes things' 'No README read:' $'No README read:   '; do
-  plan_body "$text"
-  expect_steps "'$text' is no such line: the CTO asks the CEO" \
-"| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
-done
-set_issue 10 '.body = $body' --arg body $'The plan.\n\n<!-- squad-plan:start -->\nNo README read: it only fixes things\n<!-- squad-plan:end -->'
-expect_steps "nor is the line between the markers" \
-"| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
-#     After the markers, and with the reason's pipe kept out of the table's cells, it counts too.
-set_issue 10 '.body = $body' --arg body $'The plan.\n\n<!-- squad-plan:start -->\nnothing yet\n<!-- squad-plan:end -->\nNo README read: a fix | no rule'
-expect_steps "after the markers too, its pipe escaped" \
-"| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ➖ not taken: a fix \\| no rule | — |
-| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
+| 3 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
 
-# 4c. A README read that the CEO gives another role (agent-squad #462): a line of the plan issue's
-#     description, outside its markers, that starts with "README read by:", names the role, then
-#     gives the reason. The row is that role's, with the reason, while it waits for the version PR,
-#     then while the role reads it, then once the release is tagged; in a project, while issues are
-#     open, then once they are closed. Until the tag, it waits for that role's OK (QA's finding on
-#     PR #476). A line with no role, no reason, or no blank or ,:; after the role is no such line,
-#     and a release that takes no read says so whatever names a reader.
+# 4c. The plan's steps (agent-squad #560): each checklist line outside the markers, the code and the
+#     comments, that starts with a role and names what it does, before the markers or after them,
+#     ticked as [x] or [X], with *, + or - and any indent. A line with no box, no role, a role in
+#     lower case, nothing after the role, or text before its dash, is no step; nor is one inside a
+#     fenced block, an HTML comment or the markers. A fence closes only on its own character, at
+#     least as long: a fence of three closes on one of four, a ``` line inside ~~~ hides no step
+#     after it, and a fence of four quotes a fence of three (QA's finding on PR #570).
+#     Ticked, a step is done; unticked, it waits for
+#     the version PR, then for its role: the CEO's once asked, another role's at once. The tag waits
+#     for the steps not ticked, named by their rows, past three by their count.
 world && upstream 54
 issue 1 closed "Done" "👨🏼‍💻 owner:dev" && set_issue 1 '.closer = 11'
 plan_issue 10
-plan_body $'The plan of v55.\n\nREADME read by: QA, as the CEO asked on 2026-10-19'
-expect_steps "given to QA, the version PR not merged: QA's row waits for it, with the reason" \
+set_issue 10 '.body = $body' --arg body 'The plan of v55.
+- [ ] CEO: read the README
+- [x] QA: try the install | twice
+* [X] CTO: announce it
++ [ ] DEV: update the board
+- [ ] read the docs
+- [ ] someone: read it
+- CEO: read it
+Note: - [ ] CEO: read it
+- [ ] CEO:
+- [ ] ceo: read it
+```
+- [ ] CEO: in a fence
+````
+<!--
+- [ ] CEO: in a comment
+-->
+~~~
+- [ ] QA: in a tilde fence
+```
+~~~
+````
+```
+- [ ] CEO: quoted in a fence of four
+```
+````
+
+<!-- squad-plan:start -->
+- [ ] CEO: between the markers
+<!-- squad-plan:end -->
+  - [ ] QA: indented, after the markers'
+expect_steps "the version PR not merged: the steps not ticked wait for it, the ticked ones are done" \
 "| 2 | Version PR | CTO | ⚪ not started | CTO: open it |
-| 3 | README read | QA | ⚪ waits for the version PR; QA reads it: as the CEO asked on 2026-10-19 | — |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for QA's OK | CTO: tag it, on QA's OK |"
+| 3 | read the README | CEO | ⚪ waits for the version PR | — |
+| 4 | try the install \\| twice | QA | ✅ done | — |
+| 5 | announce it | CTO | ✅ done | — |
+| 6 | update the board | DEV | ⚪ waits for the version PR | — |
+| 7 | indented, after the markers | QA | ⚪ waits for the version PR | — |
+| 8 | Tag, Release, install here | CTO | ⚪ waits for the version PR | — |"
 upstream 55
-expect_steps "the version PR merged: QA reads it" \
+expect_steps "the version PR merged: each step waits for its role, and the tag for each step not ticked" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | QA | ⏳ QA reads it: as the CEO asked on 2026-10-19 | QA: read it |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for QA's OK | CTO: tag it, on QA's OK |"
-echo '[{"ref": "refs/tags/v55"}]' > "$W/refs.json"
-expect_steps "tagged: done by QA" \
+| 3 | read the README | CEO | ⚪ not asked yet | CTO: ask the CEO |
+| 4 | try the install \\| twice | QA | ✅ done | — |
+| 5 | announce it | CTO | ✅ done | — |
+| 6 | update the board | DEV | ⏳ waits for DEV | DEV: update the board |
+| 7 | indented, after the markers | QA | ⏳ waits for QA | QA: indented, after the markers |
+| 8 | Tag, Release, install here | CTO | ⚪ waits for steps 3, 6, 7 | — |"
+set_issue 10 '.body |= sub("\\* \\[X\\] CTO:"; "* [ ] CTO:")'
+check "a fourth step not ticked: the tag counts them, and the CTO's step waits for the CTO" \
+  bash -c 'grep -qxF "| 5 | announce it | CTO | ⏳ waits for the CTO | CTO: announce it |" <<<"$1" && grep -qxF "| 8 | Tag, Release, install here | CTO | ⚪ waits for 4 steps | — |" <<<"$1"' \
+  _ "$(run && steps)"
+set_issue 10 '.body |= (sub("- \\[ \\] CEO: read the README"; "- [x] CEO: read the README") | sub("\\* \\[ \\] CTO:"; "* [x] CTO:") | sub("\\+ \\[ \\] DEV:"; "+ [x] DEV:"))'
+check "one step left: the tag names it" \
+  bash -c 'grep -qxF "| 8 | Tag, Release, install here | CTO | ⚪ waits for step 7 | — |" <<<"$1"' _ "$(run && steps)"
+set_issue 10 '.body |= sub("  - \\[ \\] QA:"; "  - [x] QA:")'
+expect_steps "every step ticked: the CTO tags the release" \
 "| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | QA | ✅ done by QA: as the CEO asked on 2026-10-19 | — |
-| 4 | Tag, Release, install here | CTO | ⏳ tag ✅, Release ⚪, install ⚪ | CTO: publish the Release |"
-echo '[]' > "$W/refs.json"
-plan_body 'README read by: CEO, as planned'
-expect_steps "a line that names the CEO keeps the tag waiting for the CEO's OK" \
-"| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ⏳ CEO reads it: as planned | CEO: read it |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
-for text in 'README read by: someone, as the CEO asked' 'README read by: QA' 'Note: README read by: QA, as the CEO asked' \
-  "README read by: QA's review of the version PR, as the CEO asked"; do
-  plan_body "$text"
-  expect_steps "'$text' is no such line: the CEO's row" \
-"| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |"
-done
-plan_body $'No README read: it only fixes things\nREADME read by: QA, as the CEO asked'
-expect_steps "a release that takes no read says so, whoever is named to read it" \
-"| 2 | Version PR | CTO | ✅ done | — |
-| 3 | README read | CEO | ➖ not taken: it only fixes things | — |
-| 4 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
-world
-issue 1 open "Open" "👨🏼‍💻 owner:dev"
-plan_issue 10 && plan_body 'README read by: CTO: the CEO is away'
-expect_steps "a project, an issue open: the CTO's row waits for it, with the reason" \
-  "| 2 | README read | CTO | ⚪ waits for #1; CTO reads it: the CEO is away | — |"
-set_issue 1 '.state = "closed"'
-expect_steps "and every issue closed: the CTO reads it" "| 2 | README read | CTO | ⏳ CTO reads it: the CEO is away | CTO: read it |"
+| 3 | read the README | CEO | ✅ done | — |
+| 4 | try the install \\| twice | QA | ✅ done | — |
+| 5 | announce it | CTO | ✅ done | — |
+| 6 | update the board | DEV | ✅ done | — |
+| 7 | indented, after the markers | QA | ✅ done | — |
+| 8 | Tag, Release, install here | CTO | ⚪ not tagged yet | CTO: tag it |"
 
 # 5. The release's version PR (agent-squad #384), upstream: the open PR whose description names the
 #    plan issue ("Part of #10") and that closes no issue. None of these is it, each numbered above
@@ -518,8 +526,8 @@ cat > "$lab/expected" <<EOF
 | 1 | #1 Done | DEV | ✅ closed by PR #11 | — |
 | 2 | #2 Second | DEV | 👀 PR #30 in review (\`bbbbbbb\`), CI ✅ | QA: review |
 | 3 | Version PR | CTO | ⚪ waits for #2 | — |
-| 4 | README read | CEO | ⚪ waits for the version PR | — |
-| 5 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |
+| 4 | read the README | CEO | ⚪ waits for the version PR | — |
+| 5 | Tag, Release, install here | CTO | ⚪ waits for the version PR | — |
 EOF
 check "PRs that name the plan issue or another, none the version PR: exit 0" bash -c '[ "$1" -eq 0 ]' _ "$code"
 check "the table is the one expected, the PR that closes #2 on its row" same "$lab/expected"
@@ -581,15 +589,29 @@ run
 check "a PR on a release branch, which GitHub does not link, shows on its issue's row" \
   bash -c 'grep -qxF "$2" <<<"$1"' _ "$out" "| 1 | #1 Fixed on the release branch | DEV | 👀 PR #40 in review (\`aaaaaaa\`), CI ✅ | QA: review |"
 
-# 6. A project's README read, every issue closed: not asked yet, then waiting for the CEO.
+# 6. A project's steps (agent-squad #560), where SQUAD.md has no version: they wait for the open
+#    issues, then for their role, and once ticked they are done, as upstream; a plan with no step
+#    has no row past its issues.
 world
-issue 1 closed "Done" "👨🏼‍💻 owner:dev"
-plan_issue 10
-expect_steps "a project, every issue closed: the CTO asks the CEO" "| 2 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |"
+issue 1 open "Open" "👨🏼‍💻 owner:dev"
+plan_issue 10 && plan_body $'The plan.\n- [ ] CEO: read the README\n- [ ] QA: try the app'
+expect_steps "a project, an issue open: its steps wait for it" \
+"| 2 | read the README | CEO | ⚪ waits for #1 | — |
+| 3 | try the app | QA | ⚪ waits for #1 | — |"
+set_issue 1 '.state = "closed"'
+expect_steps "a project, every issue closed: the CTO asks the CEO, and QA tries the app" \
+"| 2 | read the README | CEO | ⚪ not asked yet | CTO: ask the CEO |
+| 3 | try the app | QA | ⏳ waits for QA | QA: try the app |"
 set_issue 10 '.labels += [{name: "👨🏻‍💼 needs-ceo"}]'
-expect_steps "a project, the plan issue labelled needs-ceo: the CEO reads it" "| 2 | README read | CEO | ⏳ waits for the CEO | CEO: read it |"
-set_issue 10 '.labels = []' && plan_body $'The plan.\nNo README read: it only fixes things'
-expect_steps "a project's release that takes no README read says so (agent-squad #429)" "| 2 | README read | CEO | ➖ not taken: it only fixes things | — |"
+expect_steps "a project, the plan issue labelled needs-ceo: the CEO reads it" \
+"| 2 | read the README | CEO | ⏳ waits for the CEO | CEO: read the README |
+| 3 | try the app | QA | ⏳ waits for QA | QA: try the app |"
+set_issue 10 '.labels = []' && plan_body $'The plan.\n- [x] CEO: read the README\n- [X] QA: try the app'
+expect_steps "a project's steps ticked: done, though SQUAD.md has no version" \
+"| 2 | read the README | CEO | ✅ done | — |
+| 3 | try the app | QA | ✅ done | — |"
+plan_body $'The plan.\nNo README read: it only fixes things'
+expect_steps "a project's plan with no step: no row past its issues" ""
 
 # 7. --update: the table between the markers, the text around them kept; then nothing written
 #    while only the time changes, and written again when the table does.
@@ -602,7 +624,7 @@ run --update
 check "--update writes the plan issue once, saying so, and makes the milestone's issue its sub-issue" \
   bash -c '[ "$1" -eq 0 ] && [ "$2" -eq 1 ] && [ "$(tail -1 <<<"$3")" = "plan: #10 updated; sub-issues added: #1" ]' _ "$code" "$(edits)" "$out"
 check "with the table between its markers, and the text around them as it was" \
-  bash -c '[ "$1" = "The plan of v55."$'\''\n\n'\''"<!-- squad-plan:start -->"$'\''\n'\''"$2"$'\''\n'\''"<!-- squad-plan:end -->"$'\''\n\n'\''"The CEO reads the README here." ]' \
+  bash -c '[ "$1" = "The plan of v55."$'\''\n\n'\''"<!-- squad-plan:start -->"$'\''\n'\''"$2"$'\''\n'\''"<!-- squad-plan:end -->"$'\''\n\n'\''"- [ ] CEO: read the README" ]' \
   _ "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json")" "$table"
 run --update
 check "run again, it writes nothing, and says so" \
@@ -618,7 +640,7 @@ set_issue 10 '.body = "<!-- squad-plan:start -->\n<!-- squad-plan:end -->"'
 run --update
 check "a description that holds its markers alone, nothing between them: the table goes between" \
   bash -c '[ "$1" -eq 1 ] && [ "$2" = "<!-- squad-plan:start -->"$'\''\n'\''"$3"$'\''\n'\''"<!-- squad-plan:end -->" ]' \
-  _ "$(edits)" "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json")" "$table"
+  _ "$(edits)" "$(jq -r '.[] | select(.number == 10) | .body' "$W/issues.json")" "$(grep -vF '| read the README |' <<<"$table")"
 set_issue 1 '.labels += [{name: "🚧 status:in-progress"}]'
 run --update
 check "a state changed: it writes again" \
@@ -627,7 +649,7 @@ run
 check "and a run without --update writes nothing" bash -c '[ "$1" -eq 0 ] && ! grep -q "^plan: " <<<"$2"' _ "$(edits)" "$out"
 
 # 8. Two plan issues, in a repository that tracks SQUAD.md: v55's, with the release's own steps, and a
-#    phase's, whose milestone names no version, with the README read alone. Each gets its own
+#    phase's, whose milestone names no version, with the plan's step alone. Each gets its own
 #    milestone's table, in the order of their numbers, a blank line between them, and is written
 #    with it, its milestone's issue made its sub-issue. A plan issue with no milestone gets one
 #    line, and nothing written.
@@ -644,7 +666,7 @@ plan: #3 is a plan issue with no milestone, so it has no table
 | | 📌 Step | 👤 Who | 🚦 State | ⏭️ Next |
 |---|---|---|---|---|
 | 1 | #2 Done in phase 2 | DEV | ✅ closed | — |
-| 2 | README read | CEO | ⚪ not asked yet | CTO: ask the CEO |
+| 2 | read the README | CEO | ⚪ not asked yet | CTO: ask the CEO |
 plan: #5 updated; sub-issues added: #2
 
 🗺️ **[v55 — the labels](https://github.com/o/r/milestone/40)** · 0 of 1 issues closed · updated $time
@@ -653,8 +675,8 @@ plan: #5 updated; sub-issues added: #2
 |---|---|---|---|---|
 | 1 | #1 First | DEV | ⚪ not started | DEV: start it |
 | 2 | Version PR | CTO | ⚪ waits for #1 | — |
-| 3 | README read | CEO | ⚪ waits for the version PR | — |
-| 4 | Tag, Release, install here | CTO | ⚪ waits for the CEO's OK | CTO: tag it, on the CEO's OK |
+| 3 | read the README | CEO | ⚪ waits for the version PR | — |
+| 4 | Tag, Release, install here | CTO | ⚪ waits for the version PR | — |
 plan: #10 updated; sub-issues added: #1
 EOF
 check "two plan issues and one with no milestone: exit 0, two edits" bash -c '[ "$1" -eq 0 ] && [ "$2" -eq 2 ]' _ "$code" "$(edits)"
