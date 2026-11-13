@@ -1,16 +1,17 @@
 # Changelog
 
 ## v76 — 2026-11-13
-- **A plan's own steps are the project's checklist** (#560, reported by another project's CTO; #563,
-  #567). The plan no longer has a fixed *README read* row, nor the `No README read:` and `README
-  read by:` lines. §3: what the CEO checks before a deliverable closes is each project's choice,
-  listed in a new *The CEO's review* section of its `AGENTS.md`, and nothing beyond QA's review when
-  it lists nothing. The CTO writes each as a checklist line of the plan issue's description, outside
-  its markers, that starts with the role that takes it (`- [ ] CEO: read the README`); it asks for a
-  CEO step with `needs-ceo`, ticks the line once the step is done, and takes `needs-ceo` off when no
-  other CEO step waits. `squad-plan.sh` shows each line as a row after the issues, done once ticked,
-  in any repository; where `SQUAD.md` is versioned, the tag waits for every step. `BOOTSTRAP.md` row
-  12b asks the CEO what they check, and `templates/AGENTS.md` has the section, empty.
+- **A plan's own steps are the project's checklist** (#560, reported by another project's CTO; #563;
+  #567, found by QA in its review of PR #565). The plan no longer has a fixed *README read* row, nor
+  the `No README read:` and `README read by:` lines. §3: what the CEO checks before a deliverable
+  closes is each project's choice, listed in a new *The CEO's review* section of its `AGENTS.md`,
+  and nothing beyond QA's review when it lists nothing. The CTO writes each as a checklist line of
+  the plan issue's description, outside its markers, that starts with the role that takes it (`- [ ]
+  CEO: read the README`); it asks for a CEO step with `needs-ceo`, ticks the line once the step is
+  done, and takes `needs-ceo` off when no other CEO step waits. `squad-plan.sh` shows each line as a
+  row after the issues, done once ticked, in any repository; where `SQUAD.md` is versioned, the tag
+  waits for every step. `BOOTSTRAP.md` row 12b asks the CEO what they check, and
+  `templates/AGENTS.md` has the section, empty.
 - **The stall watch takes a first state written just before the in-progress label** (#561, found by
   another project's DEV). A state written up to five minutes before `🚧 status:in-progress` counts as
   written in the same step; an older one, from an earlier spell of work, still does not. §3 and the
