@@ -32,3 +32,4 @@ scripts/check-sessions.sh
 scripts/check-set-status.sh
 scripts/check-setup-labels.sh
 scripts/check-plan.sh
+scripts/check-timeline.sh
