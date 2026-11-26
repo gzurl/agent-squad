@@ -1,5 +1,23 @@
 # Changelog
 
+## v77 — 2026-11-26
+- **A release's timeline: where its time went, issue by issue** (#574, from the CTO).
+  `/squad-timeline`, in any of the squad's sessions, shows a table for the release in progress, or
+  for the last one closed, or for the one named, as `/squad-timeline v76`: one row per issue and its
+  PR, with how long it took before the PR, how long the PR waited for QA, was being fixed and waited
+  for its merge, the total, its rounds of review, how many sent it back and its findings, then a
+  total row. It reads it all from GitHub (the status labels, the verdicts and the merges), in whole
+  minutes; the times are wall-clock, not effort, as the line under the table says, and a cell with
+  no data shows `—`. The README names it.
+- **A write to GitHub whose answer was lost is looked up before it is repeated** (#572, from the
+  CTO; QA's finding in its review of PR #576). §2.4: when a command that writes to GitHub runs out
+  of time, or ends without the answer that says what it did, the agent waits for it to end, or
+  stops it, then looks for the write on GitHub, and repeats it only when it is not there; §2.4 says
+  what it looks up for a comment, a label, a review and a merge. The playbook's scripts that write
+  can be run again as they are.
+- **Upgrading from v76:** nothing by hand. §2.4 changes and a command is added: restart the three
+  sessions, as after any upgrade, to load v77's charter and commands (README, *Upgrade*).
+
 ## v76 — 2026-11-13
 - **A plan's own steps are the project's checklist** (#560, reported by another project's CTO; #563;
   #567, found by QA in its review of PR #565). The plan no longer has a fixed *README read* row, nor
