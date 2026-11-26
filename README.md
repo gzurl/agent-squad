@@ -270,6 +270,14 @@ request, and at every pass of `/squad-watch`, so that you can follow the work fr
 to the 100 GitHub allows, with GitHub's bar of how many are done, and each of them names the plan
 issue as its parent.
 
+**Where a release's time went.** `/squad-timeline`, in any of the squad's sessions, shows you a
+table for the release in progress, or for the last one closed, or for the one you name, as
+`/squad-timeline v76`. It has one row per issue: how long it took before its pull request, how long
+that pull request waited for QA, was being fixed and waited for its merge, the total, its rounds of
+review, how many of them sent it back, and its findings. It reads it all from GitHub: the status
+labels, the verdicts and the merges. Its times are wall-clock, not effort: a night or a pause
+counts.
+
 Whenever the CTO reports on the agents, during these commands or when you ask how they are doing,
 each agent gets a line of its own, always in the order CTO, DEV, QA, with an emoji for its state:
 working, paused, free, waiting for you, or no answer. The same lines come back in every update, so
@@ -508,8 +516,9 @@ squad on the machine.
 
 The commands that pause, steer, resume, update, upgrade or remove the squad, and
 `/squad-save-state`, are yours alone: no agent can run one on its own. When the CTO passes one on to
-DEV and QA, they read its file and follow their part, which still works. `/squad-watch` and
-`/squad-usage` the agents may run themselves, as autopilot does with the watch.
+DEV and QA, they read its file and follow their part, which still works. `/squad-watch`,
+`/squad-usage` and `/squad-timeline` the agents may run themselves, as autopilot does with the
+watch.
 
 | Command | Type it in | What it does |
 |---|---|---|
@@ -519,6 +528,7 @@ DEV and QA, they read its file and follow their part, which still works. `/squad
 | 🔎&nbsp;`/squad-watch` | the CTO's session | Looks for stalled work and pings whoever owns its next step; autopilot runs it every half hour. |
 | 💾&nbsp;`/squad-save-state` | any session | Its agent writes its state on GitHub, before you type `/compact` ([When a session's context fills up](#when-a-sessions-context-fills-up)). |
 | 📊&nbsp;`/squad-usage`<br>`/squad-usage-all` | any session | The tokens each agent has used ([How many tokens the agents use](#how-many-tokens-the-agents-use)). |
+| ⏱️&nbsp;`/squad-timeline`<br>`/squad-timeline vN` | any session | Where the time of a release went, issue by issue ([When you step away](#when-you-step-away)). |
 | 🔔&nbsp;`/squad-update` | the CTO's session | What a newer release changes; installs nothing ([Upgrade](#-upgrade)). |
 | 🔄&nbsp;`/squad-upgrade`<br>`/squad-upgrade vN` | the CTO's session | Installs the latest release, or vN, with no question: typing it is your yes ([Upgrade](#-upgrade)). |
 | 🧹&nbsp;`/squad-uninstall` | the CTO's session | What removing the squad would do; on your yes, a PR for the tracked files, then the rest goes ([Upgrade](#-upgrade)). |

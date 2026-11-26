@@ -2,9 +2,10 @@
 # open PR or of an issue in progress, and what that step is. squad-stalls.sh pings the owner of a
 # step that has stalled, and squad-plan.sh shows each step in the plan of the release in progress;
 # both include this module (`jq -L <scripts> 'include "squad-steps"; …'`), so that they never
-# disagree. Each step is {owner, step, short}: the role that owns it ("requested" for a reviewer
-# requested on GitHub, then named in `reviewers`), the sentence the stall watch prints, and the few
-# words the plan's table shows.
+# disagree, and so do squad-merge-gate.sh, for a PR's stray closing links, and squad-timeline.sh,
+# for a PR's author and what a plan issue is. Each step is {owner, step, short}: the role that owns
+# it ("requested" for a reviewer requested on GitHub, then named in `reviewers`), the sentence the
+# stall watch prints, and the few words the plan's table shows.
 
 # The issues a PR closes, as GitHub names them or as its description says ("Closes #N").
 def closes: [(.closingIssuesReferences // [])[].number]
@@ -71,3 +72,12 @@ def progress: add // []
   | {since: ([.[] | select(.event == "labeled" and (.label.name // "" | endswith("status:in-progress")))] | last | .created_at // null),
      states: [.[] | select(.event == "commented" and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")))
        | {role: (.body // "" | signed("^ *(✅|⏳|⚠️?|❌|⏸️?) *State:")), at: (.updated_at // .created_at)} | select(.role)]};
+
+# A plan issue's description (SQUAD.md §3), which squad-plan.sh writes the table into and
+# squad-timeline.sh finds the release in progress by (agent-squad #574): its markers stand on lines
+# of their own, the start before the end, so that an issue that only quotes them, as one that
+# describes the plan does, is none, and a row of the table. `plan_parts` splits a description into
+# what comes before the table, the table, and what comes after; `marked` tells a plan issue's.
+def plan_parts: ("\n" + . + "\n")
+  | capture("^(?<before>[\\s\\S]*?\n)<!-- squad-plan:start -->\n(?<table>[\\s\\S]*?)(?<=\n)<!-- squad-plan:end -->\n(?<after>[\\s\\S]*)$");
+def marked: [plan_parts] != [];

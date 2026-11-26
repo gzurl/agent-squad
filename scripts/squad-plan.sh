@@ -77,23 +77,17 @@ now="${SQUAD_NOW:-$(date +%s)}"
 markers="<!-- squad-plan:start --> and <!-- squad-plan:end -->"
 # GitHub's limit on an issue's sub-issues (its documentation, "Adding sub-issues").
 limit=100
-# A plan issue's markers stand on lines of their own, the start before the end: an issue that only
-# quotes them, as one that describes the plan does, is none, and a row of the table. `plan_parts`
-# splits a description into what comes before the table, the table, and what comes after; `marked`
-# tells a plan issue's description.
-plan_defs='def plan_parts: ("\n" + . + "\n")
-    | capture("^(?<before>[\\s\\S]*?\n)<!-- squad-plan:start -->\n(?<table>[\\s\\S]*?)(?<=\n)<!-- squad-plan:end -->\n(?<after>[\\s\\S]*)$");
-  def marked: [plan_parts] != [];'
 
-# 1. The open plan issues, each with its milestone. What GitHub answers goes to jq through files of
-#    a work directory.
+# 1. The open plan issues, each with its milestone: `marked`, from squad-steps.jq, tells a plan
+#    issue's description, and `plan_parts` splits it around its table. What GitHub answers goes to
+#    jq through files of a work directory.
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner </dev/null)" || die "cannot read the repository, as gh says above"
 work="${TMPDIR:-/tmp}"
 work="$(mktemp -d "${work%/}/squad-plan.XXXXXX")" || die "cannot make a work directory"
 trap 'rm -rf "$work"' EXIT
 gh api --paginate --slurp "repos/$repo/issues?state=open&per_page=100" </dev/null > "$work/open.pages" \
   || die "cannot read the open issues, as gh says above"
-jq -c "$plan_defs"'add // [] | map(select(.pull_request == null) | .body = (.body // "" | gsub("\r"; "")) | select(.body | marked))
+jq -c -L "$here" 'include "squad-steps"; add // [] | map(select(.pull_request == null) | .body = (.body // "" | gsub("\r"; "")) | select(.body | marked))
   | sort_by(.number)[] | {number, url, body, labels: [.labels[] | {name}],
     milestone: (.milestone | if . then {number, title, url: .html_url} else null end)}' "$work/open.pages" > "$work/plans.jsonl" \
   || die "cannot read the open issues"
@@ -184,7 +178,7 @@ table() {
   jq -nr -L "$here" --slurpfile issues "$work/issues.json" --slurpfile prs "$work/prs.json" \
     --slurpfile version_prs "$work/version-pr.json" --slurpfile verdicts "$work/verdicts.json" \
     --slurpfile closers "$work/closers.json" --argjson plan "$plan" --argjson release "$release" --argjson now "$now" '
-    include "squad-steps";'"$plan_defs"'
+    include "squad-steps";
     $issues[0] as $issues | $prs[0] as $prs | $version_prs[0][0] as $version_pr | $verdicts[0] as $verdicts
     | $closers[0] as $closers
     | def labelled($end): any(.labels[].name; endswith($end));
@@ -307,7 +301,7 @@ table() {
 rewrite() {
   local number
   number="$(jq -r .number <<<"$1")"
-  jq -r --arg table "$2" "$plan_defs"'.body | plan_parts as $parts
+  jq -r -L "$here" --arg table "$2" 'include "squad-steps"; .body | plan_parts as $parts
     | def timeless: gsub(" · updated [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}"; "") | ltrimstr("\n") | rtrimstr("\n");
     if ($parts.table | timeless) == ($table | timeless) then empty
     else $parts.before + "<!-- squad-plan:start -->\n" + $table + "\n<!-- squad-plan:end -->\n" + $parts.after | .[1:-1] end' \
@@ -336,7 +330,7 @@ adopt() {
   number="$(jq -r .number <<<"$1")"
   gh api --paginate --slurp "repos/$repo/issues/$number/sub_issues?per_page=100" </dev/null > "$work/subs.pages" \
     || die "cannot read the sub-issues of #$number, as gh says above"
-  jq -c --arg plan "$(jq -r .url <<<"$1")" --arg repo "$repo" --argjson limit "$limit" --slurpfile subs "$work/subs.pages" "$plan_defs"'
+  jq -c --arg plan "$(jq -r .url <<<"$1")" --arg repo "$repo" --argjson limit "$limit" --slurpfile subs "$work/subs.pages" -L "$here" 'include "squad-steps";
     # An issue as the line names it, from its repository and number: "#12", or "owner/name#12".
     def named($r; $n): if $r == $repo then "#\($n)" else "\($r)#\($n)" end;
     ($subs[0] | add // [] | map({id, number, name: named(.repository_url // "" | sub("^.*/repos/"; ""); .number)})) as $subs

@@ -69,6 +69,8 @@ jobs:
         run: scripts/check-setup-labels.sh
       - name: The plan's table shows each release in progress, and its plan issue follows it
         run: scripts/check-plan.sh
+      - name: The timeline shows where each issue of a release spent its time
+        run: scripts/check-timeline.sh
 
   install:
     runs-on: ubuntu-latest
