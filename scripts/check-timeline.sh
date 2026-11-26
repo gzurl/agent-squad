@@ -196,10 +196,10 @@ label() {
     --arg n "$1" --arg change "$2" --arg at "$(iso "$3")"
 }
 # `review <pr> <association> <last line>`: a review by an account of that association, whose last
-# line is that one.
+# line is that one, followed by a newline, as GitHub stores every review (QA's finding on PR #577).
 review() {
   update prs.json '.[$n].reviews += [{assoc: $assoc, body: $body}]' --arg n "$1" --arg assoc "$2" \
-    --arg body "$(lines "**👩🏼‍🔬[QA]:** ✅ The review." "" "$3")"
+    --arg body "$(lines "**👩🏼‍🔬[QA]:** ✅ The review." "" "$3")"$'\n'
 }
 # `comment <pr> <association> <first line>` and `inline <pr> <association> <top|reply> <first
 # line>`: a comment on the PR, or an inline one, opening a thread or replying in one.
@@ -482,8 +482,8 @@ done <<'CASES'
 milestones|v76|cannot read the milestones
 issues?state=open||cannot read the open issues
 graphql|v76|cannot read the issues of v76 — a plan's own steps are the project's checklist; two races in the watch and the plan
-issues/570/timeline|v76|cannot read the timeline of PR #570
-pulls/565/comments|v76|cannot read the timeline of PR #565
+issues/570/timeline|v76|cannot read the timeline or the inline comments of PR #570
+pulls/565/comments|v76|cannot read the timeline or the inline comments of PR #565
 CASES
 #    A call that GitHub never answers is stopped after SQUAD_GH_TIMEOUT seconds of wall-clock time,
 #    and fails the run as any other failure does, below the line that says why (agent-squad #430).

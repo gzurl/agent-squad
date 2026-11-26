@@ -153,7 +153,8 @@ timeline() {
                    | capture("^QA-VERDICT: (?<v>APPROVED|CHANGES-REQUESTED)\\s*$").v],
         findings: ([.[] | select(.event == "commented" and inside) | priority]
                    + [$inline[0] | add // [] | .[] | select(.in_reply_to_id == null and inside) | priority])}}' \
-      "$work/timeline.pages" >> "$work/prs.jsonl" || die "cannot read the timeline of PR #$pr"
+      "$work/timeline.pages" >> "$work/prs.jsonl" \
+      || die "cannot read the timeline or the inline comments of PR #$pr"
   done
   jq -sc 'add // {}' "$work/prs.jsonl" > "$work/prs.json" || die "cannot read the PRs"
 

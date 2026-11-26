@@ -2,10 +2,10 @@
 # open PR or of an issue in progress, and what that step is. squad-stalls.sh pings the owner of a
 # step that has stalled, and squad-plan.sh shows each step in the plan of the release in progress;
 # both include this module (`jq -L <scripts> 'include "squad-steps"; …'`), so that they never
-# disagree, and so does squad-timeline.sh, for a PR's author and what a plan issue is. Each step is
-# {owner, step, short}: the role that owns it ("requested" for a reviewer requested on GitHub, then
-# named in `reviewers`), the sentence the stall watch prints, and the few words the plan's table
-# shows.
+# disagree, and so do squad-merge-gate.sh, for a PR's stray closing links, and squad-timeline.sh,
+# for a PR's author and what a plan issue is. Each step is {owner, step, short}: the role that owns
+# it ("requested" for a reviewer requested on GitHub, then named in `reviewers`), the sentence the
+# stall watch prints, and the few words the plan's table shows.
 
 # The issues a PR closes, as GitHub names them or as its description says ("Closes #N").
 def closes: [(.closingIssuesReferences // [])[].number]
